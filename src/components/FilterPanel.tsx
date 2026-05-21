@@ -5,10 +5,12 @@ export function FilterPanel({ onClose }: { onClose: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const projects = useStore((s) => s.projects);
   const projectOrder = useStore((s) => s.projectOrder);
+  const tabs = useStore((s) => s.tabs);
   const tasks = useStore((s) => s.tasks);
   const filter = useStore((s) => s.filter);
   const setFilter = useStore((s) => s.setFilter);
   const resetFilter = useStore((s) => s.resetFilter);
+  const deleteProject = useStore((s) => s.deleteProject);
 
   const owners = useMemo(() => {
     const set = new Set<string>();
@@ -63,15 +65,38 @@ export function FilterPanel({ onClose }: { onClose: () => void }) {
             const p = projects[pid];
             if (!p) return null;
             const active = filter.projectIds.includes(pid);
+            const isLast = projectOrder.length <= 1;
+            const tabCount = Object.values(tabs).filter((t) => t.projectId === pid && t.type !== 'today').length;
             return (
-              <button
-                key={pid}
-                className={`chip chip-project ${active ? 'active' : ''}`}
-                style={{ '--chip-color': p.color } as React.CSSProperties}
-                onClick={() => toggleProject(pid)}
-              >
-                {p.name}
-              </button>
+              <span key={pid} className="chip-project-wrap">
+                <button
+                  className={`chip chip-project ${active ? 'active' : ''}`}
+                  style={{ '--chip-color': p.color } as React.CSSProperties}
+                  onClick={() => toggleProject(pid)}
+                >
+                  {p.name}
+                </button>
+                {!isLast && (
+                  <button
+                    className="icon-btn delete chip-delete"
+                    aria-label={`delete project ${p.name}`}
+                    title="delete project"
+                    onClick={() => {
+                      const msg = tabCount
+                        ? `Delete project "${p.name}" and its ${tabCount} tab${tabCount === 1 ? '' : 's'}?`
+                        : `Delete project "${p.name}"?`;
+                      if (confirm(msg)) {
+                        deleteProject(pid);
+                        if (filter.projectIds.includes(pid)) {
+                          setFilter({ projectIds: filter.projectIds.filter((x) => x !== pid) });
+                        }
+                      }
+                    }}
+                  >
+                    <svg viewBox="0 0 16 16" width="10" height="10"><path d="M4 4l8 8M12 4L4 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                  </button>
+                )}
+              </span>
             );
           })}
         </div>

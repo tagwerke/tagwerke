@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 import type { Filter, ID, Project, RootState, Snapshot, Tab, Task, TodayBlock } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
+import { sidecarStorage } from './util/storage';
 
 interface Actions {
   createProject(name: string, color?: string): Project;
@@ -129,11 +130,25 @@ export const useStore = create<RootState & Actions>()(
       },
       deleteProject(id) {
         set((s) => {
+          if (s.projectOrder.length <= 1) return s;
+          const fallbackProjectId = s.projectOrder.find((pid) => pid !== id);
+          if (!fallbackProjectId) return s;
+
           const projects = { ...s.projects };
           delete projects[id];
-          const tabsToDelete = Object.values(s.tabs).filter((t) => t.projectId === id).map((t) => t.id);
+
           const tabs = { ...s.tabs };
-          tabsToDelete.forEach((tid) => delete tabs[tid]);
+          const tabsToDelete: ID[] = [];
+          for (const t of Object.values(s.tabs)) {
+            if (t.projectId !== id) continue;
+            if (t.type === 'today') {
+              tabs[t.id] = { ...t, projectId: fallbackProjectId };
+            } else {
+              tabsToDelete.push(t.id);
+              delete tabs[t.id];
+            }
+          }
+
           const tasks = { ...s.tasks };
           for (const tid of tabsToDelete) {
             for (const task of Object.values(tasks)) {
@@ -147,6 +162,7 @@ export const useStore = create<RootState & Actions>()(
             projectOrder: s.projectOrder.filter((pid) => pid !== id),
             tabOrder: s.tabOrder.filter((tid) => !tabsToDelete.includes(tid)),
             starredRowOrder: s.starredRowOrder.filter((tid) => !tabsToDelete.includes(tid)),
+            activeTabId: s.activeTabId && tabsToDelete.includes(s.activeTabId) ? null : s.activeTabId,
           };
         });
       },
@@ -378,6 +394,7 @@ export const useStore = create<RootState & Actions>()(
     {
       name: 'do-app/v1',
       version: 1,
+      storage: createJSONStorage(() => sidecarStorage),
     }
   )
 );

@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useStore } from '../store';
 import { TaskRow } from './TaskRow';
-import { TaskPicker } from './TaskPicker';
+import { TaskAutocomplete } from './TaskAutocomplete';
 import type { ID } from '../types';
 import { appendNewTaskToHome } from '../editor/registry';
 import { nanoid } from 'nanoid';
@@ -20,20 +20,13 @@ export function TodayBlockView({ blockId, index }: Props) {
   const upsertTask = useStore((s) => s.upsertTask);
   const setTabDoc = useStore((s) => s.setTabDoc);
 
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [newText, setNewText] = useState('');
-  const newInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { if (adding) newInputRef.current?.focus(); }, [adding]);
 
   if (!block) return null;
   const boundTab = tabs[block.tabId];
   const boundProject = boundTab ? projects[boundTab.projectId] : undefined;
 
-  const onAddNew = () => {
-    const raw = newText.trim();
-    if (!raw) { setAdding(false); return; }
+  const createNew = (raw: string) => {
     if (!block.tabId) {
       alert('bind this block to a tab first');
       return;
@@ -42,19 +35,20 @@ export function TodayBlockView({ blockId, index }: Props) {
     let id = appendNewTaskToHome(block.tabId, parsed.text);
     if (!id) {
       id = `t_${nanoid(8)}`;
-      const tabDoc = (tabs[block.tabId]?.docJSON as any) || { type: 'doc', content: [] };
+      const tabDoc = (tabs[block.tabId]?.docJSON as { content?: unknown[] } | undefined) ?? { type: 'doc', content: [] };
       const newItem = {
         type: 'taskItem',
         attrs: { id, done: false },
         content: [{ type: 'paragraph', content: parsed.text ? [{ type: 'text', text: parsed.text }] : [] }],
       };
-      const lastNode = tabDoc.content?.[tabDoc.content.length - 1];
+      const content = [...(tabDoc.content ?? [])] as Array<{ type: string; content?: unknown[] }>;
+      const lastNode = content[content.length - 1];
       if (lastNode?.type === 'taskList') {
-        lastNode.content = [...(lastNode.content ?? []), newItem];
+        content[content.length - 1] = { ...lastNode, content: [...(lastNode.content ?? []), newItem] };
       } else {
-        tabDoc.content = [...(tabDoc.content ?? []), { type: 'taskList', content: [newItem] }];
+        content.push({ type: 'taskList', content: [newItem] });
       }
-      setTabDoc(block.tabId, tabDoc);
+      setTabDoc(block.tabId, { ...tabDoc, type: 'doc', content });
     }
     upsertTask({
       id,
@@ -66,7 +60,11 @@ export function TodayBlockView({ blockId, index }: Props) {
       done: parsed.done ?? false,
     });
     addTaskToBlock(block.id, id);
-    setNewText('');
+    setAdding(false);
+  };
+
+  const pickExisting = (taskId: ID) => {
+    addTaskToBlock(block.id, taskId);
     setAdding(false);
   };
 
@@ -118,35 +116,18 @@ export function TodayBlockView({ blockId, index }: Props) {
 
       <div className="today-block-add">
         {adding ? (
-          <div className="add-row">
-            <input
-              ref={newInputRef}
-              value={newText}
-              onChange={(e) => setNewText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') onAddNew();
-                else if (e.key === 'Escape') { setAdding(false); setNewText(''); }
-              }}
-              placeholder={`- new task in ${boundTab?.name ?? '(no tab)'}`}
-            />
-            <button className="btn ghost tiny" onClick={onAddNew}>add</button>
-          </div>
+          <TaskAutocomplete
+            tabId={block.tabId}
+            excludeIds={new Set(block.taskIds)}
+            onPickExisting={pickExisting}
+            onCreateNew={createNew}
+            onCancel={() => setAdding(false)}
+            placeholder={boundTab ? `task in ${boundTab.name} — type to filter or create` : 'bind a tab first'}
+          />
         ) : (
-          <div className="add-actions">
-            <button className="btn ghost tiny" onClick={() => setAdding(true)}>+ type new</button>
-            <button className="btn ghost tiny" onClick={() => setPickerOpen(true)}>+ pick from {boundTab?.name ?? 'tab'}</button>
-          </div>
+          <button className="btn ghost tiny" onClick={() => setAdding(true)}>+ add task</button>
         )}
       </div>
-
-      {pickerOpen && (
-        <TaskPicker
-          tabId={block.tabId}
-          excludeIds={new Set(block.taskIds)}
-          onPick={(taskId) => { addTaskToBlock(block.id, taskId); }}
-          onClose={() => setPickerOpen(false)}
-        />
-      )}
     </article>
   );
 }

@@ -120,6 +120,12 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .btn.primary:hover { background: var(--accent); }
 .btn.tiny { height: 26px; padding: 0 10px; font-size: 12px; }
+.btn.sync.syncing { color: var(--ink); border-color: var(--line-strong); }
+.btn.sync.syncing svg { animation: sync-spin 1s linear infinite; }
+.btn.sync.error { color: #c0392b; border-color: rgba(192,57,43,0.4); background: rgba(192,57,43,0.05); }
+.btn.sync.ok { color: var(--ink); border-color: var(--line-strong); }
+.btn.sync:disabled { opacity: 0.55; cursor: not-allowed; }
+@keyframes sync-spin { to { transform: rotate(360deg); } }
 .icon-btn {
   background: transparent; border: 0; padding: 4px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -462,6 +468,18 @@ input, select, textarea { font: inherit; color: inherit; }
   border-color: color-mix(in srgb, var(--chip-color, var(--ink)) 30%, transparent);
   background: color-mix(in srgb, var(--chip-color, var(--ink)) 8%, transparent);
 }
+.chip-project-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.chip-project-wrap .chip-delete {
+  opacity: 0;
+  width: 18px; height: 18px;
+  transition: opacity .12s;
+}
+.chip-project-wrap:hover .chip-delete,
+.chip-project-wrap:focus-within .chip-delete { opacity: 1; }
 
 /* ── Tab view (full editor) ───────────────────────────────────────────── */
 .tab-view {
@@ -663,19 +681,54 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-row-source .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .muted { color: var(--ink-mute); }
 
-.today-block-add { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); }
-.add-actions { display: flex; gap: 8px; }
-.add-row { display: flex; gap: 8px; align-items: center; }
-.add-row input {
-  flex: 1;
+.today-block-add { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); position: relative; }
+
+.task-autocomplete { position: relative; }
+.task-autocomplete-input {
+  width: 100%;
   background: var(--bg-paper);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   padding: 6px 10px;
-  font-size: 13px;
+  font: inherit;
+  color: var(--ink);
   outline: none;
 }
-.add-row input:focus { border-color: var(--pop); }
+.task-autocomplete-input:focus { border-color: var(--pop); }
+.task-autocomplete-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  list-style: none; padding: 4px; margin: 0;
+  background: var(--bg-paper);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+  max-height: 280px; overflow-y: auto;
+  z-index: 10;
+}
+.task-autocomplete-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; text-align: left;
+  background: transparent; border: 0;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.task-autocomplete-item.active { background: var(--line); }
+.task-autocomplete-item.create { color: var(--pop); font-weight: 500; }
+.task-autocomplete-item.create.active { background: color-mix(in srgb, var(--pop) 12%, transparent); }
+.task-autocomplete-plus {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px;
+  font-weight: 700;
+}
+.task-autocomplete-text {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* ── Modals / popovers ────────────────────────────────────────────────── */
 .modal-backdrop {
