@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const SIDECAR = process.env.DO_APP_SIDECAR ?? 'http://localhost:5174'
+const SIDECAR = process.env.DO_APP_SIDECAR ?? 'http://127.0.0.1:5174'
 
 // https://vite.dev/config/
 export default defineConfig({
