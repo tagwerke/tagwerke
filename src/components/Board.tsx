@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useStore } from '../store';
 import { TabCard } from './TabCard';
+import { Masonry } from './Masonry';
 import { isDueSoon } from '../util/dates';
 
 export function Board() {
@@ -69,11 +70,11 @@ export function Board() {
   if (!groupByProject) {
     return (
       <section className="board">
-        <div className="masonry">
+        <Masonry>
           {allTabIds.map((tid) => (
             <TabCard tabId={tid} key={tid} />
           ))}
-        </div>
+        </Masonry>
       </section>
     );
   }
@@ -101,11 +102,11 @@ export function Board() {
                 <svg viewBox="0 0 16 16" width="12" height="12"><path d="M4 4l8 8M12 4L4 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
               </button>
             </header>
-            <div className="masonry">
+            <Masonry>
               {tabIds.map((tid) => (
                 <TabCard tabId={tid} key={tid} />
               ))}
-            </div>
+            </Masonry>
           </div>
         );
       })}

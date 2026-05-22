@@ -41,6 +41,41 @@ interface Actions {
   reset(): void;
 }
 
+interface DocLike { type: string; text?: string; attrs?: Record<string, unknown>; content?: DocLike[] }
+
+function nodeText(n: DocLike | undefined): string {
+  if (!n) return '';
+  if (n.type === 'text' && typeof n.text === 'string') return n.text;
+  return (n.content ?? []).map(nodeText).join('');
+}
+
+function renderTodayDocToText(doc: unknown, dateKey: string): string {
+  const root = doc as DocLike | undefined;
+  if (!root || !Array.isArray(root.content)) return '';
+  const lines: string[] = [`# ${dateKey}`, ''];
+  for (const top of root.content) {
+    if (top.type === 'paragraph') {
+      const text = nodeText(top);
+      if (text.trim()) lines.push(text);
+      else lines.push('');
+      continue;
+    }
+    if (top.type === 'taskList') {
+      for (const item of top.content ?? []) {
+        if (item.type !== 'taskItem') continue;
+        const done = item.attrs?.done ? '[x]' : '[ ]';
+        const text = nodeText(item.content?.[0]);
+        lines.push(`- ${done} ${text}`);
+      }
+      continue;
+    }
+    // Fallback for other top-level nodes (e.g. headings).
+    const text = nodeText(top);
+    if (text) lines.push(text);
+  }
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 const initialFilter: Filter = {
   projectIds: [],
   owners: [],
@@ -347,41 +382,27 @@ export const useStore = create<RootState & Actions>()(
       },
 
       freezeToday() {
-        const { todayTabId, tabs, tasks } = get();
+        const { todayTabId, tabs } = get();
         const today = tabs[todayTabId];
-        if (!today?.blocks) return null;
-        const lines: string[] = [];
-        lines.push(`# ${today.dateKey ?? todayISO()}`);
-        lines.push('');
-        for (const block of today.blocks) {
-          const tab = tabs[block.tabId];
-          const range = block.start && block.end ? `${block.start}–${block.end}` : block.start ?? '';
-          const header = [tab?.name ?? '(unbound)', range, block.label].filter(Boolean).join('  ');
-          lines.push(`## ${header}`);
-          for (const tid of block.taskIds) {
-            const t = tasks[tid];
-            if (!t) continue;
-            const mark = t.done ? '[x]' : '[ ]';
-            const chips = [
-              t.priority ? '!'.repeat(t.priority) : '',
-              t.owner ? `[${t.owner}]` : '',
-              t.date ? `@${t.date}` : '',
-            ].filter(Boolean).join(' ');
-            lines.push(`- ${mark} ${t.text}${chips ? '  ' + chips : ''}`);
-          }
-          lines.push('');
-        }
+        if (!today) return null;
+        const text = renderTodayDocToText(today.docJSON, today.dateKey ?? todayISO());
+        if (!text.trim()) return null;
         const snap: Snapshot = {
           id: nanoid(),
           dateKey: today.dateKey ?? todayISO(),
           createdAt: Date.now(),
-          text: lines.join('\n'),
+          text,
         };
         set((s) => ({
           snapshots: { ...s.snapshots, [snap.id]: snap },
           tabs: {
             ...s.tabs,
-            [todayTabId]: { ...s.tabs[todayTabId], blocks: [], dateKey: todayISO() },
+            [todayTabId]: {
+              ...s.tabs[todayTabId],
+              docJSON: { type: 'doc', content: [{ type: 'paragraph' }] },
+              blocks: [],
+              dateKey: todayISO(),
+            },
           },
         }));
         return snap;

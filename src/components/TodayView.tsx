@@ -1,25 +1,27 @@
 import { useEffect } from 'react';
 import { useStore } from '../store';
-import { TodayBlockView } from './TodayBlockView';
+import { TodayEditor } from '../editor/TodayEditor';
 import { todayISO, formatDateChip } from '../util/dates';
 
 export function TodayView() {
   const today = useStore((s) => s.tabs[s.todayTabId]);
   const todayTabId = useStore((s) => s.todayTabId);
   const setActiveTab = useStore((s) => s.setActiveTab);
-  const addBlock = useStore((s) => s.addBlock);
   const freezeToday = useStore((s) => s.freezeToday);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setActiveTab(null);
+      if (e.key === 'Escape') {
+        const target = e.target as HTMLElement;
+        if (target?.closest('.ProseMirror')) return;
+        setActiveTab(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [setActiveTab]);
 
   if (!today) return null;
-  const blocks = today.blocks ?? [];
   const dateKey = today.dateKey ?? todayISO();
 
   return (
@@ -38,21 +40,11 @@ export function TodayView() {
             if (!confirm('Freeze the current TODAY into a snapshot and clear it for a new day?')) return;
             freezeToday();
           }}>freeze day</button>
-          <button className="btn primary" onClick={() => addBlock()}>+ block</button>
         </div>
       </header>
 
-      <div className="today-blocks">
-        {blocks.length === 0 ? (
-          <div className="today-empty">
-            <p>no blocks yet — plan your day in time-boxes.</p>
-            <button className="btn primary" onClick={() => addBlock()}>+ first block</button>
-          </div>
-        ) : (
-          blocks.map((b, i) => (
-            <TodayBlockView blockId={b.id} key={b.id} index={i} todayTabId={todayTabId} />
-          ))
-        )}
+      <div className="today-body">
+        <TodayEditor tabId={todayTabId} autoFocus />
       </div>
     </main>
   );
