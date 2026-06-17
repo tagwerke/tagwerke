@@ -1,7 +1,12 @@
 import 'dotenv/config';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { db } from './db/client.ts';
 import { authRoutes } from './auth/routes.ts';
 import { stateRoutes } from './routes/state.ts';
 import { projectRoutes } from './routes/projects.ts';
@@ -11,12 +16,26 @@ import { blockRoutes } from './routes/blocks.ts';
 import { todayRoutes } from './routes/today.ts';
 
 const PORT = Number(process.env.PORT ?? 5174);
-const HOST = process.env.HOST ?? '127.0.0.1';
+// Bind all interfaces by default so the container is reachable; override with HOST.
+const HOST = process.env.HOST ?? '0.0.0.0';
+const isProd = process.env.NODE_ENV === 'production';
 
 const secret = process.env.SESSION_SECRET;
-if (!secret) throw new Error('SESSION_SECRET is not set. Copy .env.example to .env and fill it in.');
+if (!secret) throw new Error('SESSION_SECRET is not set.');
 
-const app = Fastify({ logger: true });
+// trustProxy: behind Dokploy/Traefik, derive client IP + protocol from
+// X-Forwarded-* so rate-limiting keys on the real IP and cookies behave.
+const app = Fastify({ logger: true, trustProxy: true });
+
+// Apply pending migrations before serving. Idempotent; safe to run each boot.
+try {
+  const migrationsFolder = fileURLToPath(new URL('./db/migrations', import.meta.url));
+  await migrate(db, { migrationsFolder });
+  app.log.info('migrations up to date');
+} catch (err) {
+  app.log.error({ err }, 'migration failed');
+  process.exit(1);
+}
 
 await app.register(cookie, { secret });
 // global:false -> only routes that opt in (auth endpoints) are limited, so heavy
@@ -30,6 +49,23 @@ await app.register(tabRoutes);
 await app.register(taskRoutes);
 await app.register(blockRoutes);
 await app.register(todayRoutes);
+
+// In production the same process serves the built SPA. In dev, Vite serves it.
+if (isProd) {
+  const distDir = fileURLToPath(new URL('../dist', import.meta.url));
+  if (!existsSync(distDir)) {
+    app.log.error(`dist/ not found at ${distDir} — run "npm run build" before starting`);
+    process.exit(1);
+  }
+  await app.register(fastifyStatic, { root: distDir });
+  // SPA fallback: any non-API GET that isn't a real file returns index.html.
+  app.setNotFoundHandler((req, reply) => {
+    if (req.method === 'GET' && !req.url.startsWith('/api')) {
+      return reply.sendFile('index.html');
+    }
+    return reply.code(404).send({ error: 'not found' });
+  });
+}
 
 try {
   await app.listen({ port: PORT, host: HOST });

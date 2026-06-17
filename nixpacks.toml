@@ -1,0 +1,21 @@
+# Nixpacks build config for Dokploy.
+# Build phase installs all deps (incl. dev) and builds the SPA; the runtime image
+# keeps only production deps and runs the Fastify server, which serves dist/ + /api
+# and applies DB migrations on boot.
+
+[variables]
+NODE_ENV = "production"
+# Vite/tsc need devDependencies at build time; npm prune happens after build.
+NPM_CONFIG_PRODUCTION = "false"
+
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"
