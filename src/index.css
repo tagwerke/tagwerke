@@ -1074,3 +1074,109 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* hide TipTap empty placeholder cursor noise */
 .ProseMirror-focused { outline: none; }
+
+/* ── Auth screen ──────────────────────────────────────────────────────── */
+.app-loading { min-height: 100vh; }
+
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(900px 480px at 50% -8%, rgba(255, 106, 61, 0.07), transparent 60%),
+    var(--bg);
+}
+.auth-card {
+  width: min(384px, calc(100vw - 32px));
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  padding: 34px 30px;
+  display: flex;
+  flex-direction: column;
+}
+.auth-title {
+  margin: 0;
+  text-align: center;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 40px;
+  letter-spacing: -0.5px;
+  color: var(--ink);
+}
+.auth-title::before {
+  content: '';
+  display: block;
+  width: 40px; height: 40px;
+  margin: 0 auto 14px;
+  border-radius: 10px;
+  transform: rotate(-4deg);
+  background:
+    radial-gradient(circle at 35% 35%, var(--pop-2) 0 7px, transparent 7px),
+    radial-gradient(circle at 70% 65%, var(--pop) 0 12px, transparent 12px),
+    var(--ink);
+}
+.auth-sub {
+  text-align: center;
+  color: var(--ink-mute);
+  font-size: 13px;
+  margin: 6px 0 24px;
+}
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+.auth-field > span {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.auth-field input {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.auth-field input:focus {
+  border-color: var(--pop);
+  box-shadow: 0 0 0 3px rgba(255, 106, 61, 0.12);
+}
+.auth-field input::placeholder { color: var(--ink-mute); }
+.auth-error {
+  background: rgba(168, 88, 31, 0.08);
+  border: 1px solid rgba(168, 88, 31, 0.30);
+  color: #a8581f;
+  font-size: 13px;
+  border-radius: var(--r-sm);
+  padding: 8px 11px;
+  margin-bottom: 14px;
+}
+.auth-submit {
+  width: 100%;
+  height: 40px;
+  justify-content: center;
+  margin-top: 4px;
+  font-size: 14px;
+}
+.auth-toggle {
+  margin-top: 16px;
+  padding: 6px;
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 13px;
+  transition: color .12s ease;
+}
+.auth-toggle:hover { color: var(--pop); }

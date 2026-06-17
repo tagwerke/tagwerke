@@ -1,10 +1,13 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 import type { Filter, ID, Project, RootState, Snapshot, Tab, Task, TodayBlock } from './types';
 import { nextColor } from './util/color';
-import { todayISO } from './util/dates';
-import { sidecarStorage } from './util/storage';
+import { todayISO, toISO } from './util/dates';
+import { api, enqueue } from './api/client';
+
+function nextPosition(orders: number[]): number {
+  return orders.length ? Math.max(...orders) + 1 : 0;
+}
 
 interface Actions {
   createProject(name: string, color?: string): Project;
@@ -37,6 +40,10 @@ interface Actions {
   resetFilter(): void;
 
   freezeToday(): Snapshot | null;
+
+  cleanupEmptyTasks(): number;
+
+  hydrate(state: RootState): void;
 
   reset(): void;
 }
@@ -143,27 +150,31 @@ function makeInitial(): RootState {
 }
 
 export const useStore = create<RootState & Actions>()(
-  persist(
     (set, get) => ({
       ...makeInitial(),
 
       createProject(name, color) {
         const id = nanoid();
         const used = Object.values(get().projects).map((p) => p.color);
-        const project: Project = { id, name, color: color ?? nextColor(used), order: get().projectOrder.length };
+        const position = nextPosition(Object.values(get().projects).map((p) => p.order));
+        const project: Project = { id, name, color: color ?? nextColor(used), order: position };
         set((s) => ({
           projects: { ...s.projects, [id]: project },
           projectOrder: [...s.projectOrder, id],
         }));
+        enqueue(() => api.projects.create({ id, name: project.name, color: project.color, position }));
         return project;
       },
       renameProject(id, name) {
         set((s) => ({ projects: { ...s.projects, [id]: { ...s.projects[id], name } } }));
+        enqueue(() => api.projects.update(id, { name }));
       },
       recolorProject(id, color) {
         set((s) => ({ projects: { ...s.projects, [id]: { ...s.projects[id], color } } }));
+        enqueue(() => api.projects.update(id, { color }));
       },
       deleteProject(id) {
+        const canDelete = get().projectOrder.length > 1;
         set((s) => {
           if (s.projectOrder.length <= 1) return s;
           const fallbackProjectId = s.projectOrder.find((pid) => pid !== id);
@@ -200,21 +211,25 @@ export const useStore = create<RootState & Actions>()(
             activeTabId: s.activeTabId && tabsToDelete.includes(s.activeTabId) ? null : s.activeTabId,
           };
         });
+        if (canDelete) enqueue(() => api.projects.remove(id));
       },
 
       createTab(projectId, name) {
         const id = nanoid();
+        const position = nextPosition(Object.values(get().tabs).map((t) => t.order));
         const tab: Tab = {
-          id, projectId, name, order: get().tabOrder.length, starred: false, type: 'normal',
+          id, projectId, name, order: position, starred: false, type: 'normal',
         };
         set((s) => ({
           tabs: { ...s.tabs, [id]: tab },
           tabOrder: [...s.tabOrder, id],
         }));
+        enqueue(() => api.tabs.create({ id, projectId, name, position, starred: false, type: 'normal' }));
         return tab;
       },
       renameTab(id, name) {
         set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], name } } }));
+        enqueue(() => api.tabs.update(id, { name }));
       },
       setTabStarred(id, starred) {
         set((s) => {
@@ -226,11 +241,15 @@ export const useStore = create<RootState & Actions>()(
             starredRowOrder: star,
           };
         });
+        const starredPosition = starred ? get().starredRowOrder.indexOf(id) : null;
+        enqueue(() => api.tabs.update(id, { starred, starredPosition }));
       },
       setTabDoc(id, doc) {
+        // docJSON is persisted by the subscription differ in src/api/persist.ts.
         set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], docJSON: doc } } }));
       },
       deleteTab(id) {
+        const canDelete = get().tabs[id]?.type !== 'today';
         set((s) => {
           if (s.tabs[id]?.type === 'today') return s;
           const tabs = { ...s.tabs };
@@ -255,6 +274,7 @@ export const useStore = create<RootState & Actions>()(
             activeTabId: s.activeTabId === id ? null : s.activeTabId,
           };
         });
+        if (canDelete) enqueue(() => api.tabs.remove(id));
       },
       setActiveTab(id) {
         set({ activeTabId: id });
@@ -333,6 +353,8 @@ export const useStore = create<RootState & Actions>()(
           blocks.push(block);
         }
         set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        const position = blocks.findIndex((b) => b.id === block.id);
+        enqueue(() => api.blocks.create({ id: block.id, homeTabId: block.tabId, position }));
         return block;
       },
       updateBlock(id, patch) {
@@ -340,12 +362,19 @@ export const useStore = create<RootState & Actions>()(
         const today = tabs[todayTabId];
         const blocks = (today?.blocks ?? []).map((b) => (b.id === id ? { ...b, ...patch } : b));
         set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        const apiPatch: { homeTabId?: ID; start?: string | null; end?: string | null; label?: string | null } = {};
+        if (patch.tabId !== undefined) apiPatch.homeTabId = patch.tabId;
+        if (patch.start !== undefined) apiPatch.start = patch.start ?? null;
+        if (patch.end !== undefined) apiPatch.end = patch.end ?? null;
+        if (patch.label !== undefined) apiPatch.label = patch.label ?? null;
+        enqueue(() => api.blocks.update(id, apiPatch));
       },
       deleteBlock(id) {
         const { todayTabId, tabs } = get();
         const today = tabs[todayTabId];
         const blocks = (today?.blocks ?? []).filter((b) => b.id !== id);
         set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        enqueue(() => api.blocks.remove(id));
       },
       addTaskToBlock(blockId, taskId) {
         const { todayTabId, tabs } = get();
@@ -356,6 +385,7 @@ export const useStore = create<RootState & Actions>()(
             : b
         );
         set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        enqueue(() => api.blocks.addTask(blockId, taskId));
       },
       removeTaskFromBlock(blockId, taskId) {
         const { todayTabId, tabs } = get();
@@ -364,6 +394,7 @@ export const useStore = create<RootState & Actions>()(
           b.id === blockId ? { ...b, taskIds: b.taskIds.filter((t) => t !== taskId) } : b
         );
         set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        enqueue(() => api.blocks.removeTask(blockId, taskId));
       },
       reorderBlocks(order) {
         const { todayTabId, tabs } = get();
@@ -372,6 +403,7 @@ export const useStore = create<RootState & Actions>()(
         const byId = new Map(today.blocks.map((b) => [b.id, b]));
         const blocks = order.map((id) => byId.get(id)!).filter(Boolean);
         set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        enqueue(() => api.blocks.reorder(order));
       },
 
       setFilter(patch) {
@@ -385,14 +417,18 @@ export const useStore = create<RootState & Actions>()(
         const { todayTabId, tabs } = get();
         const today = tabs[todayTabId];
         if (!today) return null;
-        const text = renderTodayDocToText(today.docJSON, today.dateKey ?? todayISO());
+        const frozenDateKey = today.dateKey ?? todayISO();
+        const text = renderTodayDocToText(today.docJSON, frozenDateKey);
         if (!text.trim()) return null;
         const snap: Snapshot = {
           id: nanoid(),
-          dateKey: today.dateKey ?? todayISO(),
+          dateKey: frozenDateKey,
           createdAt: Date.now(),
           text,
         };
+        const nextDate = new Date(frozenDateKey + 'T00:00:00');
+        nextDate.setDate(nextDate.getDate() + 1);
+        const nextDateKey = toISO(nextDate);
         set((s) => ({
           snapshots: { ...s.snapshots, [snap.id]: snap },
           tabs: {
@@ -401,23 +437,76 @@ export const useStore = create<RootState & Actions>()(
               ...s.tabs[todayTabId],
               docJSON: { type: 'doc', content: [{ type: 'paragraph' }] },
               blocks: [],
-              dateKey: todayISO(),
+              dateKey: nextDateKey,
             },
           },
         }));
+        // Server is authoritative for the freeze: it renders + stores the snapshot,
+        // clears the today doc/blocks, and advances dateKey.
+        enqueue(() => api.today.freeze({ snapshotId: snap.id, dateKey: frozenDateKey, docJSON: today.docJSON }));
         return snap;
+      },
+
+      cleanupEmptyTasks() {
+        const { tasks, tabs, todayTabId } = get();
+        const emptyIds = new Set<ID>();
+        for (const t of Object.values(tasks)) {
+          if (!t.text || !t.text.trim()) emptyIds.add(t.id);
+        }
+        if (!emptyIds.size) return 0;
+
+        const nextTasks: Record<ID, Task> = {};
+        for (const t of Object.values(tasks)) {
+          if (!emptyIds.has(t.id)) nextTasks[t.id] = t;
+        }
+
+        const nextTabs: Record<ID, Tab> = { ...tabs };
+        for (const tab of Object.values(tabs)) {
+          if (!tab.docJSON) continue;
+          const cloned = JSON.parse(JSON.stringify(tab.docJSON)) as DocLike;
+          let changed = false;
+          const walk = (n: DocLike) => {
+            if (!Array.isArray(n.content)) return;
+            const filtered: DocLike[] = [];
+            for (const child of n.content) {
+              if (
+                child.type === 'taskItem' &&
+                typeof child.attrs?.id === 'string' &&
+                emptyIds.has(child.attrs.id as ID)
+              ) {
+                changed = true;
+                continue;
+              }
+              walk(child);
+              filtered.push(child);
+            }
+            n.content = filtered;
+          };
+          walk(cloned);
+          if (changed) nextTabs[tab.id] = { ...tab, docJSON: cloned };
+        }
+
+        const today = nextTabs[todayTabId];
+        if (today?.blocks) {
+          const blocks = today.blocks.map((b) => ({
+            ...b,
+            taskIds: b.taskIds.filter((id) => !emptyIds.has(id)),
+          }));
+          nextTabs[todayTabId] = { ...today, blocks };
+        }
+
+        set({ tasks: nextTasks, tabs: nextTabs });
+        return emptyIds.size;
+      },
+
+      hydrate(state) {
+        set(state);
       },
 
       reset() {
         set(makeInitial());
       },
-    }),
-    {
-      name: 'do-app/v1',
-      version: 1,
-      storage: createJSONStorage(() => sidecarStorage),
-    }
-  )
+    })
 );
 
 export function useTodayTab() {

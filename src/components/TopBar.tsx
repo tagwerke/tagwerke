@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useStore } from '../store';
+import { useSession } from '../session/useSession';
 import { NewTabDialog } from './NewTabDialog';
 import { FilterPanel } from './FilterPanel';
 import { SearchPalette } from './SearchPalette';
-import { SyncButton } from './SyncButton';
 
 export function TopBar() {
   const [newOpen, setNewOpen] = useState(false);
@@ -21,6 +21,7 @@ export function TopBar() {
     );
   });
   const resetFilter = useStore((s) => s.resetFilter);
+  const logout = useSession((s) => s.logout);
 
   const onHome = () => setActiveTab(null);
   const onFreeze = () => {
@@ -51,7 +52,9 @@ export function TopBar() {
         <button className="btn ghost" onClick={onFreeze} title="Freeze TODAY into a snapshot">
           freeze
         </button>
-        <SyncButton />
+        <button className="btn ghost" onClick={() => void logout()} title="Sign out">
+          sign out
+        </button>
         <button className="btn primary" onClick={() => setNewOpen(true)}>+ new tab</button>
       </div>
 

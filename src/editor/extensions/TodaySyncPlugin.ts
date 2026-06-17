@@ -90,7 +90,7 @@ export const TodaySyncPlugin = Extension.create({
               const needsNew = !it.id || (it.id && seenDuplicate.has(it.id));
               if (!needsNew) continue;
               if (!it.boundTabId) continue;
-              if (!it.text.trim()) continue;
+              if (!extractTokens(it.text).text.trim()) continue;
               if (it.cursorInside) continue;
               const node = newState.doc.nodeAt(it.pos);
               if (!node) continue;
