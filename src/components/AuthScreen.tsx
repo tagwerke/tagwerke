@@ -27,6 +27,7 @@ export function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,14 +65,30 @@ export function AuthScreen() {
 
         <label className="auth-field">
           <span>password</span>
-          <input
-            type="password"
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div className="auth-password">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              className="auth-reveal"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-pressed={showPassword}
+              title={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? (
+                <svg viewBox="0 0 16 16" width="16" height="16"><path d="M2 2l12 12M6.5 6.6a2 2 0 002.8 2.8M4.3 4.5C2.8 5.5 1.5 8 1.5 8s2.5 4.5 6.5 4.5c1.2 0 2.2-.3 3.1-.8M9.5 3.6C9 3.5 8.5 3.5 8 3.5 4 3.5 1.5 8 1.5 8m13 0s-1-1.9-2.8-3.2" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              ) : (
+                <svg viewBox="0 0 16 16" width="16" height="16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" strokeWidth="1.2"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.2"/></svg>
+              )}
+            </button>
+          </div>
         </label>
 
         {mode === 'signup' && (

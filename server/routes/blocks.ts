@@ -1,8 +1,21 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
+import { boardRole, requireBoardRole } from '../auth/boards.ts';
+
+/** Resolve the home board of the task named in the request body (by taskId). */
+async function bodyTaskBoard(req: FastifyRequest): Promise<string | undefined> {
+  const taskId = (req.body as { taskId?: string })?.taskId;
+  if (!taskId) return undefined;
+  const rows = await db
+    .select({ homeTabId: schema.tasks.homeTabId })
+    .from(schema.tasks)
+    .where(eq(schema.tasks.id, taskId))
+    .limit(1);
+  return rows[0]?.homeTabId;
+}
 
 const createBody = z.object({
   id: z.string().min(1),
@@ -32,7 +45,11 @@ async function todayTabId(userId: string): Promise<string | null> {
 export async function blockRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
 
-  app.post('/api/blocks', async (req, reply) => {
+  // Binding a block to a source board requires READ on that board.
+  app.post(
+    '/api/blocks',
+    { preHandler: requireBoardRole('viewer', (req) => (req.body as { homeTabId?: string })?.homeTabId) },
+    async (req, reply) => {
     const b = createBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid block' });
     const userId = req.user!.id;
@@ -60,7 +77,8 @@ export async function blockRoutes(app: FastifyInstance): Promise<void> {
       });
     });
     return reply.code(201).send({ ok: true });
-  });
+    },
+  );
 
   app.patch('/api/blocks/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
@@ -68,6 +86,9 @@ export async function blockRoutes(app: FastifyInstance): Promise<void> {
     if (!b.success) return reply.code(400).send({ error: 'invalid patch' });
     const userId = req.user!.id;
     const { homeTabId, ...rest } = b.data;
+    // Rebinding a block to a new source board requires READ on that board.
+    if (homeTabId !== undefined && !(await boardRole(userId, homeTabId)))
+      return reply.code(404).send({ error: 'not found' });
     const set: Record<string, unknown> = { ...rest };
     if (homeTabId !== undefined) set.homeTabId = homeTabId;
     await db
@@ -86,7 +107,10 @@ export async function blockRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true });
   });
 
-  app.post('/api/blocks/:id/tasks', async (req, reply) => {
+  app.post(
+    '/api/blocks/:id/tasks',
+    { preHandler: requireBoardRole('viewer', bodyTaskBoard) },
+    async (req, reply) => {
     const { id } = req.params as { id: string };
     const b = addTaskBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid request' });
@@ -110,7 +134,8 @@ export async function blockRoutes(app: FastifyInstance): Promise<void> {
       .values({ blockId: id, taskId: b.data.taskId, position })
       .onConflictDoNothing();
     return reply.send({ ok: true });
-  });
+    },
+  );
 
   app.delete('/api/blocks/:id/tasks/:taskId', async (req, reply) => {
     const { id, taskId } = req.params as { id: string; taskId: string };

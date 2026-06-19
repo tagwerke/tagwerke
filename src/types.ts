@@ -19,6 +19,7 @@ export interface Tab {
   docJSON?: unknown;
   blocks?: TodayBlock[];
   dateKey?: string;
+  location?: string; // board's place facet (v2)
 }
 
 export interface Task {

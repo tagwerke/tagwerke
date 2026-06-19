@@ -4,11 +4,14 @@ import { useSession } from '../session/useSession';
 import { NewTabDialog } from './NewTabDialog';
 import { FilterPanel } from './FilterPanel';
 import { SearchPalette } from './SearchPalette';
+import { AdminPanel } from './AdminPanel';
 
 export function TopBar() {
   const [newOpen, setNewOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const isAdmin = useSession((s) => s.user?.role === 'admin');
   const activeTabId = useStore((s) => s.activeTabId);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const freezeToday = useStore((s) => s.freezeToday);
@@ -52,6 +55,11 @@ export function TopBar() {
         <button className="btn ghost" onClick={onFreeze} title="Freeze TODAY into a snapshot">
           freeze
         </button>
+        {isAdmin && (
+          <button className="btn ghost" onClick={() => setAdminOpen(true)} title="Admin dashboard">
+            admin
+          </button>
+        )}
         <button className="btn ghost" onClick={() => void logout()} title="Sign out">
           sign out
         </button>
@@ -61,6 +69,7 @@ export function TopBar() {
       {newOpen && <NewTabDialog onClose={() => setNewOpen(false)} />}
       {filterOpen && <FilterPanel onClose={() => setFilterOpen(false)} />}
       {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} />}
+      {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} />}
       <div style={{ display: 'none' }}>{activeTabId}</div>
     </header>
   );

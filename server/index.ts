@@ -14,6 +14,9 @@ import { tabRoutes } from './routes/tabs.ts';
 import { taskRoutes } from './routes/tasks.ts';
 import { blockRoutes } from './routes/blocks.ts';
 import { todayRoutes } from './routes/today.ts';
+import { memberRoutes } from './routes/members.ts';
+import { eventRoutes } from './routes/events.ts';
+import { adminRoutes } from './routes/admin.ts';
 
 const PORT = Number(process.env.PORT ?? 5174);
 // Bind all interfaces by default so the container is reachable; override with HOST.
@@ -49,6 +52,9 @@ await app.register(tabRoutes);
 await app.register(taskRoutes);
 await app.register(blockRoutes);
 await app.register(todayRoutes);
+await app.register(memberRoutes);
+await app.register(eventRoutes);
+await app.register(adminRoutes);
 
 // In production the same process serves the built SPA. In dev, Vite serves it.
 if (isProd) {

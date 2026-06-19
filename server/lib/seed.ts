@@ -29,6 +29,7 @@ export async function seedUser(userId: string): Promise<void> {
     {
       id: todayId,
       userId,
+      createdBy: userId,
       projectId: workId,
       name: 'TODAY',
       position: 0,
@@ -41,6 +42,7 @@ export async function seedUser(userId: string): Promise<void> {
     {
       id: inboxId,
       userId,
+      createdBy: userId,
       projectId: workId,
       name: 'Inbox',
       position: 1,
@@ -52,6 +54,7 @@ export async function seedUser(userId: string): Promise<void> {
     {
       id: errandsId,
       userId,
+      createdBy: userId,
       projectId: personalId,
       name: 'Errands',
       position: 2,
@@ -60,5 +63,14 @@ export async function seedUser(userId: string): Promise<void> {
       type: 'normal',
       docJSON: null,
     },
+  ]);
+
+  // v2: each seeded tab is a board the user owns (admin membership), which also holds
+  // their personal view state. Without this the tabs are invisible (the read path
+  // keys on board_members).
+  await db.insert(schema.boardMembers).values([
+    { tabId: todayId, userId, role: 'admin', categoryId: workId, position: 0, starred: true, starredPosition: 0 },
+    { tabId: inboxId, userId, role: 'admin', categoryId: workId, position: 1, starred: true, starredPosition: 1 },
+    { tabId: errandsId, userId, role: 'admin', categoryId: personalId, position: 2, starred: false, starredPosition: null },
   ]);
 }

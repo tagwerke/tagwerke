@@ -19,7 +19,8 @@
     "db:push": "drizzle-kit push",
     "typecheck:server": "tsc -p tsconfig.server.json --noEmit",
     "import:state": "tsx server/scripts/import-state.ts",
-    "invite": "tsx server/scripts/create-invite.ts"
+    "invite": "tsx server/scripts/create-invite.ts",
+    "backup": "tsx server/scripts/backup-json.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -39,6 +40,7 @@
     "pg": "^8.21.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "rrule": "^2.8.1",
     "tsx": "^4.22.4",
     "zod": "^4.4.3",
     "zustand": "^5.0.13"

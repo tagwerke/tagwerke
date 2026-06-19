@@ -62,7 +62,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const sessionId = await createSession(id);
     setSessionCookie(reply, sessionId);
-    return reply.code(201).send({ user: { id, email } });
+    return reply.code(201).send({ user: { id, email, role: 'member' } });
   });
 
   app.post('/api/auth/login', authRateLimit, async (req, reply) => {
@@ -77,6 +77,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         passwordHash: schema.users.passwordHash,
         failedAttempts: schema.users.failedAttempts,
         lockedUntil: schema.users.lockedUntil,
+        role: schema.users.role,
       })
       .from(schema.users)
       .where(eq(schema.users.email, email))
@@ -113,7 +114,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const sessionId = await createSession(user.id);
     setSessionCookie(reply, sessionId);
-    return reply.send({ user: { id: user.id, email: user.email } });
+    return reply.send({ user: { id: user.id, email: user.email, role: user.role === 'admin' ? 'admin' : 'member' } });
   });
 
   app.post('/api/auth/logout', async (req, reply) => {

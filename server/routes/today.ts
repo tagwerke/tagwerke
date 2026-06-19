@@ -30,10 +30,13 @@ export async function todayRoutes(app: FastifyInstance): Promise<void> {
     if (!b.success) return reply.code(400).send({ error: 'invalid request' });
     const userId = req.user!.id;
 
+    // The TODAY tab is the user's own board — resolve it via membership (not the
+    // legacy tabs.user_id column, which Phase 6 cleanup will drop).
     const tabRows = await db
       .select({ id: schema.tabs.id })
-      .from(schema.tabs)
-      .where(and(eq(schema.tabs.userId, userId), eq(schema.tabs.type, 'today')))
+      .from(schema.boardMembers)
+      .innerJoin(schema.tabs, eq(schema.boardMembers.tabId, schema.tabs.id))
+      .where(and(eq(schema.boardMembers.userId, userId), eq(schema.tabs.type, 'today')))
       .limit(1);
     const todayTab = tabRows[0];
     if (!todayTab) return reply.code(409).send({ error: 'no today tab' });
@@ -53,7 +56,7 @@ export async function todayRoutes(app: FastifyInstance): Promise<void> {
       await tx
         .update(schema.tabs)
         .set({ docJSON: EMPTY_DOC, dateKey: nextDateKey })
-        .where(and(eq(schema.tabs.id, todayTab.id), eq(schema.tabs.userId, userId)));
+        .where(eq(schema.tabs.id, todayTab.id));
     });
 
     return reply.send({ snapshot, nextDateKey, emptyDoc: EMPTY_DOC });

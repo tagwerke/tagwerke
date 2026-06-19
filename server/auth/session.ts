@@ -31,6 +31,7 @@ export async function destroySession(id: string): Promise<void> {
 export interface SessionUser {
   id: string;
   email: string;
+  role: 'admin' | 'member';
 }
 
 /** Resolve the logged-in user from the request cookie, refreshing expiry. Returns null if unauthenticated. */
@@ -47,6 +48,7 @@ export async function resolveUser(req: FastifyRequest): Promise<SessionUser | nu
       expiresAt: schema.sessions.expiresAt,
       userId: schema.users.id,
       email: schema.users.email,
+      role: schema.users.role,
     })
     .from(schema.sessions)
     .innerJoin(schema.users, eq(schema.sessions.userId, schema.users.id))
@@ -66,7 +68,7 @@ export async function resolveUser(req: FastifyRequest): Promise<SessionUser | nu
     .set({ expiresAt: expiry() })
     .where(eq(schema.sessions.id, sessionId));
 
-  return { id: row.userId, email: row.email };
+  return { id: row.userId, email: row.email, role: row.role === 'admin' ? 'admin' : 'member' };
 }
 
 export function setSessionCookie(reply: FastifyReply, sessionId: string): void {

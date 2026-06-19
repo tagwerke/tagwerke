@@ -69,18 +69,20 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       const fallback = projectRows.find((p) => p.id !== id);
       if (!fallback) return;
 
-      // Reassign any TODAY tab in this project to the fallback so cascade-delete
-      // does not remove it; normal tabs (+ their tasks) cascade away with the project.
+      // v2: a project is now a personal CATEGORY. Deleting it must NOT delete any
+      // board. Re-file the caller's boards under the fallback category:
+      //  - board_members.category_id (the live per-user filing), and
+      //  - the legacy tabs.project_id (still FK-cascades until Phase 6) — reassign ALL
+      //    such tabs so none are cascade-deleted with the project.
+      await tx
+        .update(schema.boardMembers)
+        .set({ categoryId: fallback.id })
+        .where(and(eq(schema.boardMembers.userId, userId), eq(schema.boardMembers.categoryId, id)));
+
       await tx
         .update(schema.tabs)
         .set({ projectId: fallback.id })
-        .where(
-          and(
-            eq(schema.tabs.userId, userId),
-            eq(schema.tabs.projectId, id),
-            eq(schema.tabs.type, 'today'),
-          ),
-        );
+        .where(and(eq(schema.tabs.userId, userId), eq(schema.tabs.projectId, id)));
 
       await tx
         .delete(schema.projects)

@@ -17,6 +17,7 @@ interface Actions {
 
   createTab(projectId: ID, name: string): Tab;
   renameTab(id: ID, name: string): void;
+  setTabLocation(id: ID, location: string): void;
   setTabStarred(id: ID, starred: boolean): void;
   setTabDoc(id: ID, doc: unknown): void;
   deleteTab(id: ID): void;
@@ -230,6 +231,10 @@ export const useStore = create<RootState & Actions>()(
       renameTab(id, name) {
         set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], name } } }));
         enqueue(() => api.tabs.update(id, { name }));
+      },
+      setTabLocation(id, location) {
+        set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], location } } }));
+        enqueue(() => api.tabs.update(id, { location }));
       },
       setTabStarred(id, starred) {
         set((s) => {

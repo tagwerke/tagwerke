@@ -1,8 +1,14 @@
 // Reassembles the client RootState shape from normalized rows for one user.
 // Mirrors src/types.ts. `filter` and `activeTabId` are client-side concerns and
 // are returned as defaults; `todayTabId` is derived (the tab with type='today').
+//
+// v2: access derives from board_members, not from a user_id column. A tab is visible
+// because the user has a membership row; that same row supplies the per-user view
+// state (category/order/starred). The OUTPUT shape is unchanged — `tab.projectId` is
+// the member's category, `tab.order`/`starred` come from the membership — so the
+// client is untouched by the ownership pivot.
 
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 
 interface TodayBlockOut {
@@ -15,11 +21,36 @@ interface TodayBlockOut {
 }
 
 export async function assembleState(userId: string) {
-  const [projectRows, tabRows, taskRows, snapshotRows, blockRows, blockTaskRows] = await Promise.all([
+  // The user's boards (via membership) joined to shared tab content. The membership
+  // row carries this user's personal view state for each board.
+  const membershipRows = await db
+    .select({
+      id: schema.tabs.id,
+      name: schema.tabs.name,
+      type: schema.tabs.type,
+      docJSON: schema.tabs.docJSON,
+      dateKey: schema.tabs.dateKey,
+      location: schema.tabs.location,
+      categoryId: schema.boardMembers.categoryId,
+      position: schema.boardMembers.position,
+      starred: schema.boardMembers.starred,
+      starredPosition: schema.boardMembers.starredPosition,
+    })
+    .from(schema.boardMembers)
+    .innerJoin(schema.tabs, eq(schema.boardMembers.tabId, schema.tabs.id))
+    .where(eq(schema.boardMembers.userId, userId))
+    .orderBy(asc(schema.boardMembers.position));
+
+  const tabIds = membershipRows.map((t) => t.id);
+
+  const [projectRows, taskRows, snapshotRows, blockRows, blockTaskRows] = await Promise.all([
     db.select().from(schema.projects).where(eq(schema.projects.userId, userId)).orderBy(asc(schema.projects.position)),
-    db.select().from(schema.tabs).where(eq(schema.tabs.userId, userId)).orderBy(asc(schema.tabs.position)),
-    db.select().from(schema.tasks).where(eq(schema.tasks.userId, userId)),
+    // Tasks of any board the user can see (not tasks.userId).
+    tabIds.length
+      ? db.select().from(schema.tasks).where(inArray(schema.tasks.homeTabId, tabIds))
+      : Promise.resolve([] as (typeof schema.tasks.$inferSelect)[]),
     db.select().from(schema.snapshots).where(eq(schema.snapshots.userId, userId)),
+    // TODAY blocks remain personal (owned by the user's today tab).
     db.select().from(schema.todayBlocks).where(eq(schema.todayBlocks.userId, userId)).orderBy(asc(schema.todayBlocks.position)),
     db.select().from(schema.todayBlockTasks),
   ]);
@@ -63,17 +94,18 @@ export async function assembleState(userId: string) {
   const tabOrder: string[] = [];
   const starred: { id: string; pos: number }[] = [];
   let todayTabId = '';
-  for (const t of tabRows) {
+  for (const t of membershipRows) {
     const isToday = t.type === 'today';
     if (isToday) todayTabId = t.id;
     tabs[t.id] = {
       id: t.id,
-      projectId: t.projectId,
+      projectId: t.categoryId, // member's personal category
       name: t.name,
       order: t.position,
       starred: t.starred,
       type: t.type,
       docJSON: t.docJSON ?? undefined,
+      ...(t.location != null ? { location: t.location } : {}),
       ...(isToday ? { blocks: blocksByTab.get(t.id) ?? [] } : {}),
       ...(t.dateKey != null ? { dateKey: t.dateKey } : {}),
     };
