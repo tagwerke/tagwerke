@@ -59,7 +59,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const userId = req.user!.id;
       const values = {
         id,
-        userId,
         createdBy: userId,
         homeTabId: b.data.homeTabId,
         text: b.data.text,

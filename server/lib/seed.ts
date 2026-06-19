@@ -26,43 +26,9 @@ export async function seedUser(userId: string): Promise<void> {
   ]);
 
   await db.insert(schema.tabs).values([
-    {
-      id: todayId,
-      userId,
-      createdBy: userId,
-      projectId: workId,
-      name: 'TODAY',
-      position: 0,
-      starred: true,
-      starredPosition: 0,
-      type: 'today',
-      dateKey: todayISO(),
-      docJSON: null,
-    },
-    {
-      id: inboxId,
-      userId,
-      createdBy: userId,
-      projectId: workId,
-      name: 'Inbox',
-      position: 1,
-      starred: true,
-      starredPosition: 1,
-      type: 'normal',
-      docJSON: null,
-    },
-    {
-      id: errandsId,
-      userId,
-      createdBy: userId,
-      projectId: personalId,
-      name: 'Errands',
-      position: 2,
-      starred: false,
-      starredPosition: null,
-      type: 'normal',
-      docJSON: null,
-    },
+    { id: todayId, createdBy: userId, name: 'TODAY', type: 'today', dateKey: todayISO(), docJSON: null },
+    { id: inboxId, createdBy: userId, name: 'Inbox', type: 'normal', docJSON: null },
+    { id: errandsId, createdBy: userId, name: 'Errands', type: 'normal', docJSON: null },
   ]);
 
   // v2: each seeded tab is a board the user owns (admin membership), which also holds

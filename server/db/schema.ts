@@ -66,53 +66,39 @@ export const projects = pgTable(
   (t) => [index('projects_user_idx').on(t.userId)],
 );
 
+// v2: a tab IS a board. It holds only SHARED content + attribution. Per-user view
+// state (category/order/starred) lives on board_members; access derives from there.
 export const tabs = pgTable(
   'tabs',
   {
     id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    // v2: position/starred/starredPosition/projectId are per-USER view state and are
-    // being relocated to board_members. Kept here through the additive migration; the
-    // read/write paths move to board_members (Phase 3), then these are dropped (Phase 6).
-    position: integer('position').notNull(),
-    starred: boolean('starred').notNull().default(false),
-    starredPosition: integer('starred_position'),
     // 'normal' | 'today'
     type: text('type').notNull().default('normal'),
     dateKey: text('date_key'),
     docJSON: jsonb('doc_json'),
-    // v2 board facets / attribution.
+    // Board facets / attribution.
     location: text('location'),
     createdBy: text('created_by'), // attribution; access derives from board_members
   },
-  (t) => [index('tabs_user_idx').on(t.userId), index('tabs_project_idx').on(t.projectId)],
 );
 
 export const tasks = pgTable(
   'tasks',
   {
     id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
     homeTabId: text('home_tab_id')
       .notNull()
       .references(() => tabs.id, { onDelete: 'cascade' }),
     text: text('text').notNull().default(''),
     date: text('date'),
     priority: smallint('priority'),
-    // v2: owner becomes a real user id (the [Name] token → a board member), not free text.
+    // owner: a real user id (the [Name] token → a board member); legacy free text tolerated.
     owner: text('owner'),
     done: boolean('done').notNull().default(false),
     createdBy: text('created_by'), // attribution; access derives from the home tab's board
   },
-  (t) => [index('tasks_user_idx').on(t.userId), index('tasks_home_tab_idx').on(t.homeTabId)],
+  (t) => [index('tasks_home_tab_idx').on(t.homeTabId)],
 );
 
 // v2 collaboration: a board's access list AND each member's personal view of it.

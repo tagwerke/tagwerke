@@ -34,10 +34,12 @@ const addTaskBody = z.object({ taskId: z.string().min(1) });
 const reorderBody = z.object({ order: z.array(z.string().min(1)) });
 
 async function todayTabId(userId: string): Promise<string | null> {
+  // The user's TODAY board, resolved via membership.
   const rows = await db
     .select({ id: schema.tabs.id })
-    .from(schema.tabs)
-    .where(and(eq(schema.tabs.userId, userId), eq(schema.tabs.type, 'today')))
+    .from(schema.boardMembers)
+    .innerJoin(schema.tabs, eq(schema.boardMembers.tabId, schema.tabs.id))
+    .where(and(eq(schema.boardMembers.userId, userId), eq(schema.tabs.type, 'today')))
     .limit(1);
   return rows[0]?.id ?? null;
 }

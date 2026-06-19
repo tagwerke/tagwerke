@@ -80,11 +80,11 @@ async function main() {
   const userId = userRow.id;
 
   await db.transaction(async (tx) => {
-    // Wipe existing rows (snapshots + projects cascade to tabs/tasks/blocks).
+    // Wipe existing rows. Deleting the user's boards (by created_by) cascades their
+    // tasks, memberships, events, and owned blocks.
     await tx.delete(schema.snapshots).where(eq(schema.snapshots.userId, userId));
     await tx.delete(schema.todayBlocks).where(eq(schema.todayBlocks.userId, userId));
-    await tx.delete(schema.tasks).where(eq(schema.tasks.userId, userId));
-    await tx.delete(schema.tabs).where(eq(schema.tabs.userId, userId));
+    await tx.delete(schema.tabs).where(eq(schema.tabs.createdBy, userId));
     await tx.delete(schema.projects).where(eq(schema.projects.userId, userId));
 
     const starredIdx = (id: string) => {
@@ -104,15 +104,23 @@ async function main() {
       await tx.insert(schema.tabs).values(
         tabs.map((t) => ({
           id: t.id,
-          userId,
-          projectId: t.projectId,
+          createdBy: userId,
           name: t.name,
-          position: t.order,
-          starred: t.starred,
-          starredPosition: t.starred ? starredIdx(t.id) : null,
           type: t.type,
           dateKey: t.dateKey ?? null,
           docJSON: t.docJSON ?? null,
+        })),
+      );
+      // Each imported tab is a board the user admins; view state on the membership.
+      await tx.insert(schema.boardMembers).values(
+        tabs.map((t) => ({
+          tabId: t.id,
+          userId,
+          role: 'admin' as const,
+          categoryId: t.projectId,
+          position: t.order,
+          starred: t.starred,
+          starredPosition: t.starred ? starredIdx(t.id) : null,
         })),
       );
     }
@@ -122,7 +130,7 @@ async function main() {
       await tx.insert(schema.tasks).values(
         tasks.map((t) => ({
           id: t.id,
-          userId,
+          createdBy: userId,
           homeTabId: t.homeTabId,
           text: t.text,
           date: t.date ?? null,

@@ -37,17 +37,12 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     const userId = req.user!.id;
     const starred = b.data.starred ?? false;
     await db.transaction(async (tx) => {
-      // Shared content. Legacy user_id/project_id/position/starred stay populated
-      // through the additive transition (dropped in Phase 6); created_by is the new
-      // attribution column.
+      // Shared content only; created_by is attribution. Per-user view state
+      // (category/order/starred) lives on the membership row below.
       await tx.insert(schema.tabs).values({
         id: b.data.id,
-        userId,
         createdBy: userId,
-        projectId: b.data.projectId,
         name: b.data.name,
-        position: b.data.position,
-        starred,
         type: b.data.type ?? 'normal',
       });
       // The creator's membership = admin. Carries this user's view state.
