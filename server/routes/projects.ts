@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { and, asc, eq, ne } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
+import { reorderByIndex } from '../lib/reorder.ts';
 
 const createBody = z.object({
   id: z.string().min(1),
@@ -45,14 +46,11 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     const b = reorderBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid order' });
     const userId = req.user!.id;
-    await db.transaction(async (tx) => {
-      for (let i = 0; i < b.data.order.length; i++) {
-        await tx
-          .update(schema.projects)
-          .set({ position: i })
-          .where(and(eq(schema.projects.id, b.data.order[i]), eq(schema.projects.userId, userId)));
-      }
-    });
+    await reorderByIndex(b.data.order, (tx, id, position) =>
+      tx
+        .update(schema.projects)
+        .set({ position })
+        .where(and(eq(schema.projects.id, id), eq(schema.projects.userId, userId))));
     return reply.send({ ok: true });
   });
 
