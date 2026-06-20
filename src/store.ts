@@ -9,6 +9,15 @@ function nextPosition(orders: number[]): number {
   return orders.length ? Math.max(...orders) + 1 : 0;
 }
 
+/** Return a copy of `tasks` with every task homed in one of `tabIds` removed. */
+function pruneTasksForTabs(tasks: Record<ID, Task>, tabIds: Set<ID>): Record<ID, Task> {
+  const next: Record<ID, Task> = {};
+  for (const t of Object.values(tasks)) {
+    if (!tabIds.has(t.homeTabId)) next[t.id] = t;
+  }
+  return next;
+}
+
 interface Actions {
   createProject(name: string, color?: string): Project;
   renameProject(id: ID, name: string): void;
@@ -205,12 +214,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
             }
           }
 
-          const tasks = { ...s.tasks };
-          for (const tid of tabsToDelete) {
-            for (const task of Object.values(tasks)) {
-              if (task.homeTabId === tid) delete tasks[task.id];
-            }
-          }
+          const tasks = pruneTasksForTabs(s.tasks, new Set(tabsToDelete));
           return {
             projects,
             tabs,
@@ -268,10 +272,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           if (s.tabs[id]?.type === 'today') return s;
           const tabs = { ...s.tabs };
           delete tabs[id];
-          const tasks = { ...s.tasks };
-          for (const task of Object.values(tasks)) {
-            if (task.homeTabId === id) delete tasks[task.id];
-          }
+          const tasks = pruneTasksForTabs(s.tasks, new Set([id]));
           const todayId = s.todayTabId;
           const today = s.tabs[todayId];
           const blocks = today?.blocks?.map((b) =>
