@@ -150,8 +150,17 @@ function makeInitial(): RootState {
   };
 }
 
-export const useStore = create<RootState & Actions>()(
-    (set, get) => ({
+export const useStore = create<RootState & Actions>()((set, get) => {
+  // Read today's blocks, apply `fn`, and write them back. Centralizes the
+  // get-today → transform → set-tabs[todayTabId] dance the block actions share.
+  const setTodayBlocks = (fn: (blocks: TodayBlock[]) => TodayBlock[]): TodayBlock[] => {
+    const { todayTabId } = get();
+    const blocks = fn(get().tabs[todayTabId]?.blocks ?? []);
+    set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...s.tabs[todayTabId], blocks } } }));
+    return blocks;
+  };
+
+  return {
       ...makeInitial(),
 
       createProject(name, color) {
@@ -342,31 +351,25 @@ export const useStore = create<RootState & Actions>()(
 
       addBlock(after) {
         const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
-        if (!today) throw new Error('today not initialized');
+        if (!tabs[todayTabId]) throw new Error('today not initialized');
         const firstNormal = Object.values(tabs).find((t) => t.type === 'normal');
         const block: TodayBlock = {
           id: nanoid(),
           tabId: firstNormal?.id ?? '',
           taskIds: [],
         };
-        const blocks = today.blocks ? [...today.blocks] : [];
-        if (after) {
-          const idx = blocks.findIndex((b) => b.id === after);
-          blocks.splice(idx + 1, 0, block);
-        } else {
-          blocks.push(block);
-        }
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        const blocks = setTodayBlocks((existing) => {
+          const next = [...existing];
+          const at = after ? next.findIndex((b) => b.id === after) + 1 : next.length;
+          next.splice(at, 0, block);
+          return next;
+        });
         const position = blocks.findIndex((b) => b.id === block.id);
         enqueue(() => api.blocks.create({ id: block.id, homeTabId: block.tabId, position }));
         return block;
       },
       updateBlock(id, patch) {
-        const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
-        const blocks = (today?.blocks ?? []).map((b) => (b.id === id ? { ...b, ...patch } : b));
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        setTodayBlocks((blocks) => blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)));
         const apiPatch: { homeTabId?: ID; start?: string | null; end?: string | null; label?: string | null } = {};
         if (patch.tabId !== undefined) apiPatch.homeTabId = patch.tabId;
         if (patch.start !== undefined) apiPatch.start = patch.start ?? null;
@@ -375,39 +378,28 @@ export const useStore = create<RootState & Actions>()(
         enqueue(() => api.blocks.update(id, apiPatch));
       },
       deleteBlock(id) {
-        const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
-        const blocks = (today?.blocks ?? []).filter((b) => b.id !== id);
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        setTodayBlocks((blocks) => blocks.filter((b) => b.id !== id));
         enqueue(() => api.blocks.remove(id));
       },
       addTaskToBlock(blockId, taskId) {
-        const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
-        const blocks = (today?.blocks ?? []).map((b) =>
+        setTodayBlocks((blocks) => blocks.map((b) =>
           b.id === blockId
             ? { ...b, taskIds: b.taskIds.includes(taskId) ? b.taskIds : [...b.taskIds, taskId] }
             : b
-        );
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        ));
         enqueue(() => api.blocks.addTask(blockId, taskId));
       },
       removeTaskFromBlock(blockId, taskId) {
-        const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
-        const blocks = (today?.blocks ?? []).map((b) =>
+        setTodayBlocks((blocks) => blocks.map((b) =>
           b.id === blockId ? { ...b, taskIds: b.taskIds.filter((t) => t !== taskId) } : b
-        );
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        ));
         enqueue(() => api.blocks.removeTask(blockId, taskId));
       },
       reorderBlocks(order) {
-        const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
+        const today = get().tabs[get().todayTabId];
         if (!today?.blocks) return;
         const byId = new Map(today.blocks.map((b) => [b.id, b]));
-        const blocks = order.map((id) => byId.get(id)!).filter(Boolean);
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        setTodayBlocks(() => order.map((id) => byId.get(id)!).filter(Boolean));
         enqueue(() => api.blocks.reorder(order));
       },
 
@@ -511,8 +503,8 @@ export const useStore = create<RootState & Actions>()(
       reset() {
         set(makeInitial());
       },
-    })
-);
+  };
+});
 
 export function useTodayTab() {
   return useStore((s) => s.tabs[s.todayTabId]);
