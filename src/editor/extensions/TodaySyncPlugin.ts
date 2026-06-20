@@ -12,6 +12,7 @@ import { useStore } from '../../store';
 import { parseHeader } from '../../util/header';
 import { extractTokens } from '../../util/parse';
 import { applyStripOps, stripOpForLine, type StripOp } from '../taskItemDoc';
+import { setTaskDoneInDoc, setTaskTextInDoc } from '../persistedDoc';
 import { applyTaskTextEditToHome, applyTaskDoneToHome } from '../registry';
 import type { ID, Task } from '../../types';
 
@@ -175,35 +176,16 @@ export const TodaySyncPlugin = Extension.create({
   },
 });
 
-interface DocLike { type: string; text?: string; attrs?: Record<string, unknown>; content?: DocLike[] }
-
 function writeTextToPersistedDoc(tabId: ID, id: ID, text: string) {
   const store = useStore.getState();
   const tab = store.tabs[tabId];
   if (!tab?.docJSON) return;
-  const doc = JSON.parse(JSON.stringify(tab.docJSON)) as DocLike;
-  const walk = (n: DocLike) => {
-    if (n.type === 'taskItem' && n.attrs?.id === id) {
-      const para = n.content?.[0];
-      if (para) para.content = text ? [{ type: 'text', text }] : [];
-    }
-    n.content?.forEach(walk);
-  };
-  walk(doc);
-  store.setTabDoc(tabId, doc);
+  store.setTabDoc(tabId, setTaskTextInDoc(tab.docJSON, id, text));
 }
 
 function writeDoneToPersistedDoc(tabId: ID, id: ID, done: boolean) {
   const store = useStore.getState();
   const tab = store.tabs[tabId];
   if (!tab?.docJSON) return;
-  const doc = JSON.parse(JSON.stringify(tab.docJSON)) as DocLike;
-  const walk = (n: DocLike) => {
-    if (n.type === 'taskItem' && n.attrs?.id === id) {
-      n.attrs = { ...n.attrs, done };
-    }
-    n.content?.forEach(walk);
-  };
-  walk(doc);
-  store.setTabDoc(tabId, doc);
+  store.setTabDoc(tabId, setTaskDoneInDoc(tab.docJSON, id, done));
 }

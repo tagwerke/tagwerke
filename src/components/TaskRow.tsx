@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import { Chip } from './Chip';
 import { formatDateChip } from '../util/dates';
 import { applyTaskTextEditToHome, applyTaskDoneToHome } from '../editor/registry';
+import { setTaskDoneInDoc, setTaskTextInDoc } from '../editor/persistedDoc';
 import type { ID } from '../types';
 
 interface Props { taskId: ID; blockId?: ID }
@@ -37,32 +38,13 @@ export function TaskRow({ taskId, blockId }: Props) {
   function writeDoneToPersistedDoc(tabId: ID, id: ID, done: boolean) {
     const tab = tabs[tabId];
     if (!tab?.docJSON) return;
-    const doc = JSON.parse(JSON.stringify(tab.docJSON)) as any;
-    const walk = (n: any) => {
-      if (!n) return;
-      if (n.type === 'taskItem' && n.attrs?.id === id) {
-        n.attrs = { ...n.attrs, done };
-      }
-      if (Array.isArray(n.content)) n.content.forEach(walk);
-    };
-    walk(doc);
-    setTabDoc(tabId, doc);
+    setTabDoc(tabId, setTaskDoneInDoc(tab.docJSON, id, done));
   }
 
   function writeTextToPersistedDoc(tabId: ID, id: ID, text: string) {
     const tab = tabs[tabId];
     if (!tab?.docJSON) return;
-    const doc = JSON.parse(JSON.stringify(tab.docJSON)) as any;
-    const walk = (n: any) => {
-      if (!n) return;
-      if (n.type === 'taskItem' && n.attrs?.id === id) {
-        const para = n.content?.[0];
-        if (para) para.content = text ? [{ type: 'text', text }] : [];
-      }
-      if (Array.isArray(n.content)) n.content.forEach(walk);
-    };
-    walk(doc);
-    setTabDoc(tabId, doc);
+    setTabDoc(tabId, setTaskTextInDoc(tab.docJSON, id, text));
   }
 
   const commit = () => {
