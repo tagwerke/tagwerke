@@ -4,6 +4,7 @@ import { TextSelection, type EditorState } from '@tiptap/pm/state';
 import { useStore } from '../store';
 import { parseHeader, type TabMatch } from '../util/header';
 import { blockHeaderKey } from './extensions/BlockHeader';
+import { taskItemInnerRange } from './taskItemDoc';
 import type { ID } from '../types';
 
 interface TaskMatch { id: ID; text: string; done: boolean }
@@ -118,8 +119,7 @@ function computeMode(editor: Editor): Mode | null {
       // Replace text of the taskItem and set its id to m.id (turns it into a reference).
       const para = taskItemNode!.firstChild;
       if (!para) return;
-      const innerFrom = taskItemPos + 2;
-      const innerTo = taskItemPos + 1 + para.nodeSize - 1;
+      const { from: innerFrom, to: innerTo } = taskItemInnerRange(taskItemPos, para);
       const tr = editor.state.tr.replaceWith(innerFrom, innerTo, editor.state.schema.text(m.text));
       tr.setNodeMarkup(taskItemPos, undefined, { ...taskItemNode!.attrs, id: m.id });
       tr.setMeta('externalEdit', true);

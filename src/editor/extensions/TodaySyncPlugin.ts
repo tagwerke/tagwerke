@@ -10,7 +10,8 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { nanoid } from 'nanoid';
 import { useStore } from '../../store';
 import { parseHeader } from '../../util/header';
-import { extractTokens, hasTokens } from '../../util/parse';
+import { extractTokens } from '../../util/parse';
+import { applyStripOps, stripOpForLine, type StripOp } from '../taskItemDoc';
 import { applyTaskTextEditToHome, applyTaskDoneToHome } from '../registry';
 import type { ID, Task } from '../../types';
 
@@ -101,25 +102,15 @@ export const TodaySyncPlugin = Extension.create({
             }
 
             // Strip chip tokens (`!2`, `@2025…`, `[mike]`) on commit, like the regular SyncPlugin.
-            const stripOps: { from: number; to: number; insert: string }[] = [];
+            const stripOps: StripOp[] = [];
             for (const it of items) {
               if (it.cursorInside) continue;
-              if (!hasTokens(it.text)) continue;
-              const parsed = extractTokens(it.text);
-              if (parsed.text === it.text) continue;
-              const node = newState.doc.nodeAt(it.pos);
-              const para = node?.firstChild;
-              if (!para) continue;
-              const innerFrom = it.pos + 2;
-              const innerTo = it.pos + 1 + para.nodeSize - 1;
-              stripOps.push({ from: innerFrom, to: innerTo, insert: parsed.text });
+              const op = stripOpForLine(it.pos, it.text, newState.doc);
+              if (op) stripOps.push(op);
             }
             if (stripOps.length) {
               tr = tr ?? newState.tr;
-              stripOps.sort((a, b) => b.from - a.from);
-              for (const op of stripOps) {
-                tr.replaceWith(op.from, op.to, op.insert ? newState.schema.text(op.insert) : []);
-              }
+              applyStripOps(tr, stripOps, newState.schema);
             }
           }
 

@@ -1,7 +1,24 @@
 import type { Editor } from '@tiptap/react';
 import type { ID } from '../types';
+import { taskItemInnerRange } from './taskItemDoc';
 
 const editors = new Map<ID, Editor>();
+
+/** Find the first mounted editor holding a taskItem with this id, and its position. */
+function findTaskItem(taskId: ID): { editor: Editor; pos: number } | null {
+  for (const editor of editors.values()) {
+    let pos: number | null = null;
+    editor.state.doc.descendants((node, p) => {
+      if (node.type.name === 'taskItem' && node.attrs.id === taskId) {
+        pos = p;
+        return false;
+      }
+      return true;
+    });
+    if (pos != null) return { editor, pos };
+  }
+  return null;
+}
 
 export function registerEditor(tabId: ID, editor: Editor) {
   editors.set(tabId, editor);
@@ -21,55 +38,29 @@ export function getEditor(tabId: ID): Editor | undefined {
  * caller should fall back to applying the change to the persisted doc JSON.
  */
 export function applyTaskTextEditToHome(taskId: ID, newText: string): boolean {
-  for (const editor of editors.values()) {
-    let pos: number | null = null;
-    editor.state.doc.descendants((node, p) => {
-      if (node.type.name === 'taskItem' && node.attrs.id === taskId) {
-        pos = p;
-        return false;
-      }
-      return true;
-    });
-    if (pos != null) {
-      const { state, view } = editor;
-      const node = state.doc.nodeAt(pos)!;
-      const para = node.firstChild;
-      if (!para) return false;
-      const innerFrom = pos + 2;
-      const innerTo = pos + 1 + para.nodeSize - 1;
-      const tr = state.tr.replaceWith(
-        innerFrom,
-        innerTo,
-        newText ? state.schema.text(newText) : []
-      );
-      view.dispatch(tr.setMeta('externalEdit', true));
-      return true;
-    }
-  }
-  return false;
+  const hit = findTaskItem(taskId);
+  if (!hit) return false;
+  const { editor, pos } = hit;
+  const { state, view } = editor;
+  const para = state.doc.nodeAt(pos)!.firstChild;
+  if (!para) return false;
+  const { from, to } = taskItemInnerRange(pos, para);
+  const tr = state.tr.replaceWith(from, to, newText ? state.schema.text(newText) : []);
+  view.dispatch(tr.setMeta('externalEdit', true));
+  return true;
 }
 
 export function applyTaskDoneToHome(taskId: ID, done: boolean): boolean {
-  for (const editor of editors.values()) {
-    let pos: number | null = null;
-    editor.state.doc.descendants((node, p) => {
-      if (node.type.name === 'taskItem' && node.attrs.id === taskId) {
-        pos = p;
-        return false;
-      }
-      return true;
-    });
-    if (pos != null) {
-      const { state, view } = editor;
-      const tr = state.tr.setNodeMarkup(pos, undefined, {
-        ...state.doc.nodeAt(pos)!.attrs,
-        done,
-      });
-      view.dispatch(tr.setMeta('externalEdit', true));
-      return true;
-    }
-  }
-  return false;
+  const hit = findTaskItem(taskId);
+  if (!hit) return false;
+  const { editor, pos } = hit;
+  const { state, view } = editor;
+  const tr = state.tr.setNodeMarkup(pos, undefined, {
+    ...state.doc.nodeAt(pos)!.attrs,
+    done,
+  });
+  view.dispatch(tr.setMeta('externalEdit', true));
+  return true;
 }
 
 /** Insert a new task line at the end of a home tab's doc, return its id. */

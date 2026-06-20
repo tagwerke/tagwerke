@@ -4,7 +4,8 @@ import type { Transaction, EditorState } from '@tiptap/pm/state';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { nanoid } from 'nanoid';
 import { useStore } from '../../store';
-import { extractTokens, hasTokens } from '../../util/parse';
+import { extractTokens } from '../../util/parse';
+import { applyStripOps, stripOpForLine, type StripOp } from '../taskItemDoc';
 import type { ID, Task } from '../../types';
 
 export interface SyncPluginOptions {
@@ -84,25 +85,15 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
           // Strip tokens from lines where cursor is NOT inside (commit).
           // Walk back-to-front so positions stay valid.
           if (!externalEdit) {
-            const stripOps: { from: number; to: number; insert: string }[] = [];
+            const stripOps: StripOp[] = [];
             for (const it of items) {
               if (it.cursorInside) continue;
-              if (!hasTokens(it.rawText)) continue;
-              const parsed = extractTokens(it.rawText);
-              if (parsed.text === it.rawText) continue;
-              const node = newState.doc.nodeAt(it.pos);
-              const para = node?.firstChild;
-              if (!para) continue;
-              const innerFrom = it.pos + 2;
-              const innerTo = it.pos + 1 + para.nodeSize - 1;
-              stripOps.push({ from: innerFrom, to: innerTo, insert: parsed.text });
+              const op = stripOpForLine(it.pos, it.rawText, newState.doc);
+              if (op) stripOps.push(op);
             }
             if (stripOps.length) {
               tr = tr ?? newState.tr;
-              stripOps.sort((a, b) => b.from - a.from);
-              for (const op of stripOps) {
-                tr.replaceWith(op.from, op.to, op.insert ? newState.schema.text(op.insert) : []);
-              }
+              applyStripOps(tr, stripOps, newState.schema);
             }
           }
 
