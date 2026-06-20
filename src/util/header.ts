@@ -117,7 +117,7 @@ export function rankTabs(
     const n = tab.name.toLowerCase();
     const p = projName.toLowerCase();
 
-    let score = 0;
+    let score: number;
     if (!q) {
       score = 1; // include all when query is empty
     } else if (n === q) score = 200;
