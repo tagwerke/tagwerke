@@ -34,6 +34,16 @@ const patchBody = z.object({
 const addTaskBody = z.object({ taskId: z.string().min(1) });
 const reorderBody = z.object({ order: z.array(z.string().min(1)) });
 
+/** True when `blockId` is one of the caller's own today blocks. */
+async function ownsBlock(userId: string, blockId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.todayBlocks.id })
+    .from(schema.todayBlocks)
+    .where(and(eq(schema.todayBlocks.id, blockId), eq(schema.todayBlocks.userId, userId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
 async function todayTabId(userId: string): Promise<string | null> {
   // The user's TODAY board, resolved via membership.
   const rows = await db
@@ -119,12 +129,7 @@ export async function blockRoutes(app: FastifyInstance): Promise<void> {
     if (!b.success) return reply.code(400).send({ error: 'invalid request' });
     const userId = req.user!.id;
     // Ownership: ensure the block belongs to the user.
-    const owns = await db
-      .select({ id: schema.todayBlocks.id })
-      .from(schema.todayBlocks)
-      .where(and(eq(schema.todayBlocks.id, id), eq(schema.todayBlocks.userId, userId)))
-      .limit(1);
-    if (!owns.length) return reply.code(404).send({ error: 'block not found' });
+    if (!(await ownsBlock(userId, id))) return reply.code(404).send({ error: 'block not found' });
 
     const countRows = await db
       .select({ c: sql<number>`count(*)` })
@@ -143,12 +148,7 @@ export async function blockRoutes(app: FastifyInstance): Promise<void> {
   app.delete('/api/blocks/:id/tasks/:taskId', async (req, reply) => {
     const { id, taskId } = req.params as { id: string; taskId: string };
     const userId = req.user!.id;
-    const owns = await db
-      .select({ id: schema.todayBlocks.id })
-      .from(schema.todayBlocks)
-      .where(and(eq(schema.todayBlocks.id, id), eq(schema.todayBlocks.userId, userId)))
-      .limit(1);
-    if (!owns.length) return reply.code(404).send({ error: 'block not found' });
+    if (!(await ownsBlock(userId, id))) return reply.code(404).send({ error: 'block not found' });
     await db
       .delete(schema.todayBlockTasks)
       .where(and(eq(schema.todayBlockTasks.blockId, id), eq(schema.todayBlockTasks.taskId, taskId)));

@@ -8,7 +8,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import rrule from 'rrule';
 import { nanoid } from 'nanoid';
 
