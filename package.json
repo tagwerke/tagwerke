@@ -20,7 +20,8 @@
     "typecheck:server": "tsc -p tsconfig.server.json --noEmit",
     "import:state": "tsx server/scripts/import-state.ts",
     "invite": "tsx server/scripts/create-invite.ts",
-    "backup": "tsx server/scripts/backup-json.ts"
+    "backup": "tsx server/scripts/backup-json.ts",
+    "reset-pw": "tsx server/scripts/reset-password.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

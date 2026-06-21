@@ -38,6 +38,9 @@ export async function hasBoardRole(userId: string, tabId: string, min: BoardRole
 
 type TabIdResolver = (req: FastifyRequest) => string | undefined | Promise<string | undefined>;
 
+/** Common resolver: the board id is the `:id` route param. */
+export const paramTabId: TabIdResolver = (req) => (req.params as { id: string }).id;
+
 /**
  * preHandler factory: requires the caller to be at least `min` on the board returned
  * by `getTabId`. Must run AFTER requireAuth (reads req.user). Replies and stops on

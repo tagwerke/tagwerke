@@ -1,7 +1,6 @@
-import 'dotenv/config';
-import pg from 'pg';
-const c = new pg.Client({ connectionString: process.env.DATABASE_URL, keepAlive: true });
-await c.connect();
+import { connect } from './_db.ts';
+
+const c = await connect();
 const q = async (s: string) => (await c.query(s)).rows[0].n;
 console.log('tabs total                :', await q('SELECT count(*)::int n FROM tabs'));
 console.log('tabs w/o membership (0)   :', await q('SELECT count(*)::int n FROM tabs t WHERE NOT EXISTS (SELECT 1 FROM board_members m WHERE m.tab_id=t.id)'));

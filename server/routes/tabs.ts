@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
-import { boardRole, requireBoardRole } from '../auth/boards.ts';
+import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 
 const createBody = z.object({
   id: z.string().min(1),
@@ -126,7 +126,7 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
   // access, leave the board via DELETE /api/tabs/:id/members/:me (members route).
   app.delete(
     '/api/tabs/:id',
-    { preHandler: requireBoardRole('admin', (req) => (req.params as { id: string }).id) },
+    { preHandler: requireBoardRole('admin', paramTabId) },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const rows = await db.select({ type: schema.tabs.type }).from(schema.tabs).where(eq(schema.tabs.id, id)).limit(1);

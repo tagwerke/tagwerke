@@ -1,12 +1,10 @@
 // One-off sanity check of the v2 backfill. Read-only. Run after migrating.
 //   npx tsx server/scripts/verify-v2.ts
 
-import 'dotenv/config';
-import pg from 'pg';
+import { connect } from './_db.ts';
 
 async function main() {
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL, keepAlive: true });
-  await client.connect();
+  const client = await connect();
   const q = async (sql: string) => (await client.query(sql)).rows;
 
   const checks: [string, string][] = [

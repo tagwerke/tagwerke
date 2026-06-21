@@ -150,8 +150,21 @@ function makeInitial(): RootState {
   };
 }
 
-export const useStore = create<RootState & Actions>()(
-    (set, get) => ({
+export const useStore = create<RootState & Actions>()((set, get) => {
+  // Patch one task in place, no-op if it no longer exists.
+  const patchTask = (id: ID, patch: Partial<Task>) =>
+    set((s) => (s.tasks[id] ? { tasks: { ...s.tasks, [id]: { ...s.tasks[id], ...patch } } } : s));
+
+  // Replace the TODAY tab's blocks via a transform; everything else stays put.
+  // Returns the new block list so callers can read positions back out.
+  const mutateTodayBlocks = (transform: (blocks: TodayBlock[]) => TodayBlock[]): TodayBlock[] => {
+    const { todayTabId, tabs } = get();
+    const blocks = transform(tabs[todayTabId]?.blocks ?? []);
+    set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...s.tabs[todayTabId], blocks } } }));
+    return blocks;
+  };
+
+  return {
       ...makeInitial(),
 
       createProject(name, color) {
@@ -300,22 +313,14 @@ export const useStore = create<RootState & Actions>()(
         return merged;
       },
       setTaskMeta(id, meta) {
-        set((s) => {
-          if (!s.tasks[id]) return s;
-          return { tasks: { ...s.tasks, [id]: { ...s.tasks[id], ...meta } } };
-        });
+        patchTask(id, meta);
       },
       setTaskText(id, text) {
-        set((s) => {
-          if (!s.tasks[id]) return s;
-          return { tasks: { ...s.tasks, [id]: { ...s.tasks[id], text } } };
-        });
+        patchTask(id, { text });
       },
       toggleTaskDone(id) {
-        set((s) => {
-          if (!s.tasks[id]) return s;
-          return { tasks: { ...s.tasks, [id]: { ...s.tasks[id], done: !s.tasks[id].done } } };
-        });
+        const t = get().tasks[id];
+        if (t) patchTask(id, { done: !t.done });
       },
       deleteTask(id) {
         set((s) => {
@@ -342,31 +347,29 @@ export const useStore = create<RootState & Actions>()(
 
       addBlock(after) {
         const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
-        if (!today) throw new Error('today not initialized');
+        if (!tabs[todayTabId]) throw new Error('today not initialized');
         const firstNormal = Object.values(tabs).find((t) => t.type === 'normal');
         const block: TodayBlock = {
           id: nanoid(),
           tabId: firstNormal?.id ?? '',
           taskIds: [],
         };
-        const blocks = today.blocks ? [...today.blocks] : [];
-        if (after) {
-          const idx = blocks.findIndex((b) => b.id === after);
-          blocks.splice(idx + 1, 0, block);
-        } else {
-          blocks.push(block);
-        }
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        const blocks = mutateTodayBlocks((existing) => {
+          const next = [...existing];
+          if (after) {
+            const idx = next.findIndex((b) => b.id === after);
+            next.splice(idx + 1, 0, block);
+          } else {
+            next.push(block);
+          }
+          return next;
+        });
         const position = blocks.findIndex((b) => b.id === block.id);
         enqueue(() => api.blocks.create({ id: block.id, homeTabId: block.tabId, position }));
         return block;
       },
       updateBlock(id, patch) {
-        const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
-        const blocks = (today?.blocks ?? []).map((b) => (b.id === id ? { ...b, ...patch } : b));
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        mutateTodayBlocks((blocks) => blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)));
         const apiPatch: { homeTabId?: ID; start?: string | null; end?: string | null; label?: string | null } = {};
         if (patch.tabId !== undefined) apiPatch.homeTabId = patch.tabId;
         if (patch.start !== undefined) apiPatch.start = patch.start ?? null;
@@ -375,30 +378,21 @@ export const useStore = create<RootState & Actions>()(
         enqueue(() => api.blocks.update(id, apiPatch));
       },
       deleteBlock(id) {
-        const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
-        const blocks = (today?.blocks ?? []).filter((b) => b.id !== id);
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        mutateTodayBlocks((blocks) => blocks.filter((b) => b.id !== id));
         enqueue(() => api.blocks.remove(id));
       },
       addTaskToBlock(blockId, taskId) {
-        const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
-        const blocks = (today?.blocks ?? []).map((b) =>
+        mutateTodayBlocks((blocks) => blocks.map((b) =>
           b.id === blockId
             ? { ...b, taskIds: b.taskIds.includes(taskId) ? b.taskIds : [...b.taskIds, taskId] }
             : b
-        );
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        ));
         enqueue(() => api.blocks.addTask(blockId, taskId));
       },
       removeTaskFromBlock(blockId, taskId) {
-        const { todayTabId, tabs } = get();
-        const today = tabs[todayTabId];
-        const blocks = (today?.blocks ?? []).map((b) =>
+        mutateTodayBlocks((blocks) => blocks.map((b) =>
           b.id === blockId ? { ...b, taskIds: b.taskIds.filter((t) => t !== taskId) } : b
-        );
-        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
+        ));
         enqueue(() => api.blocks.removeTask(blockId, taskId));
       },
       reorderBlocks(order) {
@@ -511,8 +505,8 @@ export const useStore = create<RootState & Actions>()(
       reset() {
         set(makeInitial());
       },
-    })
-);
+  };
+});
 
 export function useTodayTab() {
   return useStore((s) => s.tabs[s.todayTabId]);
