@@ -1,17 +1,33 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
+import { api } from '../api/client';
 import { NewTabDialog } from './NewTabDialog';
 import { FilterPanel } from './FilterPanel';
 import { SearchPalette } from './SearchPalette';
 import { AdminPanel } from './AdminPanel';
+import { InboxPanel } from './InboxPanel';
 
 export function TopBar() {
   const [newOpen, setNewOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxCount, setInboxCount] = useState(0);
   const isAdmin = useSession((s) => s.user?.role === 'admin');
+
+  const refreshInboxCount = useCallback(async () => {
+    try {
+      const { drafts } = await api.inbox.list();
+      setInboxCount(drafts.length);
+    } catch {
+      /* not signed in yet / transient — leave count as-is */
+    }
+  }, []);
+  useEffect(() => {
+    void refreshInboxCount();
+  }, [refreshInboxCount]);
   const activeTabId = useStore((s) => s.activeTabId);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const freezeToday = useStore((s) => s.freezeToday);
@@ -55,6 +71,13 @@ export function TopBar() {
         <button className="btn ghost" onClick={onFreeze} title="Freeze TODAY into a snapshot">
           freeze
         </button>
+        <button
+          className={`btn ghost ${inboxCount ? 'has-filter' : ''}`}
+          onClick={() => setInboxOpen(true)}
+          title="Email tasks to review"
+        >
+          inbox{inboxCount ? ` · ${inboxCount}` : ''}
+        </button>
         {isAdmin && (
           <button className="btn ghost" onClick={() => setAdminOpen(true)} title="Admin dashboard">
             admin
@@ -70,6 +93,15 @@ export function TopBar() {
       {filterOpen && <FilterPanel onClose={() => setFilterOpen(false)} />}
       {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} />}
       {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} />}
+      {inboxOpen && (
+        <InboxPanel
+          onClose={() => {
+            setInboxOpen(false);
+            void refreshInboxCount();
+          }}
+          onChanged={refreshInboxCount}
+        />
+      )}
       <div style={{ display: 'none' }}>{activeTabId}</div>
     </header>
   );

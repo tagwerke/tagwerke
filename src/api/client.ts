@@ -142,6 +142,12 @@ export const api = {
     rsvp: (eventId: ID, occurrenceDate: string, status: AttendanceStatus) =>
       req(`/api/events/${eventId}/attendance`, { method: 'PUT', body: JSON.stringify({ occurrenceDate, status }) }),
   },
+  inbox: {
+    list: () => req<{ drafts: InboundDraft[] }>('/api/inbox'),
+    keep: (id: ID, b: { keptTaskId?: ID }) =>
+      req<{ ok: boolean }>(`/api/inbox/${id}/keep`, { method: 'POST', body: JSON.stringify(b) }),
+    dismiss: (id: ID) => req(`/api/inbox/${id}/dismiss`, { method: 'POST' }),
+  },
   admin: {
     users: () => req<{ users: AdminUser[] }>('/api/admin/users'),
     invites: () => req<{ invites: AdminInvite[] }>('/api/admin/invites'),
@@ -167,6 +173,20 @@ export interface BoardEvent {
   end: string | null;
   rrule: string | null;
   occurrences: { date: string; attendance: { userId: ID; status: AttendanceStatus }[] }[];
+}
+// A pending email→task draft awaiting the user's keep/dismiss decision.
+export interface InboundDraft {
+  id: ID;
+  title: string;
+  summary: string | null;
+  suggestedDate: string | null;
+  suggestedOwner: string | null;
+  confidence: number | null;
+  fromAddr: string | null;
+  subject: string | null;
+  snippet: string | null;
+  extractionFailed: boolean;
+  receivedAt: string;
 }
 export interface AdminUser {
   id: ID;

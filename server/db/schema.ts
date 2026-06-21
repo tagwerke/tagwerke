@@ -200,6 +200,42 @@ export const todayBlockTasks = pgTable(
   (t) => [primaryKey({ columns: [t.blockId, t.taskId] })],
 );
 
+// Email→task confirm queue. An inbound email is read by Haiku and, if it looks
+// actionable, lands here as a DRAFT the user approves. We deliberately store only
+// the extracted result + lightweight email metadata (from/subject/snippet/
+// message-id) — NEVER the raw body, which is read in memory and discarded.
+// status: 'pending' (awaiting review) | 'kept' (turned into a task) | 'dismissed'.
+// When kept, keptTaskId points at the created tasks.id.
+export const inboundDrafts = pgTable(
+  'inbound_drafts',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('pending'),
+    // Extracted task fields.
+    title: text('title').notNull(),
+    summary: text('summary'), // <= ~200 chars, AI-written
+    suggestedDate: text('suggested_date'), // ISO date or null
+    suggestedOwner: text('suggested_owner'), // free-text name from the email
+    confidence: smallint('confidence'), // 0-100, AI self-reported
+    // Email metadata (provenance), no body.
+    fromAddr: text('from_addr'),
+    subject: text('subject'),
+    snippet: text('snippet'), // first ~200 chars, for context only
+    messageId: text('message_id'), // RFC822 Message-ID, for dedupe/threading
+    extractionFailed: boolean('extraction_failed').notNull().default(false),
+    // Set when status -> 'kept'.
+    keptTaskId: text('kept_task_id'),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('inbound_drafts_user_idx').on(t.userId),
+    index('inbound_drafts_status_idx').on(t.userId, t.status),
+  ],
+);
+
 export const snapshots = pgTable(
   'snapshots',
   {

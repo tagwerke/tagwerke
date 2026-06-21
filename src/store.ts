@@ -29,6 +29,10 @@ interface Actions {
   toggleTaskDone(id: ID): void;
   deleteTask(id: ID): void;
   deleteOrphanTasks(homeTabId: ID, keepIds: Set<ID>): void;
+  /** Append a task (from an approved email draft) to a board's document. Returns
+   *  the new task id. The node + store task share an id so the editor's SyncPlugin
+   *  reconciles them instead of orphan-deleting. */
+  appendTaskFromDraft(tabId: ID, fields: { text: string; date?: string | null; owner?: string | null }): ID;
 
   addBlock(after?: ID): TodayBlock;
   updateBlock(id: ID, patch: Partial<TodayBlock>): void;
@@ -343,6 +347,46 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           const blocks = today?.blocks?.map((b) => ({ ...b, taskIds: b.taskIds.filter((tid) => tasks[tid]) })) ?? [];
           return { tasks, tabs: { ...s.tabs, [todayId]: { ...s.tabs[todayId], blocks } } };
         });
+      },
+
+      appendTaskFromDraft(tabId, fields) {
+        // Match the editor's id format (SyncPlugin assigns nanoid(8)).
+        const id = nanoid(8);
+        const text = fields.text;
+        const node = {
+          type: 'taskItem',
+          attrs: { id, done: false },
+          content: [{ type: 'paragraph', content: text ? [{ type: 'text', text }] : [] }],
+        };
+        set((s) => {
+          const tab = s.tabs[tabId];
+          if (!tab) return s;
+          const doc = tab.docJSON as { type?: string; content?: unknown[] } | undefined;
+          const content = Array.isArray(doc?.content) ? [...doc.content] : [];
+          const last = content.length ? (content[content.length - 1] as { type?: string; content?: unknown[] }) : null;
+          if (last && last.type === 'taskList') {
+            content[content.length - 1] = { ...last, content: [...(last.content ?? []), node] };
+          } else {
+            content.push({ type: 'taskList', content: [node] });
+          }
+          const newDoc = { ...(doc ?? {}), type: 'doc', content };
+          // Seed store metadata too. Node text is plain, so when the board opens
+          // the SyncPlugin falls back to these date/owner values (extractTokens
+          // finds none) — keeping them consistent under the shared id.
+          const task: Task = {
+            id,
+            homeTabId: tabId,
+            text,
+            date: fields.date ?? undefined,
+            owner: fields.owner ?? undefined,
+            done: false,
+          };
+          return {
+            tabs: { ...s.tabs, [tabId]: { ...tab, docJSON: newDoc } },
+            tasks: { ...s.tasks, [id]: task },
+          };
+        });
+        return id;
       },
 
       addBlock(after) {

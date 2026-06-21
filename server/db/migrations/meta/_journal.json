@@ -29,6 +29,13 @@
       "when": 1781906752081,
       "tag": "0003_long_champions",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782056335668,
+      "tag": "0004_motionless_serpent_society",
+      "breakpoints": true
     }
   ]
 }

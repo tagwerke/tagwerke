@@ -21,9 +21,11 @@
     "import:state": "tsx server/scripts/import-state.ts",
     "invite": "tsx server/scripts/create-invite.ts",
     "backup": "tsx server/scripts/backup-json.ts",
-    "reset-pw": "tsx server/scripts/reset-password.ts"
+    "reset-pw": "tsx server/scripts/reset-password.ts",
+    "extract:test": "tsx server/scripts/extract-test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
     "@fastify/cookie": "^11.0.2",
     "@fastify/rate-limit": "^11.0.0",
     "@fastify/static": "^9.1.3",
