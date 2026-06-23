@@ -9,15 +9,6 @@ function nextPosition(orders: number[]): number {
   return orders.length ? Math.max(...orders) + 1 : 0;
 }
 
-/** Return a copy of `tasks` with every task homed in one of `tabIds` removed. */
-function pruneTasksForTabs(tasks: Record<ID, Task>, tabIds: Set<ID>): Record<ID, Task> {
-  const next: Record<ID, Task> = {};
-  for (const t of Object.values(tasks)) {
-    if (!tabIds.has(t.homeTabId)) next[t.id] = t;
-  }
-  return next;
-}
-
 interface Actions {
   createProject(name: string, color?: string): Project;
   renameProject(id: ID, name: string): void;
@@ -160,11 +151,15 @@ function makeInitial(): RootState {
 }
 
 export const useStore = create<RootState & Actions>()((set, get) => {
-  // Read today's blocks, apply `fn`, and write them back. Centralizes the
-  // get-today → transform → set-tabs[todayTabId] dance the block actions share.
-  const setTodayBlocks = (fn: (blocks: TodayBlock[]) => TodayBlock[]): TodayBlock[] => {
-    const { todayTabId } = get();
-    const blocks = fn(get().tabs[todayTabId]?.blocks ?? []);
+  // Patch one task in place, no-op if it no longer exists.
+  const patchTask = (id: ID, patch: Partial<Task>) =>
+    set((s) => (s.tasks[id] ? { tasks: { ...s.tasks, [id]: { ...s.tasks[id], ...patch } } } : s));
+
+  // Replace the TODAY tab's blocks via a transform; everything else stays put.
+  // Returns the new block list so callers can read positions back out.
+  const mutateTodayBlocks = (transform: (blocks: TodayBlock[]) => TodayBlock[]): TodayBlock[] => {
+    const { todayTabId, tabs } = get();
+    const blocks = transform(tabs[todayTabId]?.blocks ?? []);
     set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...s.tabs[todayTabId], blocks } } }));
     return blocks;
   };
@@ -214,7 +209,12 @@ export const useStore = create<RootState & Actions>()((set, get) => {
             }
           }
 
-          const tasks = pruneTasksForTabs(s.tasks, new Set(tabsToDelete));
+          const tasks = { ...s.tasks };
+          for (const tid of tabsToDelete) {
+            for (const task of Object.values(tasks)) {
+              if (task.homeTabId === tid) delete tasks[task.id];
+            }
+          }
           return {
             projects,
             tabs,
@@ -272,7 +272,10 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           if (s.tabs[id]?.type === 'today') return s;
           const tabs = { ...s.tabs };
           delete tabs[id];
-          const tasks = pruneTasksForTabs(s.tasks, new Set([id]));
+          const tasks = { ...s.tasks };
+          for (const task of Object.values(tasks)) {
+            if (task.homeTabId === id) delete tasks[task.id];
+          }
           const todayId = s.todayTabId;
           const today = s.tabs[todayId];
           const blocks = today?.blocks?.map((b) =>
@@ -310,22 +313,14 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         return merged;
       },
       setTaskMeta(id, meta) {
-        set((s) => {
-          if (!s.tasks[id]) return s;
-          return { tasks: { ...s.tasks, [id]: { ...s.tasks[id], ...meta } } };
-        });
+        patchTask(id, meta);
       },
       setTaskText(id, text) {
-        set((s) => {
-          if (!s.tasks[id]) return s;
-          return { tasks: { ...s.tasks, [id]: { ...s.tasks[id], text } } };
-        });
+        patchTask(id, { text });
       },
       toggleTaskDone(id) {
-        set((s) => {
-          if (!s.tasks[id]) return s;
-          return { tasks: { ...s.tasks, [id]: { ...s.tasks[id], done: !s.tasks[id].done } } };
-        });
+        const t = get().tasks[id];
+        if (t) patchTask(id, { done: !t.done });
       },
       deleteTask(id) {
         set((s) => {
@@ -359,10 +354,14 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           tabId: firstNormal?.id ?? '',
           taskIds: [],
         };
-        const blocks = setTodayBlocks((existing) => {
+        const blocks = mutateTodayBlocks((existing) => {
           const next = [...existing];
-          const at = after ? next.findIndex((b) => b.id === after) + 1 : next.length;
-          next.splice(at, 0, block);
+          if (after) {
+            const idx = next.findIndex((b) => b.id === after);
+            next.splice(idx + 1, 0, block);
+          } else {
+            next.push(block);
+          }
           return next;
         });
         const position = blocks.findIndex((b) => b.id === block.id);
@@ -370,7 +369,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         return block;
       },
       updateBlock(id, patch) {
-        setTodayBlocks((blocks) => blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+        mutateTodayBlocks((blocks) => blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)));
         const apiPatch: { homeTabId?: ID; start?: string | null; end?: string | null; label?: string | null } = {};
         if (patch.tabId !== undefined) apiPatch.homeTabId = patch.tabId;
         if (patch.start !== undefined) apiPatch.start = patch.start ?? null;
@@ -379,11 +378,11 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         enqueue(() => api.blocks.update(id, apiPatch));
       },
       deleteBlock(id) {
-        setTodayBlocks((blocks) => blocks.filter((b) => b.id !== id));
+        mutateTodayBlocks((blocks) => blocks.filter((b) => b.id !== id));
         enqueue(() => api.blocks.remove(id));
       },
       addTaskToBlock(blockId, taskId) {
-        setTodayBlocks((blocks) => blocks.map((b) =>
+        mutateTodayBlocks((blocks) => blocks.map((b) =>
           b.id === blockId
             ? { ...b, taskIds: b.taskIds.includes(taskId) ? b.taskIds : [...b.taskIds, taskId] }
             : b
@@ -391,16 +390,18 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         enqueue(() => api.blocks.addTask(blockId, taskId));
       },
       removeTaskFromBlock(blockId, taskId) {
-        setTodayBlocks((blocks) => blocks.map((b) =>
+        mutateTodayBlocks((blocks) => blocks.map((b) =>
           b.id === blockId ? { ...b, taskIds: b.taskIds.filter((t) => t !== taskId) } : b
         ));
         enqueue(() => api.blocks.removeTask(blockId, taskId));
       },
       reorderBlocks(order) {
-        const today = get().tabs[get().todayTabId];
+        const { todayTabId, tabs } = get();
+        const today = tabs[todayTabId];
         if (!today?.blocks) return;
         const byId = new Map(today.blocks.map((b) => [b.id, b]));
-        setTodayBlocks(() => order.map((id) => byId.get(id)!).filter(Boolean));
+        const blocks = order.map((id) => byId.get(id)!).filter(Boolean);
+        set((s) => ({ tabs: { ...s.tabs, [todayTabId]: { ...today, blocks } } }));
         enqueue(() => api.blocks.reorder(order));
       },
 

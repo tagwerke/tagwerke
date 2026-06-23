@@ -1,7 +1,7 @@
-import 'dotenv/config';
-import pg from 'pg';
-const c = new pg.Client({ connectionString: process.env.DATABASE_URL, keepAlive: true });
-await c.connect();
+// List all users with their board (tab) counts.
+import { connect } from './_db.ts';
+
+const c = await connect();
 const r = await c.query(
   'SELECT email, created_at, (SELECT count(*)::int FROM tabs t WHERE t.user_id = u.id) AS tabs FROM users u ORDER BY created_at ASC',
 );

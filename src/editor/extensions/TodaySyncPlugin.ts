@@ -10,9 +10,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { nanoid } from 'nanoid';
 import { useStore } from '../../store';
 import { parseHeader } from '../../util/header';
-import { extractTokens } from '../../util/parse';
-import { applyStripOps, stripOpForLine, type StripOp } from '../taskItemDoc';
-import { setTaskDoneInDoc, setTaskTextInDoc } from '../persistedDoc';
+import { extractTokens, hasTokens } from '../../util/parse';
 import { applyTaskTextEditToHome, applyTaskDoneToHome } from '../registry';
 import type { ID, Task } from '../../types';
 
@@ -103,15 +101,25 @@ export const TodaySyncPlugin = Extension.create({
             }
 
             // Strip chip tokens (`!2`, `@2025…`, `[mike]`) on commit, like the regular SyncPlugin.
-            const stripOps: StripOp[] = [];
+            const stripOps: { from: number; to: number; insert: string }[] = [];
             for (const it of items) {
               if (it.cursorInside) continue;
-              const op = stripOpForLine(it.pos, it.text, newState.doc);
-              if (op) stripOps.push(op);
+              if (!hasTokens(it.text)) continue;
+              const parsed = extractTokens(it.text);
+              if (parsed.text === it.text) continue;
+              const node = newState.doc.nodeAt(it.pos);
+              const para = node?.firstChild;
+              if (!para) continue;
+              const innerFrom = it.pos + 2;
+              const innerTo = it.pos + 1 + para.nodeSize - 1;
+              stripOps.push({ from: innerFrom, to: innerTo, insert: parsed.text });
             }
             if (stripOps.length) {
               tr = tr ?? newState.tr;
-              applyStripOps(tr, stripOps, newState.schema);
+              stripOps.sort((a, b) => b.from - a.from);
+              for (const op of stripOps) {
+                tr.replaceWith(op.from, op.to, op.insert ? newState.schema.text(op.insert) : []);
+              }
             }
           }
 
@@ -176,16 +184,33 @@ export const TodaySyncPlugin = Extension.create({
   },
 });
 
-function writeTextToPersistedDoc(tabId: ID, id: ID, text: string) {
+interface DocLike { type: string; text?: string; attrs?: Record<string, unknown>; content?: DocLike[] }
+
+// Clone the home tab's persisted docJSON, apply `mutate` to every taskItem matching
+// `id`, and write it back. Used to mirror a TODAY reference edit into the home doc
+// when no live editor is mounted to receive it.
+function mutatePersistedTask(tabId: ID, id: ID, mutate: (node: DocLike) => void) {
   const store = useStore.getState();
   const tab = store.tabs[tabId];
   if (!tab?.docJSON) return;
-  store.setTabDoc(tabId, setTaskTextInDoc(tab.docJSON, id, text));
+  const doc = JSON.parse(JSON.stringify(tab.docJSON)) as DocLike;
+  const walk = (n: DocLike) => {
+    if (n.type === 'taskItem' && n.attrs?.id === id) mutate(n);
+    n.content?.forEach(walk);
+  };
+  walk(doc);
+  store.setTabDoc(tabId, doc);
+}
+
+function writeTextToPersistedDoc(tabId: ID, id: ID, text: string) {
+  mutatePersistedTask(tabId, id, (n) => {
+    const para = n.content?.[0];
+    if (para) para.content = text ? [{ type: 'text', text }] : [];
+  });
 }
 
 function writeDoneToPersistedDoc(tabId: ID, id: ID, done: boolean) {
-  const store = useStore.getState();
-  const tab = store.tabs[tabId];
-  if (!tab?.docJSON) return;
-  store.setTabDoc(tabId, setTaskDoneInDoc(tab.docJSON, id, done));
+  mutatePersistedTask(tabId, id, (n) => {
+    n.attrs = { ...n.attrs, done };
+  });
 }

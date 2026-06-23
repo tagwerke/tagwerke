@@ -3,8 +3,7 @@ import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
-import { boardRole, requireBoardRole } from '../auth/boards.ts';
-import { reorderByIndex } from '../lib/reorder.ts';
+import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 
 const createBody = z.object({
   id: z.string().min(1),
@@ -97,11 +96,14 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     const b = reorderBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid order' });
     const userId = req.user!.id;
-    await reorderByIndex(b.data.order, (tx, id, position) =>
-      tx
-        .update(schema.boardMembers)
-        .set({ position })
-        .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId))));
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < b.data.order.length; i++) {
+        await tx
+          .update(schema.boardMembers)
+          .set({ position: i })
+          .where(and(eq(schema.boardMembers.tabId, b.data.order[i]), eq(schema.boardMembers.userId, userId)));
+      }
+    });
     return reply.send({ ok: true });
   });
 
@@ -109,11 +111,14 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     const b = reorderBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid order' });
     const userId = req.user!.id;
-    await reorderByIndex(b.data.order, (tx, id, starredPosition) =>
-      tx
-        .update(schema.boardMembers)
-        .set({ starredPosition })
-        .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId))));
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < b.data.order.length; i++) {
+        await tx
+          .update(schema.boardMembers)
+          .set({ starredPosition: i })
+          .where(and(eq(schema.boardMembers.tabId, b.data.order[i]), eq(schema.boardMembers.userId, userId)));
+      }
+    });
     return reply.send({ ok: true });
   });
 
@@ -121,7 +126,7 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
   // access, leave the board via DELETE /api/tabs/:id/members/:me (members route).
   app.delete(
     '/api/tabs/:id',
-    { preHandler: requireBoardRole('admin', (req) => (req.params as { id: string }).id) },
+    { preHandler: requireBoardRole('admin', paramTabId) },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const rows = await db.select({ type: schema.tabs.type }).from(schema.tabs).where(eq(schema.tabs.id, id)).limit(1);

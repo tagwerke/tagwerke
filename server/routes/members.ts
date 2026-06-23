@@ -9,9 +9,7 @@ import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
-import { boardRole, requireBoardRole } from '../auth/boards.ts';
-
-const tabIdParam = (req: { params: unknown }) => (req.params as { id: string }).id;
+import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 
 const roleEnum = z.enum(['viewer', 'editor', 'admin']);
 const addBody = z.object({ email: z.string().email().max(320), role: roleEnum.default('viewer') });
@@ -31,7 +29,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
   // List the access list. Any member may see who else is on the board.
   app.get(
     '/api/tabs/:id/members',
-    { preHandler: requireBoardRole('viewer', tabIdParam) },
+    { preHandler: requireBoardRole('viewer', paramTabId) },
     async (req) => {
       const { id } = req.params as { id: string };
       const rows = await db
@@ -50,7 +48,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
   // Add an existing user to the board. Admin only.
   app.post(
     '/api/tabs/:id/members',
-    { preHandler: requireBoardRole('admin', tabIdParam) },
+    { preHandler: requireBoardRole('admin', paramTabId) },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const b = addBody.safeParse(req.body);
@@ -89,7 +87,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
   // Change a member's role. Admin only. Cannot demote the last admin.
   app.patch(
     '/api/tabs/:id/members/:userId',
-    { preHandler: requireBoardRole('admin', tabIdParam) },
+    { preHandler: requireBoardRole('admin', paramTabId) },
     async (req, reply) => {
       const { id, userId } = req.params as { id: string; userId: string };
       const b = patchBody.safeParse(req.body);

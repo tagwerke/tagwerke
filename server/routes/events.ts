@@ -17,9 +17,7 @@ import { nanoid } from 'nanoid';
 const { RRule } = rrule;
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
-import { requireBoardRole } from '../auth/boards.ts';
-
-const tabIdParam = (req: { params: unknown }) => (req.params as { id: string }).id;
+import { requireBoardRole, paramTabId } from '../auth/boards.ts';
 
 /** Resolve the board that owns the event named in the route param. */
 async function eventBoard(req: FastifyRequest): Promise<string | undefined> {
@@ -60,7 +58,7 @@ export async function eventRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
 
   // List a board's events expanded into occurrences, with attendance + the roster.
-  app.get('/api/tabs/:id/events', { preHandler: requireBoardRole('viewer', tabIdParam) }, async (req) => {
+  app.get('/api/tabs/:id/events', { preHandler: requireBoardRole('viewer', paramTabId) }, async (req) => {
     const { id } = req.params as { id: string };
     const q = req.query as { from?: string; to?: string };
     const from = q.from ? new Date(q.from) : new Date(new Date().toISOString().slice(0, 10));
@@ -101,7 +99,7 @@ export async function eventRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Create an event on the board.
-  app.post('/api/tabs/:id/events', { preHandler: requireBoardRole('editor', tabIdParam) }, async (req, reply) => {
+  app.post('/api/tabs/:id/events', { preHandler: requireBoardRole('editor', paramTabId) }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const b = eventBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid event' });

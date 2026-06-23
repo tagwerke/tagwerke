@@ -10,9 +10,8 @@
 // tables are skipped, not fatal. Run it wherever the DB is reachable (the deploy host
 // or a tunnel) if your laptop can't reach it.
 
-import 'dotenv/config';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import pg from 'pg';
+import { connect } from './_db.ts';
 
 const TABLES = [
   'users',
@@ -29,17 +28,8 @@ const TABLES = [
 ] as const;
 
 async function main() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error('DATABASE_URL is not set.');
-
-  const client = new pg.Client({
-    connectionString,
-    keepAlive: true,
-    // Hosted PGs that require TLS but use self-signed certs: allow opting in without
-    // failing cert verification. No-op when the server doesn't use SSL.
-    ssl: process.env.PGSSL === 'require' ? { rejectUnauthorized: false } : undefined,
-  });
-  await client.connect();
+  // connect() opts into lax TLS via PGSSL=require for hosted PGs with self-signed certs.
+  const client = await connect();
 
   const data: Record<string, unknown[]> = {};
   const counts: Record<string, number> = {};
