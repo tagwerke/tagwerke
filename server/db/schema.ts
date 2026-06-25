@@ -1,7 +1,11 @@
-// Drizzle schema for do-app. Normalized, multi-user; every child row carries
-// user_id for single-column isolation. Client-generated string ids are text PKs
-// (ids vary in format: nanoid(8), `t_${nanoid(8)}`, `t_${random}`), so no length
-// or format constraints. `order` is a SQL reserved word -> column is `position`.
+// Drizzle schema for do-app. Normalized, multi-user. Access derives from
+// `board_members` (a tab/board is shared content; per-user view state + role live on
+// the membership row); `tasks` are scoped via their `home_tab_id`. The legacy
+// per-row `user_id`/`project_id`/`starred`/`position` columns on `tabs`/`tasks` were
+// dropped in migration 0003 — `projects`, `sessions`, `today_blocks`, `snapshots`
+// still carry `user_id` as they remain per-user. Client-generated string ids are text
+// PKs (ids vary: nanoid(8), `t_${nanoid(8)}`, `t_${random}`), so no length/format
+// constraints. `order` is a SQL reserved word -> column is `position`.
 
 import {
   pgTable,

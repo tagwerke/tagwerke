@@ -6,7 +6,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { db } from './db/client.ts';
+import { db, pool } from './db/client.ts';
 import { authRoutes } from './auth/routes.ts';
 import { stateRoutes } from './routes/state.ts';
 import { projectRoutes } from './routes/projects.ts';
@@ -44,6 +44,17 @@ await app.register(cookie, { secret });
 // global:false -> only routes that opt in (auth endpoints) are limited, so heavy
 // authenticated editing traffic is never throttled.
 await app.register(rateLimit, { global: false });
+
+// Liveness/readiness probe for container healthchecks. Unauthenticated, no rate
+// limit; verifies the DB is reachable so an unhealthy instance can be restarted.
+app.get('/health', async (_req, reply) => {
+  try {
+    await pool.query('select 1');
+    return { ok: true };
+  } catch {
+    return reply.code(503).send({ ok: false, error: 'database unreachable' });
+  }
+});
 
 await app.register(authRoutes);
 await app.register(stateRoutes);
