@@ -120,11 +120,36 @@ export async function assembleState(userId: string) {
       id: t.id,
       homeTabId: t.homeTabId,
       text: t.text,
-      done: t.done,
+      status: t.status,
+      done: t.done, // back-compat mirror during the transition
+      position: t.position,
+      createdAt: t.createdAt instanceof Date ? t.createdAt.getTime() : undefined,
+      updatedAt: t.updatedAt instanceof Date ? t.updatedAt.getTime() : undefined,
+      ...(t.assigneeId != null ? { assigneeId: t.assigneeId } : {}),
       ...(t.date != null ? { date: t.date } : {}),
       ...(t.priority != null ? { priority: t.priority } : {}),
       ...(t.owner != null ? { owner: t.owner } : {}),
     };
+  }
+
+  // Per-board member rosters — the source the `@` assignee picker reads (SPEC §5).
+  // Keyed by board id; only boards the user can see. No display name in the DB yet,
+  // so `name` is the email local-part.
+  const membersByBoard: Record<string, { id: string; email: string; name: string }[]> = {};
+  if (tabIds.length) {
+    const memberRows = await db
+      .select({
+        tabId: schema.boardMembers.tabId,
+        userId: schema.boardMembers.userId,
+        email: schema.users.email,
+      })
+      .from(schema.boardMembers)
+      .innerJoin(schema.users, eq(schema.users.id, schema.boardMembers.userId))
+      .where(inArray(schema.boardMembers.tabId, tabIds));
+    for (const m of memberRows) {
+      const list = membersByBoard[m.tabId] ?? (membersByBoard[m.tabId] = []);
+      list.push({ id: m.userId, email: m.email, name: m.email.split('@')[0] });
+    }
   }
 
   const snapshots: Record<string, unknown> = {};
@@ -137,6 +162,7 @@ export async function assembleState(userId: string) {
     tabs,
     tasks,
     snapshots,
+    membersByBoard,
     projectOrder,
     tabOrder,
     starredRowOrder,

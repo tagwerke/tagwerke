@@ -22,14 +22,32 @@ export interface Tab {
   location?: string; // board's place facet (v2)
 }
 
+export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
+
 export interface Task {
   id: ID;
   homeTabId: ID;
   text: string;
+  // P0: status is authoritative. Optional during the transition; slice 2 makes it required
+  // and removes `done`. Treat a missing status as 'todo'.
+  status?: TaskStatus;
+  // P0: real user id of the assignee (a member of the home board). Supersedes `owner`.
+  assigneeId?: ID;
   date?: string;
   priority?: 1 | 2 | 3;
-  owner?: string;
-  done?: boolean;
+  position?: number;
+  owner?: string; // legacy display fallback; superseded by assigneeId
+  done?: boolean; // deprecated mirror of status==='done'; kept for one release
+  createdAt?: number; // DB-managed; read-only on the client
+  updatedAt?: number; // DB-managed; read-only on the client
+}
+
+/** A board member as the `@` picker / assignee chip needs them (no display name in the DB yet). */
+export interface Member {
+  id: ID;
+  email: string;
+  /** Email local-part, for display until a real display name exists. */
+  name: string;
 }
 
 export interface TodayBlock {
@@ -53,6 +71,8 @@ export interface RootState {
   tabs: Record<ID, Tab>;
   tasks: Record<ID, Task>;
   snapshots: Record<ID, Snapshot>;
+  /** Per-board member rosters (the `@` picker's source). Keyed by tab/board id. */
+  membersByBoard: Record<ID, Member[]>;
   projectOrder: ID[];
   tabOrder: ID[];
   starredRowOrder: ID[];

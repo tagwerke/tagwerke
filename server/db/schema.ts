@@ -95,14 +95,27 @@ export const tasks = pgTable(
       .notNull()
       .references(() => tabs.id, { onDelete: 'cascade' }),
     text: text('text').notNull().default(''),
+    // P0: status is the authoritative state field (todo|in_progress|in_review|done|cancelled).
+    // `done` is retained for one release as a derived/back-compat mirror (= status==='done').
+    status: text('status').notNull().default('todo'),
+    // P0: real user id of the assignee, constrained in app logic to a member of the home board.
+    assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
     date: text('date'),
     priority: smallint('priority'),
-    // owner: a real user id (the [Name] token → a board member); legacy free text tolerated.
+    // P0: explicit order — doc order ≠ Kanban/My-Tasks order. Backfilled 0; editor assigns.
+    position: integer('position').notNull().default(0),
+    // owner: legacy free-text display fallback ([Name] token); superseded by assigneeId.
     owner: text('owner'),
     done: boolean('done').notNull().default(false),
     createdBy: text('created_by'), // attribution; access derives from the home tab's board
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // Auto-bumped by a BEFORE UPDATE trigger (see migration) so every write path is covered.
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('tasks_home_tab_idx').on(t.homeTabId)],
+  (t) => [
+    index('tasks_home_tab_idx').on(t.homeTabId),
+    index('tasks_assignee_idx').on(t.assigneeId),
+  ],
 );
 
 // v2 collaboration: a board's access list AND each member's personal view of it.

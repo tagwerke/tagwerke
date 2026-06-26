@@ -141,6 +141,7 @@ function makeInitial(): RootState {
     tabs: { [todayId]: today, [sampleTabId]: sample, [personalTabId]: personal },
     tasks: {},
     snapshots: {},
+    membersByBoard: {},
     projectOrder: [defaultProjectId, personalProjectId],
     tabOrder: [todayId, sampleTabId, personalTabId],
     starredRowOrder: [todayId, sampleTabId],

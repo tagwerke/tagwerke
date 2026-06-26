@@ -3,7 +3,7 @@
 // through a single serialized queue so optimistic UI updates persist in order; on
 // failure the registered error handler re-pulls authoritative state.
 
-import type { ID } from '../types';
+import type { ID, TaskStatus } from '../types';
 
 async function req<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, {
@@ -98,9 +98,9 @@ export const api = {
     reorderStarred: (order: ID[]) => req('/api/tabs/reorder-starred', { method: 'POST', body: JSON.stringify({ order }) }),
   },
   tasks: {
-    upsert: (id: ID, b: { homeTabId: ID; text: string; date?: string | null; priority?: 1 | 2 | 3 | null; owner?: string | null; done?: boolean }) =>
+    upsert: (id: ID, b: { homeTabId: ID; text: string; status?: TaskStatus; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; position?: number; owner?: string | null; done?: boolean }) =>
       req(`/api/tasks/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
-    patch: (id: ID, patch: { text?: string; date?: string | null; priority?: 1 | 2 | 3 | null; owner?: string | null; done?: boolean }) =>
+    patch: (id: ID, patch: { text?: string; status?: TaskStatus; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; position?: number; owner?: string | null; done?: boolean }) =>
       req(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
     remove: (id: ID) => req(`/api/tasks/${id}`, { method: 'DELETE' }),
     deleteOrphans: (homeTabId: ID, keepIds: ID[]) =>
