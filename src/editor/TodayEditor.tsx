@@ -1,12 +1,12 @@
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { TaskItem } from './extensions/TaskItem';
 import { TaskList } from './extensions/TaskList';
 import { TaskItemView } from './TaskItemView';
 import { BlockHeader, blockHeaderKey } from './extensions/BlockHeader';
 import { TodaySyncPlugin } from './extensions/TodaySyncPlugin';
-import { TodaySuggestionOverlay } from './TodaySuggestionOverlay';
+import { SuggestionOverlay, type ResolveHomeTab } from './SuggestionOverlay';
 import { useStore } from '../store';
 import { registerEditor, unregisterEditor } from './registry';
 import type { ID } from '../types';
@@ -69,11 +69,29 @@ export function TodayEditor({ tabId, autoFocus }: Props) {
     void blockHeaderKey; // keep import used
   }, [editor, tabs, projects]);
 
+  // The @ picker is scoped to a task's home board: a referenced task keeps its own home;
+  // a new task adopts the bound block's tab (from the BlockHeader regions).
+  const resolveHomeTab = useCallback<ResolveHomeTab>(
+    (pos, existingId) => {
+      const existing = existingId ? useStore.getState().tasks[existingId] : undefined;
+      if (existing) return existing.homeTabId;
+      if (!editor) return undefined;
+      const regions = blockHeaderKey.getState(editor.state)?.regions ?? [];
+      let bound: ID | undefined;
+      for (const r of regions) {
+        if (pos > r.headerPos && pos > r.headerPos + r.headerSize - 1) bound = r.tabId;
+        else if (pos <= r.headerPos) break;
+      }
+      return bound;
+    },
+    [editor],
+  );
+
   if (!editor) return null;
   return (
     <>
       <EditorContent editor={editor} className="prose-editor today-editor" />
-      <TodaySuggestionOverlay editor={editor} />
+      <SuggestionOverlay editor={editor} resolveHomeTab={resolveHomeTab} />
     </>
   );
 }
