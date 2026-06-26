@@ -1,4 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core';
+import { useStore } from '../../store';
 
 export interface TaskItemOptions {
   HTMLAttributes: Record<string, unknown>;
@@ -21,16 +22,13 @@ export const TaskItem = Node.create<TaskItemOptions>({
   defining: true,
 
   addAttributes() {
+    // P0: the node carries only `id`. Status/done live on the task entity in the store
+    // (single source of truth), read by TaskItemView. The `done` node attr is gone.
     return {
       id: {
         default: null,
         parseHTML: (el) => (el as HTMLElement).getAttribute('data-id'),
         renderHTML: (attrs) => (attrs.id ? { 'data-id': attrs.id } : {}),
-      },
-      done: {
-        default: false,
-        parseHTML: (el) => (el as HTMLElement).getAttribute('data-done') === 'true',
-        renderHTML: (attrs) => ({ 'data-done': attrs.done ? 'true' : 'false' }),
       },
     };
   },
@@ -74,52 +72,43 @@ export const TaskItem = Node.create<TaskItemOptions>({
         view.dispatch(tr.scrollIntoView());
         return true;
       },
-      'Mod-Enter': () => {
-        const { state } = this.editor;
-        const { $from } = state.selection;
-        for (let depth = $from.depth; depth >= 0; depth--) {
-          if ($from.node(depth).type.name === 'taskItem') {
-            const pos = $from.before(depth);
-            const node = state.doc.nodeAt(pos);
-            if (!node) return false;
-            return this.editor
-              .chain()
-              .command(({ tr }) => {
-                tr.setNodeMarkup(pos, undefined, { ...node.attrs, done: !node.attrs.done });
-                return true;
-              })
-              .run();
-          }
-        }
-        return false;
-      },
+      'Mod-Enter': () => toggleDoneAtSelection(this.editor.state, this.name),
     };
   },
 
   addCommands() {
     return {
+      // Toggle done by flipping the entity status in the store (done is derived).
       toggleTaskDone:
         (pos) =>
-        ({ tr, state, dispatch }) => {
-          let target = pos;
-          if (target == null) {
-            const { $from } = state.selection;
-            for (let depth = $from.depth; depth >= 0; depth--) {
-              if ($from.node(depth).type.name === this.name) {
-                target = $from.before(depth);
-                break;
-              }
-            }
-          }
-          if (target == null) return false;
-          const node = state.doc.nodeAt(target);
-          if (!node || node.type.name !== this.name) return false;
-          if (dispatch) {
-            tr.setNodeMarkup(target, undefined, { ...node.attrs, done: !node.attrs.done });
-            dispatch(tr);
-          }
+        ({ state }) => {
+          const id = taskIdAt(state, this.name, pos);
+          if (!id) return false;
+          useStore.getState().toggleTaskDone(id);
           return true;
         },
     };
   },
 });
+
+/** The id of the taskItem at `pos`, or the one containing the selection. */
+function taskIdAt(state: import('@tiptap/pm/state').EditorState, nodeName: string, pos?: number): string | null {
+  if (pos != null) {
+    const node = state.doc.nodeAt(pos);
+    return node && node.type.name === nodeName ? ((node.attrs.id as string | null) ?? null) : null;
+  }
+  const { $from } = state.selection;
+  for (let depth = $from.depth; depth >= 0; depth--) {
+    if ($from.node(depth).type.name === nodeName) {
+      return ($from.node(depth).attrs.id as string | null) ?? null;
+    }
+  }
+  return null;
+}
+
+function toggleDoneAtSelection(state: import('@tiptap/pm/state').EditorState, nodeName: string): boolean {
+  const id = taskIdAt(state, nodeName);
+  if (!id) return false;
+  useStore.getState().toggleTaskDone(id);
+  return true;
+}

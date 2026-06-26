@@ -11,7 +11,7 @@ import { nanoid } from 'nanoid';
 import { useStore } from '../../store';
 import { parseHeader } from '../../util/header';
 import { extractTokens, hasTokens } from '../../util/parse';
-import { applyTaskTextEditToHome, applyTaskDoneToHome } from '../registry';
+import { applyTaskTextEditToHome } from '../registry';
 import type { ID, Task } from '../../types';
 
 const key = new PluginKey('today-sync');
@@ -138,22 +138,29 @@ export const TodaySyncPlugin = Extension.create({
               // New tasks adopt the block's bound tab.
               const homeTabId = existing?.homeTabId ?? it.boundTabId ?? '';
               if (!homeTabId) continue;
+              // Status/assignee/position are entity-only — preserve via spread. A checkbox
+              // token still maps to status (paste/markdown compatibility).
+              const status =
+                parsed.done != null ? (parsed.done ? 'done' : 'todo') : existing?.status ?? 'todo';
               const merged: Task = {
+                ...existing,
                 id: it.id,
                 homeTabId,
                 text,
-                done: parsed.done ?? it.done ?? existing?.done,
+                status,
                 date: parsed.date ?? existing?.date,
                 priority: parsed.priority ?? existing?.priority,
                 owner: parsed.owner ?? existing?.owner,
+                position: existing?.position ?? 0,
+                done: status === 'done',
               };
               const isNew = !existing;
-              const textChanged = existing && existing.text !== merged.text;
-              const doneChanged = existing && existing.done !== merged.done;
+              const textChanged = !!existing && existing.text !== merged.text;
+              const statusChanged = !!existing && (existing.status ?? 'todo') !== merged.status;
               if (
                 isNew ||
                 textChanged ||
-                doneChanged ||
+                statusChanged ||
                 existing.date !== merged.date ||
                 existing.priority !== merged.priority ||
                 existing.owner !== merged.owner
@@ -161,16 +168,11 @@ export const TodaySyncPlugin = Extension.create({
                 updates[it.id] = merged;
                 changed = true;
 
-                // Bidirectional: push edits to the home tab so its docJSON stays in sync.
-                if (!isNew && (textChanged || doneChanged)) {
-                  if (textChanged) {
-                    const mounted = applyTaskTextEditToHome(it.id, merged.text);
-                    if (!mounted) writeTextToPersistedDoc(homeTabId, it.id, merged.text);
-                  }
-                  if (doneChanged && merged.done != null) {
-                    const mounted = applyTaskDoneToHome(it.id, merged.done);
-                    if (!mounted) writeDoneToPersistedDoc(homeTabId, it.id, merged.done);
-                  }
+                // Only TEXT still lives in the home doc, so only text needs write-back.
+                // Status is shared via the entity — both views read it, no doc mirroring.
+                if (!isNew && textChanged) {
+                  const mounted = applyTaskTextEditToHome(it.id, merged.text);
+                  if (!mounted) writeTextToPersistedDoc(homeTabId, it.id, merged.text);
                 }
               }
             }
@@ -206,11 +208,5 @@ function writeTextToPersistedDoc(tabId: ID, id: ID, text: string) {
   mutatePersistedTask(tabId, id, (n) => {
     const para = n.content?.[0];
     if (para) para.content = text ? [{ type: 'text', text }] : [];
-  });
-}
-
-function writeDoneToPersistedDoc(tabId: ID, id: ID, done: boolean) {
-  mutatePersistedTask(tabId, id, (n) => {
-    n.attrs = { ...n.attrs, done };
   });
 }

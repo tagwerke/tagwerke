@@ -26,13 +26,3 @@ export function setTaskTextInDoc(docJSON: unknown, id: string, text: string): Do
   return doc;
 }
 
-/** Deep-clone `docJSON` and set the done attr of the taskItem with `id`. */
-export function setTaskDoneInDoc(docJSON: unknown, id: string, done: boolean): DocLike {
-  const doc = JSON.parse(JSON.stringify(docJSON)) as DocLike;
-  walk(doc, (n) => {
-    if (n.type === 'taskItem' && n.attrs?.id === id) {
-      n.attrs = { ...n.attrs, done };
-    }
-  });
-  return doc;
-}

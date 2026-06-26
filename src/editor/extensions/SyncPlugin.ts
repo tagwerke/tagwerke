@@ -116,20 +116,27 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
               const parsed = extractTokens(it.rawText);
               const text = parsed.text;
               const existing = updates[it.id];
+              // Status/assignee/position are entity-only — preserve them by spreading existing.
+              // A `[x]`/`[ ]` checkbox token still maps to status (paste/markdown compatibility).
+              const status =
+                parsed.done != null ? (parsed.done ? 'done' : 'todo') : existing?.status ?? 'todo';
               const merged: Task = {
+                ...existing,
                 id: it.id,
                 homeTabId: tabId,
                 text,
-                done: parsed.done ?? it.done ?? existing?.done,
+                status,
                 date: parsed.date ?? existing?.date,
                 priority: parsed.priority ?? existing?.priority,
                 owner: parsed.owner ?? existing?.owner,
+                position: existing?.position ?? 0,
+                done: status === 'done',
               };
-              // Only update if changed
+              // Only update if a plugin-owned field changed.
               if (
                 !existing ||
                 existing.text !== merged.text ||
-                existing.done !== merged.done ||
+                (existing.status ?? 'todo') !== merged.status ||
                 existing.date !== merged.date ||
                 existing.priority !== merged.priority ||
                 existing.owner !== merged.owner ||

@@ -399,6 +399,52 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-row.is-done .task-indicator .dot {
   opacity: 0;
 }
+
+/* P0 status control: indicator + caret + menu (the left-of-task status pill). */
+.task-status { grid-area: indicator; position: relative; display: inline-flex; align-items: flex-start; gap: 1px; }
+.status-caret {
+  margin-top: 4px; height: 18px; padding: 0 2px;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--ink-mute); opacity: 0;
+  display: inline-flex; align-items: center;
+  transition: opacity .12s;
+}
+.task-item:hover .status-caret,
+.status-caret[aria-expanded="true"] { opacity: 0.55; }
+.status-caret:hover { opacity: 1; }
+
+/* in-progress / in-review get an always-visible accent dot on the ring. */
+.task-indicator.status-in_progress { border-color: #2563eb; }
+.task-indicator.status-in_progress .dot { background: #2563eb; opacity: 1; }
+.task-indicator.status-in_review { border-color: #7c3aed; }
+.task-indicator.status-in_review .dot { background: #7c3aed; opacity: 1; }
+
+/* cancelled: muted fill, no check, struck text (distinct from done's accent fill). */
+.task-item.is-cancelled .task-content { text-decoration: line-through; color: var(--ink-mute); opacity: 0.7; }
+.task-item.is-cancelled .task-indicator { background: var(--ink-mute); border-color: var(--ink-mute); }
+.task-item.is-cancelled .task-indicator .check { opacity: 0; }
+.task-item.is-cancelled .task-indicator .dot { opacity: 0; }
+
+.status-menu {
+  position: absolute; top: 22px; left: 0; z-index: 50;
+  list-style: none; margin: 0; padding: 4px;
+  background: var(--bg); border: 1px solid var(--line-strong); border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.12); min-width: 144px;
+}
+.status-option {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 6px; cursor: pointer;
+  font-size: 13px; color: var(--ink); white-space: nowrap;
+}
+.status-option:hover { background: var(--line); }
+.status-option.is-selected { font-weight: 600; }
+.status-swatch { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); flex: none; }
+.status-option.status-todo .status-swatch { background: transparent; border: 1.5px solid var(--line-strong); }
+.status-option.status-in_progress .status-swatch { background: #2563eb; }
+.status-option.status-in_review .status-swatch { background: #7c3aed; }
+.status-option.status-done .status-swatch { background: var(--accent, #16a34a); }
+.status-option.status-cancelled .status-swatch { background: var(--ink-mute); }
+
 .task-chips {
   grid-area: chips;
   display: inline-flex;

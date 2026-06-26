@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
-import type { Filter, ID, Project, RootState, Snapshot, Tab, Task, TodayBlock } from './types';
+import type { Filter, ID, Project, RootState, Snapshot, Tab, Task, TaskStatus, TodayBlock } from './types';
 import { nextColor } from './util/color';
 import { todayISO, toISO } from './util/dates';
 import { api, enqueue } from './api/client';
@@ -24,8 +24,10 @@ interface Actions {
   setActiveTab(id: ID | null): void;
 
   upsertTask(t: Partial<Task> & { id: ID; homeTabId: ID; text: string }): Task;
-  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done'>>): void;
+  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'position'>>): void;
   setTaskText(id: ID, text: string): void;
+  setTaskStatus(id: ID, status: TaskStatus): void;
+  setTaskAssignee(id: ID, assigneeId: ID | undefined): void;
   toggleTaskDone(id: ID): void;
   deleteTask(id: ID): void;
   deleteOrphanTasks(homeTabId: ID, keepIds: Set<ID>): void;
@@ -57,7 +59,7 @@ function nodeText(n: DocLike | undefined): string {
   return (n.content ?? []).map(nodeText).join('');
 }
 
-function renderTodayDocToText(doc: unknown, dateKey: string): string {
+function renderTodayDocToText(doc: unknown, dateKey: string, tasks: Record<ID, Task>): string {
   const root = doc as DocLike | undefined;
   if (!root || !Array.isArray(root.content)) return '';
   const lines: string[] = [`# ${dateKey}`, ''];
@@ -71,7 +73,10 @@ function renderTodayDocToText(doc: unknown, dateKey: string): string {
     if (top.type === 'taskList') {
       for (const item of top.content ?? []) {
         if (item.type !== 'taskItem') continue;
-        const done = item.attrs?.done ? '[x]' : '[ ]';
+        // Status lives in the entity now (not the node attr); resolve done by id.
+        const id = item.attrs?.id as ID | undefined;
+        const isDone = id ? tasks[id]?.status === 'done' : false;
+        const done = isDone ? '[x]' : '[ ]';
         const text = nodeText(item.content?.[0]);
         lines.push(`- ${done} ${text}`);
       }
@@ -301,27 +306,45 @@ export const useStore = create<RootState & Actions>()((set, get) => {
 
       upsertTask({ id, homeTabId, text, ...meta }) {
         const existing = get().tasks[id];
+        // Spread existing first so entity-only fields (status/assigneeId/position/timestamps)
+        // are preserved — this is the intra-session clobber fix (SPEC §8). `done` is a derived
+        // mirror of status, never an independent field.
+        const status = meta.status ?? existing?.status ?? 'todo';
         const merged: Task = {
+          ...existing,
           id,
           homeTabId,
           text,
+          status,
+          assigneeId: meta.assigneeId ?? existing?.assigneeId,
           date: meta.date ?? existing?.date,
           priority: meta.priority ?? existing?.priority,
           owner: meta.owner ?? existing?.owner,
-          done: meta.done ?? existing?.done,
+          position: meta.position ?? existing?.position ?? 0,
+          done: status === 'done',
         };
         set((s) => ({ tasks: { ...s.tasks, [id]: merged } }));
         return merged;
       },
       setTaskMeta(id, meta) {
-        patchTask(id, meta);
+        // Keep the derived `done` mirror in sync whenever status is set here.
+        const patch = meta.status !== undefined ? { ...meta, done: meta.status === 'done' } : meta;
+        patchTask(id, patch);
       },
       setTaskText(id, text) {
         patchTask(id, { text });
       },
+      setTaskStatus(id, status) {
+        patchTask(id, { status, done: status === 'done' });
+      },
+      setTaskAssignee(id, assigneeId) {
+        patchTask(id, { assigneeId });
+      },
       toggleTaskDone(id) {
         const t = get().tasks[id];
-        if (t) patchTask(id, { done: !t.done });
+        if (!t) return;
+        const next: TaskStatus = (t.status ?? 'todo') === 'done' ? 'todo' : 'done';
+        patchTask(id, { status: next, done: next === 'done' });
       },
       deleteTask(id) {
         set((s) => {
@@ -418,7 +441,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         const today = tabs[todayTabId];
         if (!today) return null;
         const frozenDateKey = today.dateKey ?? todayISO();
-        const text = renderTodayDocToText(today.docJSON, frozenDateKey);
+        const text = renderTodayDocToText(today.docJSON, frozenDateKey, get().tasks);
         if (!text.trim()) return null;
         const snap: Snapshot = {
           id: nanoid(),

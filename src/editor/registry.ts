@@ -50,19 +50,6 @@ export function applyTaskTextEditToHome(taskId: ID, newText: string): boolean {
   return true;
 }
 
-export function applyTaskDoneToHome(taskId: ID, done: boolean): boolean {
-  const hit = findTaskItem(taskId);
-  if (!hit) return false;
-  const { editor, pos } = hit;
-  const { state, view } = editor;
-  const tr = state.tr.setNodeMarkup(pos, undefined, {
-    ...state.doc.nodeAt(pos)!.attrs,
-    done,
-  });
-  view.dispatch(tr.setMeta('externalEdit', true));
-  return true;
-}
-
 /** Insert a new task line at the end of a home tab's doc, return its id. */
 export function appendNewTaskToHome(tabId: ID, text: string): string | null {
   const editor = editors.get(tabId);
@@ -74,7 +61,7 @@ export function appendNewTaskToHome(tabId: ID, text: string): string | null {
   const paragraphType = schema.nodes.paragraph;
   if (!taskListType || !taskItemType) return null;
   const item = taskItemType.create(
-    { id, done: false },
+    { id },
     paragraphType.create({}, text ? schema.text(text) : null)
   );
   const list = taskListType.create({}, item);

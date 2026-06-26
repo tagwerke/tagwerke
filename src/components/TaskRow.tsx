@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { Chip } from './Chip';
 import { formatDateChip } from '../util/dates';
-import { applyTaskTextEditToHome, applyTaskDoneToHome } from '../editor/registry';
-import { setTaskDoneInDoc, setTaskTextInDoc } from '../editor/persistedDoc';
+import { applyTaskTextEditToHome } from '../editor/registry';
+import { setTaskTextInDoc } from '../editor/persistedDoc';
 import type { ID } from '../types';
 
 interface Props { taskId: ID; blockId?: ID }
@@ -28,18 +28,11 @@ export function TaskRow({ taskId, blockId }: Props) {
   const homeTab = tabs[task.homeTabId];
   const project = homeTab ? projects[homeTab.projectId] : undefined;
 
+  // Status lives on the shared entity; toggling done just updates the store — no doc
+  // write-back needed (both the list row and the editor read the same task).
   const onToggle = () => {
     toggleTaskDone(task.id);
-    if (!applyTaskDoneToHome(task.id, !task.done)) {
-      writeDoneToPersistedDoc(task.homeTabId, task.id, !task.done);
-    }
   };
-
-  function writeDoneToPersistedDoc(tabId: ID, id: ID, done: boolean) {
-    const tab = tabs[tabId];
-    if (!tab?.docJSON) return;
-    setTabDoc(tabId, setTaskDoneInDoc(tab.docJSON, id, done));
-  }
 
   function writeTextToPersistedDoc(tabId: ID, id: ID, text: string) {
     const tab = tabs[tabId];
