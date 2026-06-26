@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
 import { useStore } from '../store';
 import { Chip } from '../components/Chip';
+import { DatePicker } from '../components/DatePicker';
 import { formatDateChip } from '../util/dates';
 import type { TaskStatus } from '../types';
 
@@ -26,6 +27,8 @@ export function TaskItemView({ node }: NodeViewProps) {
   const members = useStore((s) => (task ? s.membersByBoard[task.homeTabId] : undefined));
   const toggleTaskDone = useStore((s) => s.toggleTaskDone);
   const setTaskStatus = useStore((s) => s.setTaskStatus);
+  const setTaskMeta = useStore((s) => s.setTaskMeta);
+  const [dateOpen, setDateOpen] = useState(false);
 
   const status: TaskStatus = task?.status ?? 'todo';
   const done = status === 'done';
@@ -113,7 +116,23 @@ export function TaskItemView({ node }: NodeViewProps) {
           <Chip kind="priority" priority={task.priority}>{'!'.repeat(task.priority)}</Chip>
         ) : null}
         {ownerLabel ? <Chip kind="owner">{ownerLabel}</Chip> : null}
-        {task?.date ? <Chip kind="date">{formatDateChip(task.date)}</Chip> : null}
+        {task?.date ? (
+          <Chip kind="date" onClick={() => setDateOpen((v) => !v)}>{formatDateChip(task.date)}</Chip>
+        ) : (
+          <button type="button" className="chip chip-add-date" title="Set due date" onClick={() => setDateOpen((v) => !v)}>
+            ＋date
+          </button>
+        )}
+        {dateOpen && id ? (
+          <DatePicker
+            value={task?.date}
+            onPick={(iso) => {
+              setTaskMeta(id, { date: iso });
+              setDateOpen(false);
+            }}
+            onClose={() => setDateOpen(false)}
+          />
+        ) : null}
       </div>
     </NodeViewWrapper>
   );

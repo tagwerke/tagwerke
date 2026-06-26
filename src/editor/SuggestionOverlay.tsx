@@ -12,18 +12,21 @@ import { nanoid } from 'nanoid';
 import { useStore } from '../store';
 import { parseHeader, type TabMatch } from '../util/header';
 import { extractTokens } from '../util/parse';
+import { resolveDateKeyword, formatDateChip, toISO, todayISO } from '../util/dates';
 import { blockHeaderKey } from './extensions/BlockHeader';
 import { taskItemInnerRange } from './taskItemDoc';
-import type { ID, Member } from '../types';
+import type { ID, Member, TaskStatus } from '../types';
 
 interface TaskMatch { id: ID; text: string; done: boolean }
+interface CommandItem { key: string; label: string; run: () => void }
 
 export type ResolveHomeTab = (taskItemPos: number, existingId: string | null) => ID | undefined;
 
 type Mode =
   | { kind: 'tab'; query: string; matches: TabMatch[]; x: number; y: number; onPick: (m: TabMatch) => void }
   | { kind: 'task'; query: string; matches: TaskMatch[]; x: number; y: number; onPick: (m: TaskMatch) => void }
-  | { kind: 'mention'; query: string; matches: Member[]; x: number; y: number; onPick: (m: Member) => void };
+  | { kind: 'mention'; query: string; matches: Member[]; x: number; y: number; onPick: (m: Member) => void }
+  | { kind: 'command'; query: string; matches: CommandItem[]; x: number; y: number; onPick: (m: CommandItem) => void };
 
 const MAX = 8;
 
@@ -43,6 +46,45 @@ function rankMembers(members: Member[], query: string): Member[] {
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, MAX).map((s) => s.m);
+}
+
+const STATUS_DEFS: { s: TaskStatus; label: string; aliases: string[] }[] = [
+  { s: 'todo', label: 'Todo', aliases: ['status', 'todo'] },
+  { s: 'in_progress', label: 'In progress', aliases: ['status', 'doing', 'wip', 'inprogress'] },
+  { s: 'in_review', label: 'In review', aliases: ['status', 'review', 'inreview'] },
+  { s: 'done', label: 'Done', aliases: ['status', 'done'] },
+  { s: 'cancelled', label: 'Cancelled', aliases: ['status', 'cancel', 'cancelled'] },
+];
+
+/** Build the `/` command list for `cmd`/`arg`; each item applies a property via `apply`. */
+function buildCommands(cmd: string, arg: string, apply: (mutate: (id: ID) => void) => void): CommandItem[] {
+  const items: CommandItem[] = [];
+  const matches = (kw: string) => cmd === '' || kw.startsWith(cmd) || cmd.startsWith(kw);
+  const setMeta = (patch: Parameters<ReturnType<typeof useStore.getState>['setTaskMeta']>[1]) =>
+    apply((id) => useStore.getState().setTaskMeta(id, patch));
+
+  // Due date
+  if (matches('due') || matches('date') || matches('today') || matches('tomorrow')) {
+    if (arg) {
+      const r = resolveDateKeyword(arg);
+      if (r) items.push({ key: 'due-arg', label: `Due · ${formatDateChip(r)}`, run: () => setMeta({ date: r }) });
+    }
+    const tm = new Date();
+    tm.setDate(tm.getDate() + 1);
+    items.push({ key: 'due-today', label: 'Due · today', run: () => setMeta({ date: todayISO() }) });
+    items.push({ key: 'due-tomorrow', label: 'Due · tomorrow', run: () => setMeta({ date: toISO(tm) }) });
+  }
+  // Status
+  for (const st of STATUS_DEFS) {
+    if (st.aliases.some(matches))
+      items.push({ key: `st-${st.s}`, label: `Status · ${st.label}`, run: () => apply((id) => useStore.getState().setTaskStatus(id, st.s)) });
+  }
+  // Priority
+  if (matches('priority') || cmd === 'p' || ['p1', 'p2', 'p3'].some(matches)) {
+    for (const p of [1, 2, 3] as const)
+      items.push({ key: `p${p}`, label: `Priority · ${'!'.repeat(p)}`, run: () => setMeta({ priority: p }) });
+  }
+  return items.slice(0, MAX);
 }
 
 /** Strip the `@query`, ensure the taskItem has an id, then set the assignee on the entity. */
@@ -93,17 +135,18 @@ function computeMode(editor: Editor, resolveHomeTab: ResolveHomeTab): Mode | nul
     }
   }
 
-  // --- MENTION: `@query` immediately before the cursor inside a taskItem ---
+  // --- MENTION / COMMAND: `@query` or `/cmd arg` before the cursor inside a taskItem ---
   if (taskItemPos >= 0 && taskItemNode && taskItemNode.firstChild) {
     const { from: innerFrom } = taskItemInnerRange(taskItemPos, taskItemNode.firstChild);
     const cursor = state.selection.from;
     if (cursor >= innerFrom) {
       const before = state.doc.textBetween(innerFrom, cursor, '\n', '\n');
+      const existingId = (taskItemNode.attrs.id as string | null) ?? null;
+
       const m = before.match(/(?:^|\s)@(\w*)$/);
       if (m) {
         const query = m[1];
         const atPos = cursor - query.length - 1;
-        const existingId = (taskItemNode.attrs.id as string | null) ?? null;
         const homeTabId = resolveHomeTab(taskItemPos, existingId);
         const members = homeTabId ? useStore.getState().membersByBoard[homeTabId] ?? [] : [];
         const matches = rankMembers(members, query);
@@ -118,6 +161,40 @@ function computeMode(editor: Editor, resolveHomeTab: ResolveHomeTab): Mode | nul
           };
         }
         return null; // an @ is being typed but nothing matches — don't show other modes
+      }
+
+      // `/` slash command sets a PROPERTY on this task (due / status / priority).
+      const cm = before.match(/(?:^|\s)\/(\w*)(?:\s+(\S+))?$/);
+      if (cm) {
+        const cmd = (cm[1] ?? '').toLowerCase();
+        const arg = (cm[2] ?? '').trim();
+        const slashPos = cursor - cm[0].length + (cm[0][0] === '/' ? 0 : 1);
+        const homeTabId = resolveHomeTab(taskItemPos, existingId);
+        // Apply a property mutation: strip the slash text, ensure an id, write the entity.
+        const apply = (mutate: (id: ID) => void) => {
+          const store = useStore.getState();
+          let id = existingId;
+          let tr = editor.state.tr;
+          if (!id) {
+            id = `t_${nanoid(8)}`;
+            const n = editor.state.doc.nodeAt(taskItemPos);
+            if (n) tr = tr.setNodeMarkup(taskItemPos, undefined, { ...n.attrs, id });
+          }
+          tr = tr.delete(slashPos, cursor);
+          editor.view.dispatch(tr);
+          editor.view.focus();
+          const text = extractTokens(editor.state.doc.nodeAt(taskItemPos)?.firstChild?.textContent ?? '').text;
+          if (!store.tasks[id]) {
+            if (!homeTabId) return;
+            store.upsertTask({ id, homeTabId, text });
+          }
+          mutate(id);
+        };
+        const matches = buildCommands(cmd, arg, apply);
+        if (matches.length) {
+          return { kind: 'command', query: cmd, matches, x: coords.left, y: coords.bottom + 4, onPick: (it) => it.run() };
+        }
+        return null;
       }
     }
   }
@@ -198,10 +275,11 @@ function computeMode(editor: Editor, resolveHomeTab: ResolveHomeTab): Mode | nul
   };
 }
 
-function pickItem(mode: Mode, item: TabMatch | TaskMatch | Member): void {
+function pickItem(mode: Mode, item: TabMatch | TaskMatch | Member | CommandItem): void {
   if (mode.kind === 'tab') mode.onPick(item as TabMatch);
   else if (mode.kind === 'task') mode.onPick(item as TaskMatch);
-  else mode.onPick(item as Member);
+  else if (mode.kind === 'mention') mode.onPick(item as Member);
+  else mode.onPick(item as CommandItem);
 }
 
 export function SuggestionOverlay({ editor, resolveHomeTab }: { editor: Editor; resolveHomeTab: ResolveHomeTab }) {
@@ -238,7 +316,7 @@ export function SuggestionOverlay({ editor, resolveHomeTab }: { editor: Editor; 
       } else if (e.key === 'ArrowUp') {
         e.preventDefault(); e.stopPropagation();
         setHighlight((h) => Math.max(0, h - 1));
-      } else if (e.key === 'Tab' || (e.key === 'Enter' && mode.kind === 'mention')) {
+      } else if (e.key === 'Tab' || (e.key === 'Enter' && (mode.kind === 'mention' || mode.kind === 'command'))) {
         e.preventDefault(); e.stopPropagation();
         const sel = items[highlight];
         if (sel) pickItem(mode, sel);
@@ -261,7 +339,13 @@ export function SuggestionOverlay({ editor, resolveHomeTab }: { editor: Editor; 
     >
       {mode.matches.map((m, i) => {
         const key =
-          mode.kind === 'tab' ? (m as TabMatch).tabId : mode.kind === 'mention' ? (m as Member).id : (m as TaskMatch).id;
+          mode.kind === 'tab'
+            ? (m as TabMatch).tabId
+            : mode.kind === 'mention'
+              ? (m as Member).id
+              : mode.kind === 'command'
+                ? (m as CommandItem).key
+                : (m as TaskMatch).id;
         const active = i === highlight;
         return (
           <li
@@ -286,6 +370,8 @@ export function SuggestionOverlay({ editor, resolveHomeTab }: { editor: Editor; 
                 <span className="today-suggest-name">{(m as Member).name}</span>
                 <span className="today-suggest-sub">{(m as Member).email}</span>
               </>
+            ) : mode.kind === 'command' ? (
+              <span className="today-suggest-name">{(m as CommandItem).label}</span>
             ) : (
               <>
                 <span className={`today-suggest-dot ${(m as TaskMatch).done ? 'done' : ''}`} />
