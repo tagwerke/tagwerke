@@ -83,21 +83,40 @@ export const TodaySyncPlugin = Extension.create({
           let tr: Transaction | null = null;
 
           if (!externalEdit) {
-            // Assign IDs to taskItems that are (a) under a bound block, (b) have text,
-            // (c) cursor is NOT inside (commit signal — Enter has moved the cursor away, or focus blurred).
-            // Also reassign duplicate IDs (e.g. from splitListItem copying attrs).
-            for (const it of items) {
-              const needsNew = !it.id || (it.id && seenDuplicate.has(it.id));
-              if (!needsNew) continue;
-              if (!it.boundTabId) continue;
-              if (!extractTokens(it.text).text.trim()) continue;
-              if (it.cursorInside) continue;
+            const reId = (it: ScannedItem, newId: string | null) => {
               const node = newState.doc.nodeAt(it.pos);
-              if (!node) continue;
+              if (!node) return;
               tr = tr ?? newState.tr;
-              const newId = `t_${nanoid(8)}`;
               tr.setNodeMarkup(it.pos, undefined, { ...node.attrs, id: newId });
               it.id = newId;
+            };
+            const hasText = (it: ScannedItem) => !!extractTokens(it.text).text.trim();
+
+            // (1) Resolve duplicate ids — e.g. pressing Enter splits a line and the new line
+            // is cloned WITH the original id (splitListItem / base splitBlock both copy attrs).
+            // The id must stay on the line that still holds the TEXT (the original that owns the
+            // task entity), so its metadata never detaches. The empty clone loses the id (it is
+            // re-created on commit); a non-empty extra (mid-line split) gets its own fresh id.
+            const survivor = new Map<ID, number>(); // id -> chosen pos
+            for (const it of items) {
+              if (!it.id || !seenDuplicate.has(it.id)) continue;
+              if (!survivor.has(it.id) && hasText(it)) survivor.set(it.id, it.pos);
+            }
+            for (const it of items) {
+              if (!it.id || !seenDuplicate.has(it.id)) continue;
+              if (!survivor.has(it.id)) survivor.set(it.id, it.pos); // fallback: first occurrence
+            }
+            for (const it of items) {
+              if (!it.id || !seenDuplicate.has(it.id) || survivor.get(it.id) === it.pos) continue;
+              reId(it, hasText(it) ? `t_${nanoid(8)}` : null);
+            }
+
+            // (2) Mint a fresh id for a committed new line: bound to a block, has text, and the
+            // cursor has moved away (so the line being typed isn't turned into a task too early).
+            for (const it of items) {
+              if (it.id || !it.boundTabId) continue;
+              if (!hasText(it) || it.cursorInside) continue;
+              reId(it, `t_${nanoid(8)}`);
             }
 
             // Strip chip tokens (`!2`, `@2025…`, `[mike]`) on commit, like the regular SyncPlugin.
