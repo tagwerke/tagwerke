@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
 import type { Filter, ID, PlannerMode, Project, RootState, Tab, Task, TaskStatus, TimeBlock } from './types';
 import { nextColor } from './util/color';
@@ -430,7 +431,11 @@ export function useProject(id: ID | undefined) {
 }
 
 export function useTasksForTab(tabId: ID): Task[] {
-  return useStore((s) => Object.values(s.tasks).filter((t) => t.homeTabId === tabId));
+  // Select the stable tasks map, then derive — returning a fresh filtered array straight
+  // from the selector makes useSyncExternalStore see a new snapshot every render (infinite
+  // update loop).
+  const tasks = useStore((s) => s.tasks);
+  return useMemo(() => Object.values(tasks).filter((t) => t.homeTabId === tabId), [tasks, tabId]);
 }
 
 export function getTask(id: ID): Task | undefined {
