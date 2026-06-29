@@ -6,8 +6,6 @@ import { TopBar } from './components/TopBar';
 import { StarredRow } from './components/StarredRow';
 import { Board } from './components/Board';
 import { TabView } from './components/TabView';
-import { TodayView } from './components/TodayView';
-import { SnapshotsPanel } from './components/Snapshots';
 import { PlannerView } from './components/planner/PlannerView';
 
 export default function App() {
@@ -29,7 +27,6 @@ export default function App() {
 
 function Workspace() {
   const activeTabId = useStore((s) => s.activeTabId);
-  const todayTabId = useStore((s) => s.todayTabId);
   const plannerOpen = useStore((s) => s.plannerOpen);
   const tabs = useStore((s) => s.tabs);
   const cleanupEmptyTasks = useStore((s) => s.cleanupEmptyTasks);
@@ -57,12 +54,11 @@ function Workspace() {
       {plannerOpen ? (
         <PlannerView />
       ) : active ? (
-        active.id === todayTabId ? <TodayView /> : <TabView tabId={active.id} />
+        <TabView tabId={active.id} />
       ) : (
         <>
           <StarredRow />
           <Board />
-          <SnapshotsPanel />
         </>
       )}
     </div>

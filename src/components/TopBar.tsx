@@ -15,8 +15,6 @@ export function TopBar() {
   const activeTabId = useStore((s) => s.activeTabId);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const setPlannerOpen = useStore((s) => s.setPlannerOpen);
-  const freezeToday = useStore((s) => s.freezeToday);
-  const todayTabId = useStore((s) => s.todayTabId);
   const filterCount = useStore((s) => {
     const f = s.filter;
     return (
@@ -27,12 +25,7 @@ export function TopBar() {
   const resetFilter = useStore((s) => s.resetFilter);
   const logout = useSession((s) => s.logout);
 
-  const onHome = () => setActiveTab(null);
-  const onFreeze = () => {
-    if (!confirm('Freeze the current TODAY into a snapshot and clear it for a new day?')) return;
-    freezeToday();
-    setActiveTab(todayTabId);
-  };
+  const onHome = () => { setPlannerOpen(false); setActiveTab(null); };
 
   return (
     <header className="topbar">
@@ -57,9 +50,6 @@ export function TopBar() {
         {filterCount > 0 && (
           <button className="btn ghost tiny" onClick={resetFilter} title="Clear filters">×</button>
         )}
-        <button className="btn ghost" onClick={onFreeze} title="Freeze TODAY into a snapshot">
-          freeze
-        </button>
         {isAdmin && (
           <button className="btn ghost" onClick={() => setAdminOpen(true)} title="Admin dashboard">
             admin

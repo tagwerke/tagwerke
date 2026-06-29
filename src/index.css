@@ -1468,3 +1468,13 @@ input, select, textarea { font: inherit; color: inherit; }
 .time-block-empty { font-size: 12px; padding: 4px 0; }
 .time-block-more { padding-top: 2px; }
 .muted { color: var(--ink-mute); }
+
+.loadout-planner {
+  display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  min-width: 120px; padding: 14px 16px; text-align: left; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background: var(--bg-elev); box-shadow: var(--shadow-card);
+}
+.loadout-planner:hover { border-color: var(--pop); }
+.loadout-planner-label { font-family: var(--serif); font-weight: 700; font-style: italic; font-size: 18px; }
+.loadout-planner-hint { font-size: 11px; color: var(--ink-mute); }
