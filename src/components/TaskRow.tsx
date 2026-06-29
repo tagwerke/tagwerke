@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
-import { Chip } from './Chip';
-import { formatDateChip } from '../util/dates';
+import { TaskMeta } from './TaskMeta';
 import { applyTaskTextEditToHome } from '../editor/registry';
 import { setTaskTextInDoc } from '../editor/persistedDoc';
 import type { ID } from '../types';
@@ -93,9 +92,7 @@ export function TaskRow({ taskId, blockId }: Props) {
               {homeTab.name}
             </button>
           )}
-          {task.priority && <Chip kind="priority" priority={task.priority}>{'!'.repeat(task.priority)}</Chip>}
-          {task.owner && <Chip kind="owner">{task.owner}</Chip>}
-          {task.date && <Chip kind="date">{formatDateChip(task.date)}</Chip>}
+          <TaskMeta taskId={task.id} />
         </div>
       </div>
       {blockId && (

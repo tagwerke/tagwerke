@@ -348,13 +348,16 @@ input, select, textarea { font: inherit; color: inherit; }
   margin-left: 28px;
 }
 
-/* Task item (rendered via React node view) */
+/* Task item (rendered via React node view). Title on row 1; the metadata caption
+   line sits on row 2, indented under the text (the empty cell under the indicator). */
 .task-item {
   display: grid;
-  grid-template-columns: 24px 1fr auto;
-  grid-template-areas: "indicator content chips";
+  grid-template-columns: 24px 1fr;
+  grid-template-areas:
+    "indicator content"
+    ".         meta";
   align-items: start;
-  gap: 6px 8px;
+  gap: 1px 8px;
   padding: 3px 0;
   position: relative;
 }
@@ -445,19 +448,9 @@ input, select, textarea { font: inherit; color: inherit; }
 .status-option.status-done .status-swatch { background: var(--accent, #16a34a); }
 .status-option.status-cancelled .status-swatch { background: var(--ink-mute); }
 
-/* "＋date" affordance shown when a task has no due date. */
-.chip-add-date {
-  border: 1px dashed var(--line-strong); background: transparent;
-  color: var(--ink-mute); border-radius: 6px; padding: 1px 6px;
-  font-size: 11px; cursor: pointer; opacity: 0;
-  transition: opacity .12s;
-}
-.task-item:hover .chip-add-date { opacity: 0.6; }
-.chip-add-date:hover { opacity: 1; color: var(--ink); }
-
 /* Date picker popover. */
 .date-picker {
-  position: absolute; top: 22px; right: 0; z-index: 60;
+  position: absolute; top: 20px; left: 0; z-index: 60;
   background: var(--bg); border: 1px solid var(--line-strong); border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.16); padding: 8px; width: 232px;
 }
@@ -477,17 +470,49 @@ input, select, textarea { font: inherit; color: inherit; }
 .dp-quick:hover { background: var(--line); }
 .dp-quick.clear { color: var(--ink-mute); flex: 0 0 auto; }
 
-.task-chips {
+/* Metadata caption line under the task title (assignee · priority · due).
+   Quiet, borderless tokens — they read as metadata, not buttons. Collapses when empty
+   (the component renders nothing). Shared by the editor node view and the list row. */
+.task-meta {
+  grid-area: meta;
   position: relative;
-  grid-area: chips;
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
+  display: flex;
   flex-wrap: wrap;
-  max-width: 50%;
-  justify-content: flex-end;
+  align-items: baseline;
+  gap: 12px;
   user-select: none;
 }
+/* Strip the pill chrome so chips become caption tokens; keep their per-kind accents. */
+.task-meta .chip {
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  letter-spacing: 0;
+}
+.task-meta .chip:hover { border-color: transparent; color: var(--ink); }
+.task-meta .chip.active { background: transparent; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.task-meta .chip-priority.p2 { border-color: transparent; }
+.task-meta .chip-priority.p3 { color: var(--pop); background: transparent; border-color: transparent; }
+
+.meta-date,
+.meta-add-date {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: color .12s, opacity .12s;
+}
+.meta-date:hover { color: var(--ink); }
+.meta-date.overdue { color: #dc2626; }
+/* +date only matters when a row already exists; reveal it on hover to stay quiet. */
+.meta-add-date { opacity: 0; }
+.task-item:hover .meta-add-date,
+.task-row:hover .meta-add-date { opacity: 0.6; }
+.meta-add-date:hover { opacity: 1; color: var(--ink); }
 
 /* Chips */
 .chip {
