@@ -1382,3 +1382,89 @@ input, select, textarea { font: inherit; color: inherit; }
   transition: color .12s ease;
 }
 .auth-toggle:hover { color: var(--pop); }
+
+/* ── PLANNER ──────────────────────────────────────────────────────────── */
+.planner {
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 20px clamp(16px, 3vw, 32px) 40px;
+  min-height: 70vh;
+}
+.planner-head {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 20px; padding-bottom: 14px;
+  border-bottom: 1px dashed var(--line);
+}
+.planner-nav { display: flex; align-items: center; gap: 6px; flex: 1; }
+.planner-date-input {
+  margin-left: 8px;
+  background: transparent; border: 1px solid var(--line);
+  border-radius: 999px; height: 30px; padding: 0 10px;
+  color: var(--ink-soft); font-family: var(--mono); font-size: 12px;
+}
+.planner-modes { display: flex; gap: 4px; }
+.planner-modes .btn.is-active,
+.btn.ghost.is-active { border-color: var(--line-strong); color: var(--ink); background: rgba(0,0,0,0.03); }
+.planner-error { color: var(--pop); font-size: 13px; margin-bottom: 12px; }
+
+.planner-grid { display: grid; gap: 16px; }
+.planner-grid.mode-day { grid-template-columns: minmax(0, 560px); }
+.planner-grid.mode-week { grid-template-columns: repeat(7, minmax(180px, 1fr)); overflow-x: auto; }
+
+.planner-day {
+  display: flex; flex-direction: column; gap: 10px;
+  min-width: 0;
+}
+.planner-day-head { display: flex; align-items: baseline; gap: 8px; }
+.planner-day-name { font-family: var(--serif); font-weight: 700; font-style: italic; font-size: 18px; }
+.planner-day-date { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
+.planner-lane { display: flex; flex-direction: column; gap: 10px; }
+.planner-add {
+  border: 1px dashed var(--line-strong); border-radius: var(--r-md);
+  background: transparent; color: var(--ink-soft);
+  padding: 8px; font-size: 12px; cursor: pointer;
+}
+.planner-add:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-mute); }
+.planner-add:disabled { opacity: .4; cursor: not-allowed; }
+.planner-mate-lane { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); opacity: .85; }
+.planner-mate-name { font-size: 11px; color: var(--ink-mute); margin-bottom: 6px; text-transform: lowercase; }
+
+.time-block {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent, var(--line-strong));
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-card);
+  padding: 10px 12px;
+}
+.time-block-head { display: flex; align-items: center; gap: 8px; }
+.time-block-dot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+.time-block-picker { flex: 1; min-width: 0; }
+.time-block-title {
+  flex: 1; text-align: left; background: transparent; border: none;
+  font-weight: 600; font-size: 13px; color: var(--ink); cursor: pointer; min-width: 0;
+}
+.time-block-title:hover { color: var(--pop); }
+.time-block-owner { font-size: 11px; color: var(--ink-mute); font-family: var(--mono); }
+.time-block-controls { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; }
+.time-block-time {
+  background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 2px 6px; font-size: 12px; color: var(--ink-soft); font-family: var(--mono);
+}
+.time-block-dash { color: var(--ink-mute); }
+.time-block-when { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+.time-block-filter { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
+.status-chip {
+  border: 1px solid var(--line); border-radius: 999px; background: transparent;
+  padding: 2px 8px; font-size: 11px; color: var(--ink-soft); cursor: pointer;
+}
+.status-chip.on { border-color: var(--ink); color: var(--ink); background: rgba(0,0,0,0.04); }
+
+.time-block-tasks { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.planner-task { display: flex; align-items: center; gap: 8px; padding: 3px 0; min-width: 0; }
+.planner-task-text { flex: 1; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.planner-task.is-done .planner-task-text { text-decoration: line-through; color: var(--ink-mute); }
+.time-block-empty { font-size: 12px; padding: 4px 0; }
+.time-block-more { padding-top: 2px; }
+.muted { color: var(--ink-mute); }

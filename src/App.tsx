@@ -8,6 +8,7 @@ import { Board } from './components/Board';
 import { TabView } from './components/TabView';
 import { TodayView } from './components/TodayView';
 import { SnapshotsPanel } from './components/Snapshots';
+import { PlannerView } from './components/planner/PlannerView';
 
 export default function App() {
   const status = useSession((s) => s.status);
@@ -29,6 +30,7 @@ export default function App() {
 function Workspace() {
   const activeTabId = useStore((s) => s.activeTabId);
   const todayTabId = useStore((s) => s.todayTabId);
+  const plannerOpen = useStore((s) => s.plannerOpen);
   const tabs = useStore((s) => s.tabs);
   const cleanupEmptyTasks = useStore((s) => s.cleanupEmptyTasks);
 
@@ -52,7 +54,9 @@ function Workspace() {
   return (
     <div className="app">
       <TopBar />
-      {active ? (
+      {plannerOpen ? (
+        <PlannerView />
+      ) : active ? (
         active.id === todayTabId ? <TodayView /> : <TabView tabId={active.id} />
       ) : (
         <>

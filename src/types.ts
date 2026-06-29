@@ -97,11 +97,15 @@ export interface TimeBlock {
   position: number;
 }
 
+export type PlannerMode = 'day' | 'week';
+
 export interface RootState {
   projects: Record<ID, Project>;
   tabs: Record<ID, Tab>;
   tasks: Record<ID, Task>;
   snapshots: Record<ID, Snapshot>;
+  /** The caller's OWN Planner blocks. Teammates' blocks live in PlannerView local state. */
+  timeBlocks: Record<ID, TimeBlock>;
   /** Per-board member rosters (the `@` picker's source). Keyed by tab/board id. */
   membersByBoard: Record<ID, Member[]>;
   projectOrder: ID[];
@@ -109,6 +113,10 @@ export interface RootState {
   starredRowOrder: ID[];
   todayTabId: ID;
   activeTabId: ID | null;
+  /** Planner UI state. */
+  plannerOpen: boolean;
+  plannerDate: string; // 'YYYY-MM-DD' cursor
+  plannerMode: PlannerMode;
   filter: Filter;
 }
 

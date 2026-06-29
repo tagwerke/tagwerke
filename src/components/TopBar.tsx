@@ -14,6 +14,7 @@ export function TopBar() {
   const isAdmin = useSession((s) => s.user?.role === 'admin');
   const activeTabId = useStore((s) => s.activeTabId);
   const setActiveTab = useStore((s) => s.setActiveTab);
+  const setPlannerOpen = useStore((s) => s.setPlannerOpen);
   const freezeToday = useStore((s) => s.freezeToday);
   const todayTabId = useStore((s) => s.todayTabId);
   const filterCount = useStore((s) => {
@@ -41,6 +42,10 @@ export function TopBar() {
       </button>
 
       <div className="topbar-actions">
+        <button className="btn ghost" onClick={() => setPlannerOpen(true)} title="Open the Planner">
+          <svg viewBox="0 0 16 16" width="14" height="14"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M2 6h12M5 2v2M11 2v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <span>planner</span>
+        </button>
         <button className="btn ghost" onClick={() => setSearchOpen(true)} title="Search (Ctrl+K)">
           <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           <span>search</span>
