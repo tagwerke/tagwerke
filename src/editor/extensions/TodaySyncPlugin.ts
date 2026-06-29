@@ -11,7 +11,7 @@ import { nanoid } from 'nanoid';
 import { useStore } from '../../store';
 import { parseHeader } from '../../util/header';
 import { extractTokens, hasTokens } from '../../util/parse';
-import { applyTaskTextEditToHome } from '../registry';
+import { propagateTaskText, ensureTaskInDoc } from '../registry';
 import type { ID, Task } from '../../types';
 
 const key = new PluginKey('today-sync');
@@ -146,8 +146,12 @@ export const TodaySyncPlugin = Extension.create({
           const snapshot = items.map((it) => ({ ...it }));
           queueMicrotask(() => {
             const store = useStore.getState();
+            const todayId = store.todayTabId;
             const updates: Record<ID, Task> = { ...store.tasks };
             let changed = false;
+            // Cross-doc effects, applied AFTER the store update so the entity exists first.
+            const created: { homeTabId: ID; id: ID; text: string }[] = [];
+            const textPushes: { homeTabId: ID; id: ID; text: string }[] = [];
             for (const it of snapshot) {
               if (!it.id) continue;
               const parsed = extractTokens(it.text);
@@ -187,15 +191,15 @@ export const TodaySyncPlugin = Extension.create({
                 updates[it.id] = merged;
                 changed = true;
 
-                // Only TEXT still lives in the home doc, so only text needs write-back.
-                // Status is shared via the entity — both views read it, no doc mirroring.
-                if (!isNew && textChanged) {
-                  const mounted = applyTaskTextEditToHome(it.id, merged.text);
-                  if (!mounted) writeTextToPersistedDoc(homeTabId, it.id, merged.text);
-                }
+                // A task born in Today is materialised on its home tab (2-way sync, phase 1).
+                // Status is shared via the entity (no doc mirroring); only TEXT needs write-back.
+                if (isNew) created.push({ homeTabId, id: it.id, text: merged.text });
+                else if (textChanged) textPushes.push({ homeTabId, id: it.id, text: merged.text });
               }
             }
             if (changed) useStore.setState({ tasks: updates });
+            for (const c of created) ensureTaskInDoc(c.homeTabId, c.id, c.text);
+            for (const p of textPushes) propagateTaskText(p.id, p.text, todayId, [p.homeTabId]);
           });
 
           return tr;
@@ -204,28 +208,3 @@ export const TodaySyncPlugin = Extension.create({
     ];
   },
 });
-
-interface DocLike { type: string; text?: string; attrs?: Record<string, unknown>; content?: DocLike[] }
-
-// Clone the home tab's persisted docJSON, apply `mutate` to every taskItem matching
-// `id`, and write it back. Used to mirror a TODAY reference edit into the home doc
-// when no live editor is mounted to receive it.
-function mutatePersistedTask(tabId: ID, id: ID, mutate: (node: DocLike) => void) {
-  const store = useStore.getState();
-  const tab = store.tabs[tabId];
-  if (!tab?.docJSON) return;
-  const doc = JSON.parse(JSON.stringify(tab.docJSON)) as DocLike;
-  const walk = (n: DocLike) => {
-    if (n.type === 'taskItem' && n.attrs?.id === id) mutate(n);
-    n.content?.forEach(walk);
-  };
-  walk(doc);
-  store.setTabDoc(tabId, doc);
-}
-
-function writeTextToPersistedDoc(tabId: ID, id: ID, text: string) {
-  mutatePersistedTask(tabId, id, (n) => {
-    const para = n.content?.[0];
-    if (para) para.content = text ? [{ type: 'text', text }] : [];
-  });
-}

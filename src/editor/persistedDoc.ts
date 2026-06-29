@@ -26,3 +26,40 @@ export function setTaskTextInDoc(docJSON: unknown, id: string, text: string): Do
   return doc;
 }
 
+/** Whether the doc contains a taskItem with `id` (read-only). */
+export function docHasTaskId(docJSON: unknown, id: string): boolean {
+  let found = false;
+  walk(docJSON as DocLike, (n) => {
+    if (n.type === 'taskItem' && n.attrs?.id === id) found = true;
+  });
+  return found;
+}
+
+/** Deep-clone `docJSON` and append a taskList holding a new taskItem with `id`. Idempotent. */
+export function appendTaskToDoc(docJSON: unknown, id: string, text: string): DocLike {
+  const doc = docJSON ? (JSON.parse(JSON.stringify(docJSON)) as DocLike) : { type: 'doc', content: [] };
+  if (docHasTaskId(doc, id)) return doc;
+  const item: DocLike = {
+    type: 'taskItem',
+    attrs: { id },
+    content: [{ type: 'paragraph', content: text ? [{ type: 'text', text }] : [] }],
+  };
+  doc.content = [...(doc.content ?? []), { type: 'taskList', content: [item] }];
+  return doc;
+}
+
+/** Deep-clone `docJSON` and remove every taskItem whose id is in `ids`, pruning empty taskLists. */
+export function removeTaskItemsFromDoc(docJSON: unknown, ids: Set<string>): DocLike {
+  const doc = JSON.parse(JSON.stringify(docJSON)) as DocLike;
+  const prune = (n: DocLike) => {
+    if (!n.content) return;
+    n.content = n.content.filter(
+      (c) => !(c.type === 'taskItem' && typeof c.attrs?.id === 'string' && ids.has(c.attrs.id as string)),
+    );
+    n.content = n.content.filter((c) => !(c.type === 'taskList' && (c.content?.length ?? 0) === 0));
+    n.content.forEach(prune);
+  };
+  prune(doc);
+  return doc;
+}
+

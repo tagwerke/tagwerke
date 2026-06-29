@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { TaskMeta } from './TaskMeta';
-import { applyTaskTextEditToHome } from '../editor/registry';
-import { setTaskTextInDoc } from '../editor/persistedDoc';
+import { propagateTaskText } from '../editor/registry';
 import type { ID } from '../types';
 
 interface Props { taskId: ID; blockId?: ID }
@@ -11,11 +10,11 @@ export function TaskRow({ taskId, blockId }: Props) {
   const task = useStore((s) => s.tasks[taskId]);
   const tabs = useStore((s) => s.tabs);
   const projects = useStore((s) => s.projects);
+  const todayTabId = useStore((s) => s.todayTabId);
   const setTaskText = useStore((s) => s.setTaskText);
   const toggleTaskDone = useStore((s) => s.toggleTaskDone);
   const removeTaskFromBlock = useStore((s) => s.removeTaskFromBlock);
   const setActiveTab = useStore((s) => s.setActiveTab);
-  const setTabDoc = useStore((s) => s.setTabDoc);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -33,19 +32,12 @@ export function TaskRow({ taskId, blockId }: Props) {
     toggleTaskDone(task.id);
   };
 
-  function writeTextToPersistedDoc(tabId: ID, id: ID, text: string) {
-    const tab = tabs[tabId];
-    if (!tab?.docJSON) return;
-    setTabDoc(tabId, setTaskTextInDoc(tab.docJSON, id, text));
-  }
-
   const commit = () => {
     const newText = draft.trim();
     if (newText && newText !== task.text) {
       setTaskText(task.id, newText);
-      if (!applyTaskTextEditToHome(task.id, newText)) {
-        writeTextToPersistedDoc(task.homeTabId, task.id, newText);
-      }
+      // The row isn't a doc, so push the text to both spokes that hold this task.
+      propagateTaskText(task.id, newText, '', [task.homeTabId, todayTabId]);
     }
     setEditing(false);
   };
