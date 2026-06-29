@@ -106,24 +106,6 @@ export const api = {
     deleteOrphans: (homeTabId: ID, keepIds: ID[]) =>
       req('/api/tasks/delete-orphans', { method: 'POST', body: JSON.stringify({ homeTabId, keepIds }) }),
   },
-  blocks: {
-    create: (b: { id: ID; homeTabId: ID; position: number }) =>
-      req('/api/blocks', { method: 'POST', body: JSON.stringify(b) }),
-    update: (id: ID, patch: { homeTabId?: ID; start?: string | null; end?: string | null; label?: string | null }) =>
-      req(`/api/blocks/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-    remove: (id: ID) => req(`/api/blocks/${id}`, { method: 'DELETE' }),
-    addTask: (blockId: ID, taskId: ID) =>
-      req(`/api/blocks/${blockId}/tasks`, { method: 'POST', body: JSON.stringify({ taskId }) }),
-    removeTask: (blockId: ID, taskId: ID) => req(`/api/blocks/${blockId}/tasks/${taskId}`, { method: 'DELETE' }),
-    reorder: (order: ID[]) => req('/api/blocks/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
-  },
-  today: {
-    freeze: (b: { snapshotId: ID; dateKey: string; docJSON: unknown }) =>
-      req<{ snapshot: { id: ID; dateKey: string; createdAt: number; text: string } | null; nextDateKey?: string }>(
-        '/api/today/freeze',
-        { method: 'POST', body: JSON.stringify(b) },
-      ),
-  },
   timeBlocks: {
     // Day/week read: own + teammates' blocks on shared boards, within [from, to].
     list: (from: string, to: string) =>

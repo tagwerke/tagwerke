@@ -1,6 +1,6 @@
 // Subscription-based persistence for the two pieces of state that are mutated
 // outside the action layer: `tasks` (the editor sync plugins write these directly)
-// and each tab's `docJSON` (mutated by setTabDoc, cleanupEmptyTasks, freezeToday).
+// and each tab's `docJSON` (mutated by setTabDoc, cleanupEmptyTasks).
 // On a debounced tick we diff against the last persisted snapshot and emit granular
 // upsert/delete/patch calls. Structural entities (projects, tab metadata, blocks,
 // snapshots) are persisted explicitly inside their store actions, not here.

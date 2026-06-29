@@ -7,7 +7,6 @@ import { matchesTaskFacets } from '../util/filter';
 export function Board() {
   const tabs = useStore((s) => s.tabs);
   const tabOrder = useStore((s) => s.tabOrder);
-  const todayTabId = useStore((s) => s.todayTabId);
   const projects = useStore((s) => s.projects);
   const projectOrder = useStore((s) => s.projectOrder);
   const tasks = useStore((s) => s.tasks);
@@ -42,15 +41,15 @@ export function Board() {
   const grouped = useMemo(() => {
     const out: Array<{ projectId: string; tabIds: string[] }> = [];
     for (const pid of projectOrder) {
-      const tabIds = tabOrder.filter((tid) => tabs[tid]?.projectId === pid && tid !== todayTabId && passes(tid));
+      const tabIds = tabOrder.filter((tid) => tabs[tid]?.projectId === pid && passes(tid));
       if (tabIds.length) out.push({ projectId: pid, tabIds });
     }
     return out;
-  }, [projectOrder, tabOrder, tabs, todayTabId, passes]);
+  }, [projectOrder, tabOrder, tabs, passes]);
 
   const allTabIds = useMemo(
-    () => tabOrder.filter((tid) => tid !== todayTabId && passes(tid)),
-    [tabOrder, todayTabId, passes]
+    () => tabOrder.filter((tid) => passes(tid)),
+    [tabOrder, passes]
   );
 
   if (allTabIds.length === 0) {

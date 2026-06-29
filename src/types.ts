@@ -7,6 +7,9 @@ export interface Project {
   order: number;
 }
 
+// 'today' is retained transitionally so legacy today-tab rows (type='today') from
+// before the Planner can still be classified and excluded from listings/pickers until
+// they're removed by migration. New tabs are always 'normal'.
 export type TabType = 'normal' | 'today';
 
 export interface Tab {
@@ -17,8 +20,6 @@ export interface Tab {
   starred: boolean;
   type: TabType;
   docJSON?: unknown;
-  blocks?: TodayBlock[];
-  dateKey?: string;
   location?: string; // board's place facet (v2)
 }
 
@@ -48,22 +49,6 @@ export interface Member {
   email: string;
   /** Email local-part, for display until a real display name exists. */
   name: string;
-}
-
-export interface TodayBlock {
-  id: ID;
-  tabId: ID;
-  start?: string;
-  end?: string;
-  taskIds: ID[];
-  label?: string;
-}
-
-export interface Snapshot {
-  id: ID;
-  dateKey: string;
-  createdAt: number;
-  text: string;
 }
 
 /**
@@ -103,7 +88,6 @@ export interface RootState {
   projects: Record<ID, Project>;
   tabs: Record<ID, Tab>;
   tasks: Record<ID, Task>;
-  snapshots: Record<ID, Snapshot>;
   /** The caller's OWN Planner blocks. Teammates' blocks live in PlannerView local state. */
   timeBlocks: Record<ID, TimeBlock>;
   /** Per-board member rosters (the `@` picker's source). Keyed by tab/board id. */
@@ -111,7 +95,6 @@ export interface RootState {
   projectOrder: ID[];
   tabOrder: ID[];
   starredRowOrder: ID[];
-  todayTabId: ID;
   activeTabId: ID | null;
   /** Planner UI state. */
   plannerOpen: boolean;
