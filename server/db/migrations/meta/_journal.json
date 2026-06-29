@@ -43,6 +43,13 @@
       "when": 1782765825771,
       "tag": "0005_magenta_kulan_gath",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782767630960,
+      "tag": "0006_colorful_caretaker",
+      "breakpoints": true
     }
   ]
 }

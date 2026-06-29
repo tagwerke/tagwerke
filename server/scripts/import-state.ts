@@ -29,14 +29,6 @@ interface Task {
   owner?: string;
   done?: boolean;
 }
-interface Block {
-  id: string;
-  tabId: string;
-  start?: string;
-  end?: string;
-  label?: string;
-  taskIds: string[];
-}
 interface Tab {
   id: string;
   projectId: string;
@@ -45,16 +37,12 @@ interface Tab {
   starred: boolean;
   type: 'normal' | 'today';
   docJSON?: unknown;
-  blocks?: Block[];
-  dateKey?: string;
 }
 interface RootState {
   projects: Record<string, { id: string; name: string; color: string; order: number }>;
   tabs: Record<string, Tab>;
   tasks: Record<string, Task>;
-  snapshots: Record<string, { id: string; dateKey: string; createdAt: number; text: string }>;
   starredRowOrder: string[];
-  todayTabId: string;
 }
 
 async function main() {
@@ -81,9 +69,7 @@ async function main() {
 
   await db.transaction(async (tx) => {
     // Wipe existing rows. Deleting the user's boards (by created_by) cascades their
-    // tasks, memberships, events, and owned blocks.
-    await tx.delete(schema.snapshots).where(eq(schema.snapshots.userId, userId));
-    await tx.delete(schema.todayBlocks).where(eq(schema.todayBlocks.userId, userId));
+    // tasks, memberships, events, and time blocks.
     await tx.delete(schema.tabs).where(eq(schema.tabs.createdBy, userId));
     await tx.delete(schema.projects).where(eq(schema.projects.userId, userId));
 
@@ -99,15 +85,15 @@ async function main() {
       );
     }
 
-    const tabs = Object.values(state.tabs);
+    // The legacy TODAY tab is retired (the Planner replaces it) — don't import it.
+    const tabs = Object.values(state.tabs).filter((t) => t.type !== 'today');
     if (tabs.length) {
       await tx.insert(schema.tabs).values(
         tabs.map((t) => ({
           id: t.id,
           createdBy: userId,
           name: t.name,
-          type: t.type,
-          dateKey: t.dateKey ?? null,
+          type: 'normal' as const,
           docJSON: t.docJSON ?? null,
         })),
       );
@@ -141,38 +127,8 @@ async function main() {
       );
     }
 
-    const taskIds = new Set(tasks.map((t) => t.id));
-    const today = state.tabs[state.todayTabId];
-    const blocks = today?.blocks ?? [];
-    for (let bi = 0; bi < blocks.length; bi++) {
-      const b = blocks[bi];
-      await tx.insert(schema.todayBlocks).values({
-        id: b.id,
-        userId,
-        tabId: today!.id,
-        homeTabId: b.tabId || null,
-        start: b.start ?? null,
-        end: b.end ?? null,
-        label: b.label ?? null,
-        position: bi,
-      });
-      const validTaskIds = b.taskIds.filter((id) => taskIds.has(id));
-      if (validTaskIds.length) {
-        await tx.insert(schema.todayBlockTasks).values(
-          validTaskIds.map((id, i) => ({ blockId: b.id, taskId: id, position: i })),
-        );
-      }
-    }
-
-    const snaps = Object.values(state.snapshots ?? {});
-    if (snaps.length) {
-      await tx.insert(schema.snapshots).values(
-        snaps.map((s) => ({ id: s.id, userId, dateKey: s.dateKey, createdAt: s.createdAt, text: s.text })),
-      );
-    }
-
     console.log(
-      `imported: ${projects.length} projects, ${tabs.length} tabs, ${tasks.length} tasks, ${blocks.length} blocks, ${snaps.length} snapshots`,
+      `imported: ${projects.length} projects, ${tabs.length} tabs, ${tasks.length} tasks`,
     );
   });
 

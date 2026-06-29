@@ -14,7 +14,6 @@ import {
   smallint,
   boolean,
   jsonb,
-  bigint,
   timestamp,
   primaryKey,
   index,
@@ -213,51 +212,5 @@ export const timeBlocks = pgTable(
   ],
 );
 
-export const todayBlocks = pgTable(
-  'today_blocks',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    // The TODAY tab that owns this block.
-    tabId: text('tab_id')
-      .notNull()
-      .references(() => tabs.id, { onDelete: 'cascade' }),
-    // The block's source/home tab (= TodayBlock.tabId in the client model).
-    homeTabId: text('home_tab_id'),
-    start: text('start'),
-    end: text('end'),
-    label: text('label'),
-    position: integer('position').notNull(),
-  },
-  (t) => [index('today_blocks_user_idx').on(t.userId), index('today_blocks_tab_idx').on(t.tabId)],
-);
-
-export const todayBlockTasks = pgTable(
-  'today_block_tasks',
-  {
-    blockId: text('block_id')
-      .notNull()
-      .references(() => todayBlocks.id, { onDelete: 'cascade' }),
-    taskId: text('task_id')
-      .notNull()
-      .references(() => tasks.id, { onDelete: 'cascade' }),
-    position: integer('position').notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.blockId, t.taskId] })],
-);
-
-export const snapshots = pgTable(
-  'snapshots',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    dateKey: text('date_key').notNull(),
-    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
-    text: text('text').notNull(),
-  },
-  (t) => [index('snapshots_user_idx').on(t.userId)],
-);
+// (Retired) The Today aggregation tab's blocks/snapshots were dropped in migration
+// 0006 when the Planner (time_blocks) replaced them.

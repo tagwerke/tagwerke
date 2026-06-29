@@ -1,22 +1,13 @@
 // Seeds a new user's default workspace. Mirrors makeInitial() in src/store.ts:
-// projects Work/Personal; tabs TODAY (type today, starred), Inbox (starred), Errands.
+// projects Work/Personal; tabs Inbox (starred), Errands. (Time planning lives in the
+// Planner, not a tab.)
 
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
 
-function pad(n: number): string {
-  return String(n).padStart(2, '0');
-}
-
-export function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 export async function seedUser(userId: string): Promise<void> {
   const workId = nanoid();
   const personalId = nanoid();
-  const todayId = nanoid();
   const inboxId = nanoid();
   const errandsId = nanoid();
 
@@ -26,7 +17,6 @@ export async function seedUser(userId: string): Promise<void> {
   ]);
 
   await db.insert(schema.tabs).values([
-    { id: todayId, createdBy: userId, name: 'TODAY', type: 'today', dateKey: todayISO(), docJSON: null },
     { id: inboxId, createdBy: userId, name: 'Inbox', type: 'normal', docJSON: null },
     { id: errandsId, createdBy: userId, name: 'Errands', type: 'normal', docJSON: null },
   ]);
@@ -35,8 +25,7 @@ export async function seedUser(userId: string): Promise<void> {
   // their personal view state. Without this the tabs are invisible (the read path
   // keys on board_members).
   await db.insert(schema.boardMembers).values([
-    { tabId: todayId, userId, role: 'admin', categoryId: workId, position: 0, starred: true, starredPosition: 0 },
-    { tabId: inboxId, userId, role: 'admin', categoryId: workId, position: 1, starred: true, starredPosition: 1 },
-    { tabId: errandsId, userId, role: 'admin', categoryId: personalId, position: 2, starred: false, starredPosition: null },
+    { tabId: inboxId, userId, role: 'admin', categoryId: workId, position: 0, starred: true, starredPosition: 0 },
+    { tabId: errandsId, userId, role: 'admin', categoryId: personalId, position: 1, starred: false, starredPosition: null },
   ]);
 }
