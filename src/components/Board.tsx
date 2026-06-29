@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useStore } from '../store';
 import { TabCard } from './TabCard';
 import { Masonry } from './Masonry';
-import { isDueSoon } from '../util/dates';
+import { matchesTaskFacets } from '../util/filter';
 
 export function Board() {
   const tabs = useStore((s) => s.tabs);
@@ -30,13 +30,7 @@ export function Board() {
       }
 
       if (filter.owners.length || filter.priorities.length || filter.hasDate || filter.dueSoon) {
-        const matched = tabTasks.some((t) => {
-          if (filter.owners.length && !(t.owner && filter.owners.includes(t.owner))) return false;
-          if (filter.priorities.length && !(t.priority && filter.priorities.includes(t.priority))) return false;
-          if (filter.hasDate && !t.date) return false;
-          if (filter.dueSoon && !(t.date && isDueSoon(t.date))) return false;
-          return true;
-        });
+        const matched = tabTasks.some((t) => matchesTaskFacets(t, filter));
         if (!matched) return false;
       }
       return true;
