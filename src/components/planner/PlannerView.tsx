@@ -71,7 +71,13 @@ export function PlannerView() {
       setRoster(Object.fromEntries(roster.map((r) => [r.userId, r.email])));
       setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'failed to load planner');
+      // Offline: your own blocks still render from the store; only teammates' lanes
+      // and live refresh are unavailable, so keep it quiet rather than alarming.
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setError('offline — showing your saved blocks');
+      } else {
+        setError(e instanceof ApiError ? e.message : 'failed to load planner');
+      }
     }
   }, [me, from, to, setOwnTimeBlocks]);
 

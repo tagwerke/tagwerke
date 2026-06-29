@@ -56,6 +56,7 @@ input, select, textarea { font: inherit; color: inherit; }
   margin: 0 auto;
   padding: 24px clamp(16px, 4vw, 48px) 80px;
   min-height: 100vh;
+  position: relative; /* anchor for the filter popover */
 }
 
 /* ── Top bar ──────────────────────────────────────────────────────────── */
@@ -89,6 +90,23 @@ input, select, textarea { font: inherit; color: inherit; }
   font-style: italic;
 }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
+
+/* Connectivity pill (offline / syncing) — sits between the brand and actions. */
+.net-pill {
+  margin-left: auto; margin-right: 8px;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 11px;
+  border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+  border: 1px solid var(--line-strong);
+  white-space: nowrap;
+}
+.net-pill .net-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.net-pill.is-offline { color: #a8581f; border-color: rgba(168,88,31,0.4); background: rgba(168,88,31,0.07); }
+.net-pill.is-offline .net-dot { background: #a8581f; }
+.net-pill.is-syncing { color: var(--ink-soft); background: var(--bg-paper); }
+.net-pill.is-syncing .net-dot { background: var(--pop); animation: net-pulse 1s ease-in-out infinite; }
+@keyframes net-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1089,7 +1107,8 @@ input, select, textarea { font: inherit; color: inherit; }
 
 .popover {
   position: absolute;
-  right: 0; top: 100%;
+  /* Anchored under the topbar's right edge (popover now lives at .app level). */
+  right: clamp(16px, 4vw, 48px); top: 64px;
   margin-top: 8px;
   background: var(--bg-paper);
   border: 1px solid var(--line);
@@ -1517,3 +1536,167 @@ input, select, textarea { font: inherit; color: inherit; }
 .loadout-planner:hover { border-color: var(--pop); }
 .loadout-planner-label { font-family: var(--serif); font-weight: 700; font-style: italic; font-size: 18px; }
 .loadout-planner-hint { font-size: 11px; color: var(--ink-mute); }
+
+/* ── Mobile bottom nav ────────────────────────────────────────────────────
+   A fixed thumb-bar that replaces the TopBar actions on phones. Hidden on
+   desktop; revealed at ≤720px (see the breakpoint block below). */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 40;
+  align-items: stretch;
+  justify-content: space-around;
+  gap: 2px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--bg-paper) 88%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  backdrop-filter: saturate(1.4) blur(12px);
+  border-top: 1px solid var(--line);
+}
+.mnav-item {
+  flex: 1 1 0;
+  background: none; border: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px;
+  min-height: 48px;
+  padding: 4px 0;
+  border-radius: var(--r-sm);
+  color: var(--ink-mute);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.4px;
+  -webkit-tap-highlight-color: transparent;
+}
+.mnav-item span { line-height: 1; }
+.mnav-item.is-active { color: var(--ink); }
+.mnav-item:active { background: var(--line); }
+.mnav-new { flex: 0 0 auto; }
+.mnav-new-circle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 46px; height: 46px;
+  margin-top: -14px;
+  border-radius: 50%;
+  background: var(--pop);
+  color: #fff;
+  box-shadow: var(--shadow-pop);
+}
+.mnav-new:active .mnav-new-circle { transform: translateY(1px); }
+
+/* ── Bottom sheet (More menu + sheet-ified modals) ────────────────────────── */
+.sheet-backdrop { align-items: flex-end; justify-content: center; padding: 0; }
+.sheet {
+  width: 100%;
+  max-width: 560px;
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: var(--shadow-pop);
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+  animation: sheet-up 0.18s cubic-bezier(0.2, 0.7, 0.25, 1);
+}
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-grip {
+  width: 36px; height: 4px; border-radius: 999px;
+  background: var(--line-strong);
+  margin: 6px auto 10px;
+}
+.sheet-row {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  background: none; border: 0;
+  padding: 14px 8px;
+  font-size: 15px; color: var(--ink);
+  border-radius: var(--r-md);
+  text-align: left;
+}
+.sheet-row:active { background: var(--line); }
+.sheet-row svg { color: var(--ink-soft); flex: none; }
+.sheet-row.danger { color: var(--pop); }
+.sheet-row.danger svg { color: var(--pop); }
+.sheet-badge {
+  margin-left: auto;
+  font-size: 11px; font-weight: 700;
+  background: var(--pop); color: #fff;
+  border-radius: 999px; padding: 1px 8px;
+}
+
+/* ── Touch devices: reveal hover-only affordances ─────────────────────────
+   Cards/chips hide their actions until hover; touch has no hover, so surface
+   them (a touch more visible) when the device is coarse-pointer. */
+@media (hover: none) {
+  .board-group-delete,
+  .tab-card .tab-card-actions,
+  .meta-add-date { opacity: 0.6; }
+  .status-caret { opacity: 0.4; }
+  .chip-project-wrap .chip-delete { opacity: 0.5; }
+}
+
+/* ── Phone breakpoint ─────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .app {
+    padding: 16px 16px calc(72px + env(safe-area-inset-bottom));
+  }
+  /* Inputs < 16px make iOS zoom-jump on focus; bump text fields (not the native
+     date/time picker pills, which would distort the planner chrome). */
+  input:not([type="date"]):not([type="time"]):not([type="checkbox"]):not([type="radio"]),
+  textarea, select { font-size: 16px; }
+  .topbar { margin-bottom: 18px; }
+  /* Desktop action row is replaced by the bottom nav. */
+  .topbar-actions { display: none; }
+  .brand-name { font-size: 24px; }
+  .brand-mark { width: 28px; height: 28px; }
+
+  .mobile-nav { display: flex; }
+
+  /* Sheet-ify the centered modals so they meet the thumb. */
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal, .picker, .search-palette, .share-panel {
+    width: 100%;
+    max-width: none;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border-bottom: 0;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    max-height: 88vh;
+    overflow-y: auto;
+    animation: sheet-up 0.18s cubic-bezier(0.2, 0.7, 0.25, 1);
+  }
+  .search-palette { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+
+  /* The filter popover becomes a bottom sheet (no topbar anchor on phones). */
+  .popover {
+    position: fixed;
+    left: 0; right: 0; bottom: 0; top: auto;
+    margin: 0;
+    width: 100%; max-width: none;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border-bottom: 0;
+    padding: 16px 16px calc(80px + env(safe-area-inset-bottom));
+    max-height: 80vh; overflow-y: auto;
+    z-index: 50;
+    animation: sheet-up 0.18s cubic-bezier(0.2, 0.7, 0.25, 1);
+  }
+
+  /* Containers: trim the chrome so content gets the width. */
+  .loadout { padding: 14px 12px; border-radius: var(--r-md); }
+  .loadout-header { padding-left: 6px; }
+  .loadout-row { padding-left: 6px; }
+  .board { gap: 26px; }
+  .tab-view { padding: 16px; border-radius: var(--r-md); }
+  .tab-view-head { gap: 10px; margin-bottom: 16px; padding-bottom: 12px; }
+  .tab-view-title { font-size: 26px; }
+  .planner { padding: 16px 12px calc(24px + env(safe-area-inset-bottom)); border-radius: var(--r-md); }
+
+  /* Planner week: swipe day-by-day with scroll-snap instead of a cramped 7-up grid. */
+  .planner-grid.mode-week {
+    grid-auto-flow: column;
+    grid-auto-columns: 86%;
+    grid-template-columns: none;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+  .planner-grid.mode-week > .planner-day { scroll-snap-align: start; }
+  .planner-grid.mode-day { grid-template-columns: minmax(0, 1fr); }
+}

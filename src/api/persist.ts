@@ -7,6 +7,7 @@
 
 import { useStore } from '../store';
 import { api, enqueue } from './client';
+import { saveSnapshot } from '../offline/snapshot';
 import type { ID, RootState, Task } from '../types';
 
 const DEBOUNCE_MS = 400;
@@ -97,6 +98,8 @@ function diff(): void {
   }
 
   last = next;
+  // Keep the offline snapshot current so a reload (online or not) restores edits.
+  saveSnapshot(useStore.getState());
 }
 
 function schedule(): void {

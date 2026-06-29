@@ -1,16 +1,29 @@
 // Thin HTTP client for the do-app backend. All calls are same-origin (Vite proxies
-// /api -> the Fastify server) and carry the session cookie. Mutations are funneled
-// through a single serialized queue so optimistic UI updates persist in order; on
-// failure the registered error handler re-pulls authoritative state.
+// /api -> the Fastify server) and carry the session cookie.
+//
+// Offline-critical mutations (tasks, tab docs, projects, tabs, time blocks) are
+// funneled through a DURABLE, ordered outbox (see src/offline/outbox.ts) so edits
+// made offline survive a reload and replay on reconnect. Reads, plus the
+// collaboration/admin endpoints that need a live response (members, events, admin),
+// stay as direct fetches and simply fail while offline.
 
 import type { ID, TaskStatus, TimeBlock } from '../types';
+import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
+import { offline } from '../offline/status';
 
 async function req<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(path, {
-    credentials: 'include',
-    headers: init?.body ? { 'content-type': 'application/json' } : undefined,
-    ...init,
-  });
+  let r: Response;
+  try {
+    r = await fetch(path, {
+      credentials: 'include',
+      headers: init?.body ? { 'content-type': 'application/json' } : undefined,
+      ...init,
+    });
+  } catch (e) {
+    offline.setOnline(false); // network unreachable
+    throw e;
+  }
+  offline.setOnline(true);
   if (!r.ok) {
     let detail = '';
     try {
@@ -32,28 +45,24 @@ export class ApiError extends Error {
   }
 }
 
-// ---- write serialization -------------------------------------------------
+// ---- write path: durable outbox ------------------------------------------
+const M = (method: Mutation['method'], path: string, body?: unknown): Mutation => ({ method, path, body });
 
-let chain: Promise<unknown> = Promise.resolve();
-let onError: (() => void) | null = null;
-
+/** After a server-rejected (4xx) write the session re-pulls authoritative state. */
 export function setWriteErrorHandler(fn: () => void): void {
-  onError = fn;
+  setConflictHandler(fn);
 }
 
-export function enqueue<T>(fn: () => Promise<T>): Promise<T | undefined> {
-  const next = chain.then(fn).catch((e) => {
-    console.error('[api] write failed', e);
-    onError?.();
-    return undefined;
-  });
-  chain = next;
-  return next;
+/** Back-compat shim: store/persist call `enqueue(() => api.X.Y(...))`; the api
+ *  mutation methods already submit to the durable outbox, so this just invokes
+ *  the thunk. Ordering + retry + persistence now live in the outbox. */
+export function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+  return fn();
 }
 
 /** Resolves once all queued writes have settled (used before reads that must see them). */
-export function drain(): Promise<unknown> {
-  return chain;
+export function drain(): Promise<void> {
+  return outboxIdle();
 }
 
 // ---- auth ----------------------------------------------------------------
@@ -78,47 +87,46 @@ export const getState = () => req('/api/state');
 // ---- mutations (raw; callers usually wrap in enqueue) ---------------------
 
 export const api = {
+  // ── Offline-critical mutations → durable outbox (optimistic, replayed) ──────
   projects: {
     create: (b: { id: ID; name: string; color: string; position: number }) =>
-      req('/api/projects', { method: 'POST', body: JSON.stringify(b) }),
+      submitMutation(M('POST', '/api/projects', b)),
     update: (id: ID, patch: { name?: string; color?: string }) =>
-      req(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-    remove: (id: ID) => req(`/api/projects/${id}`, { method: 'DELETE' }),
-    reorder: (order: ID[]) => req('/api/projects/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
+      submitMutation(M('PATCH', `/api/projects/${id}`, patch)),
+    remove: (id: ID) => submitMutation(M('DELETE', `/api/projects/${id}`)),
+    reorder: (order: ID[]) => submitMutation(M('POST', '/api/projects/reorder', { order })),
   },
   tabs: {
     create: (b: { id: ID; projectId: ID; name: string; position: number; starred?: boolean; type?: string }) =>
-      req('/api/tabs', { method: 'POST', body: JSON.stringify(b) }),
+      submitMutation(M('POST', '/api/tabs', b)),
     update: (
       id: ID,
       patch: { name?: string; projectId?: ID; starred?: boolean; starredPosition?: number | null; dateKey?: string | null; docJSON?: unknown; location?: string | null },
-    ) => req(`/api/tabs/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-    remove: (id: ID) => req(`/api/tabs/${id}`, { method: 'DELETE' }),
-    reorder: (order: ID[]) => req('/api/tabs/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
-    reorderStarred: (order: ID[]) => req('/api/tabs/reorder-starred', { method: 'POST', body: JSON.stringify({ order }) }),
+    ) => submitMutation(M('PATCH', `/api/tabs/${id}`, patch)),
+    remove: (id: ID) => submitMutation(M('DELETE', `/api/tabs/${id}`)),
+    reorder: (order: ID[]) => submitMutation(M('POST', '/api/tabs/reorder', { order })),
+    reorderStarred: (order: ID[]) => submitMutation(M('POST', '/api/tabs/reorder-starred', { order })),
   },
   tasks: {
     upsert: (id: ID, b: { homeTabId: ID; text: string; status?: TaskStatus; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; position?: number; owner?: string | null; done?: boolean }) =>
-      req(`/api/tasks/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+      submitMutation(M('PUT', `/api/tasks/${id}`, b)),
     patch: (id: ID, patch: { text?: string; status?: TaskStatus; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; position?: number; owner?: string | null; done?: boolean }) =>
-      req(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-    remove: (id: ID) => req(`/api/tasks/${id}`, { method: 'DELETE' }),
+      submitMutation(M('PATCH', `/api/tasks/${id}`, patch)),
+    remove: (id: ID) => submitMutation(M('DELETE', `/api/tasks/${id}`)),
     deleteOrphans: (homeTabId: ID, keepIds: ID[]) =>
-      req('/api/tasks/delete-orphans', { method: 'POST', body: JSON.stringify({ homeTabId, keepIds }) }),
+      submitMutation(M('POST', '/api/tasks/delete-orphans', { homeTabId, keepIds })),
   },
   timeBlocks: {
-    // Day/week read: own + teammates' blocks on shared boards, within [from, to].
+    // Day/week read: own + teammates' blocks on shared boards, within [from, to]. (read → live)
     list: (from: string, to: string) =>
       req<{ blocks: TimeBlockOut[]; roster: { userId: ID; email: string }[] }>(
         `/api/time-blocks?from=${from}&to=${to}`,
       ),
-    create: (b: TimeBlock) => req('/api/time-blocks', { method: 'POST', body: JSON.stringify(b) }),
-    update: (
-      id: ID,
-      patch: Partial<Omit<TimeBlock, 'id' | 'userId'>>,
-    ) => req(`/api/time-blocks/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-    remove: (id: ID) => req(`/api/time-blocks/${id}`, { method: 'DELETE' }),
-    reorder: (order: ID[]) => req('/api/time-blocks/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
+    create: (b: TimeBlock) => submitMutation(M('POST', '/api/time-blocks', b)),
+    update: (id: ID, patch: Partial<Omit<TimeBlock, 'id' | 'userId'>>) =>
+      submitMutation(M('PATCH', `/api/time-blocks/${id}`, patch)),
+    remove: (id: ID) => submitMutation(M('DELETE', `/api/time-blocks/${id}`)),
+    reorder: (order: ID[]) => submitMutation(M('POST', '/api/time-blocks/reorder', { order })),
   },
   members: {
     list: (tabId: ID) => req<{ members: BoardMember[] }>(`/api/tabs/${tabId}/members`),
