@@ -11,7 +11,7 @@ const createBody = z.object({
   name: z.string().min(1).max(200),
   position: z.number().int().nonnegative(),
   starred: z.boolean().optional(),
-  type: z.enum(['normal', 'today']).optional(),
+  type: z.enum(['normal']).optional(),
 });
 
 const patchBody = z.object({
@@ -129,17 +129,9 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireBoardRole('admin', paramTabId) },
     async (req, reply) => {
       const { id } = req.params as { id: string };
-      const rows = await db.select({ type: schema.tabs.type }).from(schema.tabs).where(eq(schema.tabs.id, id)).limit(1);
-      if (!rows.length) return reply.send({ ok: true });
-      if (rows[0].type === 'today') return reply.code(409).send({ error: 'cannot delete the today tab' });
-
-      await db.transaction(async (tx) => {
-        // TODAY blocks reference this board by home_tab_id (no FK), across ALL users —
-        // remove them so no one is left with dangling references to a deleted board.
-        await tx.delete(schema.todayBlocks).where(eq(schema.todayBlocks.homeTabId, id));
-        // Deleting the tab cascades its tasks, memberships, events, and owned blocks.
-        await tx.delete(schema.tabs).where(eq(schema.tabs.id, id));
-      });
+      // Deleting the tab cascades its tasks, memberships, events, and the time_blocks
+      // that reference it (all FK on delete cascade).
+      await db.delete(schema.tabs).where(eq(schema.tabs.id, id));
       return reply.send({ ok: true });
     },
   );

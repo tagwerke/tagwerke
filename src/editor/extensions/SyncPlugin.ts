@@ -6,7 +6,6 @@ import { nanoid } from 'nanoid';
 import { useStore } from '../../store';
 import { extractTokens } from '../../util/parse';
 import { applyStripOps, stripOpForLine, type StripOp } from '../taskItemDoc';
-import { propagateTaskText, removeTasksFromDocs } from '../registry';
 import type { ID, Task } from '../../types';
 
 export interface SyncPluginOptions {
@@ -110,17 +109,13 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
 
           queueMicrotask(() => {
             const store = useStore.getState();
-            const todayId = store.todayTabId;
             const seen = new Set<ID>();
             const updates: Record<ID, Task> = { ...store.tasks };
-            const textPushes: { id: ID; text: string }[] = [];
-            const removed = new Set<ID>();
             for (const it of snapshot) {
               if (!it.id) continue;
               const parsed = extractTokens(it.rawText);
               const text = parsed.text;
               const existing = updates[it.id];
-              const textChanged = !!existing && existing.text !== text;
               // Status/assignee/position are entity-only — preserve them by spreading existing.
               // A `[x]`/`[ ]` checkbox token still maps to status (paste/markdown compatibility).
               const status =
@@ -149,21 +144,13 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
               ) {
                 updates[it.id] = merged;
               }
-              // Reverse text sync (phase 2): a text edit here updates the Today reference.
-              if (textChanged) textPushes.push({ id: it.id, text });
               seen.add(it.id);
             }
-            // Drop tasks whose home is this tab but are no longer in the doc; their Today
-            // references must go too (phase 3), or they'd render as ghosts / be re-created.
+            // GC: drop tasks homed on this tab but no longer present in the doc.
             for (const t of Object.values(store.tasks)) {
-              if (t.homeTabId === tabId && !seen.has(t.id)) {
-                delete updates[t.id];
-                removed.add(t.id);
-              }
+              if (t.homeTabId === tabId && !seen.has(t.id)) delete updates[t.id];
             }
             useStore.setState(() => ({ tasks: { ...updates } }));
-            for (const p of textPushes) propagateTaskText(p.id, p.text, tabId, [todayId]);
-            removeTasksFromDocs(removed, [todayId]);
           });
 
           return tr;

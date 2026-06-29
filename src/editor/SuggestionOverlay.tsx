@@ -1,30 +1,23 @@
 // One inline-suggestion engine for the editors. Modes:
-//   - 'tab'     : Today block-header → tab autocomplete (structural)
-//   - 'task'    : Today bound-block → task reference autocomplete (structural)
 //   - 'mention' : `@query` in any taskItem → board-member (assignee) picker
+//   - 'command' : `/cmd arg` in any taskItem → set a property (due / status / priority)
 // One overlay component + one keydown handler, so the modes never fight over keys.
 // `resolveHomeTab` is supplied per editor (the @ picker is scoped to a task's home board).
 
 import { useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/react';
-import { TextSelection, type EditorState } from '@tiptap/pm/state';
 import { nanoid } from 'nanoid';
 import { useStore } from '../store';
-import { parseHeader, type TabMatch } from '../util/header';
 import { extractTokens } from '../util/parse';
 import { resolveDateKeyword, formatDateChip, toISO, todayISO } from '../util/dates';
-import { blockHeaderKey } from './extensions/BlockHeader';
 import { taskItemInnerRange } from './taskItemDoc';
 import type { ID, Member, TaskStatus } from '../types';
 
-interface TaskMatch { id: ID; text: string; done: boolean }
 interface CommandItem { key: string; label: string; run: () => void }
 
 export type ResolveHomeTab = (taskItemPos: number, existingId: string | null) => ID | undefined;
 
 type Mode =
-  | { kind: 'tab'; query: string; matches: TabMatch[]; x: number; y: number; onPick: (m: TabMatch) => void }
-  | { kind: 'task'; query: string; matches: TaskMatch[]; x: number; y: number; onPick: (m: TaskMatch) => void }
   | { kind: 'mention'; query: string; matches: Member[]; x: number; y: number; onPick: (m: Member) => void }
   | { kind: 'command'; query: string; matches: CommandItem[]; x: number; y: number; onPick: (m: CommandItem) => void };
 
@@ -121,7 +114,6 @@ function computeMode(editor: Editor, resolveHomeTab: ResolveHomeTab): Mode | nul
   const state = editor.state;
   const $from = state.selection.$from;
   if ($from.depth < 1) return null;
-  const { tabs, projects, tabOrder, tasks } = useStore.getState();
   const coords = editor.view.coordsAtPos(state.selection.from);
 
   // Locate the taskItem containing the cursor (used by 'mention' and 'task').
@@ -199,86 +191,12 @@ function computeMode(editor: Editor, resolveHomeTab: ResolveHomeTab): Mode | nul
     }
   }
 
-  const topPos = $from.before(1);
-  const topNode = state.doc.nodeAt(topPos);
-  if (!topNode) return null;
-
-  // --- HEADER paragraph: tab autocomplete (Today only; no-op elsewhere) ---
-  if (topNode.type.name === 'paragraph') {
-    const text = topNode.textContent;
-    const parsed = parseHeader(text, tabs, projects, tabOrder);
-    if (!parsed.isHeader) return null;
-    const cursorOffsetInPara = state.selection.from - (topPos + 1);
-    if (cursorOffsetInPara < parsed.tokenLen) return null;
-    if (parsed.matches.length === 0) return null;
-    return {
-      kind: 'tab',
-      query: parsed.remainder,
-      matches: parsed.matches.slice(0, MAX),
-      x: coords.left,
-      y: coords.bottom + 4,
-      onPick: (m) => {
-        const paraStart = topPos + 1;
-        const afterTokenPos = paraStart + parsed.tokenLen;
-        const paraEnd = topPos + topNode.nodeSize - 1;
-        const insert = ' ' + m.name;
-        const tr = editor.state.tr.replaceWith(afterTokenPos, paraEnd, editor.state.schema.text(insert));
-        const newPos = afterTokenPos + insert.length;
-        tr.setSelection(TextSelection.near(tr.doc.resolve(newPos)));
-        editor.view.dispatch(tr);
-        editor.view.focus();
-      },
-    };
-  }
-
-  // --- TASK in a bound block: task autocomplete (Today only) ---
-  if (taskItemPos < 0 || !taskItemNode) return null;
-  const taskText = (taskItemNode.firstChild?.textContent ?? '').trim();
-
-  const regions = blockHeaderKey.getState(state as EditorState)?.regions ?? [];
-  let boundTabId: ID | undefined;
-  for (const r of regions) {
-    if (taskItemPos > r.headerPos && taskItemPos > r.headerPos + r.headerSize - 1) {
-      boundTabId = r.tabId;
-    } else if (taskItemPos <= r.headerPos) {
-      break;
-    }
-  }
-  if (!boundTabId) return null;
-
-  const q = taskText.toLowerCase();
-  const currentId = (taskItemNode.attrs.id as string | null) ?? null;
-  const taskList = Object.values(tasks)
-    .filter((t) => t.homeTabId === boundTabId && t.id !== currentId)
-    .filter((t) => !q || t.text.toLowerCase().includes(q))
-    .sort((a, b) => (!!a.done === !!b.done ? 0 : a.done ? 1 : -1))
-    .slice(0, MAX);
-  if (taskList.length === 0) return null;
-
-  return {
-    kind: 'task',
-    query: taskText,
-    matches: taskList.map((t) => ({ id: t.id, text: t.text, done: t.status === 'done' })),
-    x: coords.left,
-    y: coords.bottom + 4,
-    onPick: (m) => {
-      const para = taskItemNode!.firstChild;
-      if (!para) return;
-      const { from: innerFrom, to: innerTo } = taskItemInnerRange(taskItemPos, para);
-      const tr = editor.state.tr.replaceWith(innerFrom, innerTo, editor.state.schema.text(m.text));
-      tr.setNodeMarkup(taskItemPos, undefined, { ...taskItemNode!.attrs, id: m.id });
-      tr.setMeta('externalEdit', true);
-      tr.setSelection(TextSelection.near(tr.doc.resolve(innerFrom + m.text.length)));
-      editor.view.dispatch(tr);
-      editor.view.focus();
-    },
-  };
+  // No `@`/`/` trigger under the cursor → nothing to suggest.
+  return null;
 }
 
-function pickItem(mode: Mode, item: TabMatch | TaskMatch | Member | CommandItem): void {
-  if (mode.kind === 'tab') mode.onPick(item as TabMatch);
-  else if (mode.kind === 'task') mode.onPick(item as TaskMatch);
-  else if (mode.kind === 'mention') mode.onPick(item as Member);
+function pickItem(mode: Mode, item: Member | CommandItem): void {
+  if (mode.kind === 'mention') mode.onPick(item as Member);
   else mode.onPick(item as CommandItem);
 }
 
@@ -338,14 +256,7 @@ export function SuggestionOverlay({ editor, resolveHomeTab }: { editor: Editor; 
       style={{ position: 'fixed', top: mode.y, left: mode.x, zIndex: 50 }}
     >
       {mode.matches.map((m, i) => {
-        const key =
-          mode.kind === 'tab'
-            ? (m as TabMatch).tabId
-            : mode.kind === 'mention'
-              ? (m as Member).id
-              : mode.kind === 'command'
-                ? (m as CommandItem).key
-                : (m as TaskMatch).id;
+        const key = mode.kind === 'mention' ? (m as Member).id : (m as CommandItem).key;
         const active = i === highlight;
         return (
           <li
@@ -358,25 +269,14 @@ export function SuggestionOverlay({ editor, resolveHomeTab }: { editor: Editor; 
               setMode(null);
             }}
           >
-            {mode.kind === 'tab' ? (
-              <>
-                <span className="today-suggest-dot" style={{ background: (m as TabMatch).projectColor }} />
-                <span className="today-suggest-name">{(m as TabMatch).name}</span>
-                <span className="today-suggest-sub">{(m as TabMatch).projectName}</span>
-              </>
-            ) : mode.kind === 'mention' ? (
+            {mode.kind === 'mention' ? (
               <>
                 <span className="today-suggest-avatar">{(m as Member).name.charAt(0).toUpperCase()}</span>
                 <span className="today-suggest-name">{(m as Member).name}</span>
                 <span className="today-suggest-sub">{(m as Member).email}</span>
               </>
-            ) : mode.kind === 'command' ? (
-              <span className="today-suggest-name">{(m as CommandItem).label}</span>
             ) : (
-              <>
-                <span className={`today-suggest-dot ${(m as TaskMatch).done ? 'done' : ''}`} />
-                <span className="today-suggest-name">{(m as TaskMatch).text || <em>(empty)</em>}</span>
-              </>
+              <span className="today-suggest-name">{(m as CommandItem).label}</span>
             )}
           </li>
         );
