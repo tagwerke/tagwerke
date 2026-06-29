@@ -66,6 +66,37 @@ export interface Snapshot {
   text: string;
 }
 
+/**
+ * Optional per-block projection filter. A block is already scoped to one tab, so
+ * `projectIds`/`owners` from the full {@link Filter} are moot here — only these facets
+ * narrow the live task list a block shows.
+ */
+export interface BlockFilter {
+  priorities?: (1 | 2 | 3)[];
+  statuses?: TaskStatus[];
+  hasDate?: boolean;
+  dueSoon?: boolean;
+  query?: string;
+}
+
+/**
+ * A Planner time block. OWNED by `userId` (who scheduled it), REFERENCES a tab/board it
+ * allocates time to — a live projection of that board's tasks, never a copy. Visible to
+ * every member of `tabId`; only the owner edits it.
+ */
+export interface TimeBlock {
+  id: ID;
+  userId: ID;
+  tabId: ID;
+  date: string; // 'YYYY-MM-DD'
+  start?: string | null; // 'HH:MM'
+  end?: string | null;
+  label?: string | null;
+  filter?: BlockFilter | null;
+  assigneeId?: ID | null;
+  position: number;
+}
+
 export interface RootState {
   projects: Record<ID, Project>;
   tabs: Record<ID, Tab>;

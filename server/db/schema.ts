@@ -182,6 +182,37 @@ export const eventAttendance = pgTable(
   (t) => [primaryKey({ columns: [t.eventId, t.occurrenceDate, t.userId] })],
 );
 
+// Personal time-blocking layer (the Planner). A block is OWNED by `user_id` (who
+// scheduled it) and REFERENCES a tab/board it allocates time to — a LIVE projection of
+// that board's tasks, never a frozen copy (hence no block↔task join). Visible to every
+// member of `tab_id` (team "who's-on-what-today"); writable only by the owner. `filter`
+// is an optional saved Filter (jsonb) narrowing the projected task list; `assignee_id`
+// optionally scopes it to one member.
+export const timeBlocks = pgTable(
+  'time_blocks',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tabId: text('tab_id')
+      .notNull()
+      .references(() => tabs.id, { onDelete: 'cascade' }),
+    date: text('date').notNull(), // 'YYYY-MM-DD' — the day the block sits on
+    start: text('start'), // 'HH:MM' (nullable = all-day / unscheduled)
+    end: text('end'),
+    label: text('label'),
+    filter: jsonb('filter'), // optional saved Filter projection
+    assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
+    position: integer('position').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('time_blocks_user_date_idx').on(t.userId, t.date),
+    index('time_blocks_tab_idx').on(t.tabId),
+  ],
+);
+
 export const todayBlocks = pgTable(
   'today_blocks',
   {

@@ -3,7 +3,7 @@
 // through a single serialized queue so optimistic UI updates persist in order; on
 // failure the registered error handler re-pulls authoritative state.
 
-import type { ID, TaskStatus } from '../types';
+import type { ID, TaskStatus, TimeBlock } from '../types';
 
 async function req<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, {
@@ -124,6 +124,20 @@ export const api = {
         { method: 'POST', body: JSON.stringify(b) },
       ),
   },
+  timeBlocks: {
+    // Day/week read: own + teammates' blocks on shared boards, within [from, to].
+    list: (from: string, to: string) =>
+      req<{ blocks: TimeBlockOut[]; roster: { userId: ID; email: string }[] }>(
+        `/api/time-blocks?from=${from}&to=${to}`,
+      ),
+    create: (b: TimeBlock) => req('/api/time-blocks', { method: 'POST', body: JSON.stringify(b) }),
+    update: (
+      id: ID,
+      patch: Partial<Omit<TimeBlock, 'id' | 'userId'>>,
+    ) => req(`/api/time-blocks/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+    remove: (id: ID) => req(`/api/time-blocks/${id}`, { method: 'DELETE' }),
+    reorder: (order: ID[]) => req('/api/time-blocks/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
+  },
   members: {
     list: (tabId: ID) => req<{ members: BoardMember[] }>(`/api/tabs/${tabId}/members`),
     add: (tabId: ID, email: string, role: BoardRole) =>
@@ -158,6 +172,20 @@ export interface BoardMember {
   userId: ID;
   email: string;
   role: BoardRole;
+}
+
+/** A time block as returned by the day/week read (nullable facets straight from the row). */
+export interface TimeBlockOut {
+  id: ID;
+  userId: ID;
+  tabId: ID;
+  date: string;
+  start: string | null;
+  end: string | null;
+  label: string | null;
+  filter: unknown | null;
+  assigneeId: ID | null;
+  position: number;
 }
 
 export type AttendanceStatus = 'accepted' | 'declined' | 'tentative' | 'needs-action';
