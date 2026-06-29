@@ -27,6 +27,12 @@ export const TaskItem = Node.create<TaskItemOptions>({
     return {
       id: {
         default: null,
+        // Pressing Enter runs splitListItem, which by default clones every attr onto the
+        // new line. Cloning `id` makes two lines share one task, and the de-dup pass then
+        // re-IDs the wrong twin — so metadata (stored against the id) jumps to the new
+        // empty line. keepOnSplit:false drops the id from the new line; it gets a fresh
+        // one on commit, and the original keeps its id + metadata.
+        keepOnSplit: false,
         parseHTML: (el) => (el as HTMLElement).getAttribute('data-id'),
         renderHTML: (attrs) => (attrs.id ? { 'data-id': attrs.id } : {}),
       },
