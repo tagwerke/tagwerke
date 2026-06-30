@@ -15,7 +15,7 @@ import {
 } from './session.ts';
 import { seedUser } from '../lib/seed.ts';
 import { recordAudit } from '../lib/audit.ts';
-import { sendEmail, appUrl } from '../lib/email.ts';
+import { sendEmail, appUrl, passwordResetEmail } from '../lib/email.ts';
 import { requireAuth } from './guard.ts';
 import { newSecret, otpauthURL, verifyTotp, newBackupCodes, hashCodes, consumeBackupCode } from '../lib/totp.ts';
 import QRCode from 'qrcode';
@@ -212,11 +212,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       await db.insert(schema.passwordResetTokens).values({ token, userId: user.id, expiresAt: new Date(Date.now() + RESET_TTL_MS) });
       const link = `${appUrl()}/reset?token=${token}`;
       try {
-        await sendEmail({
-          to: user.email,
-          subject: 'Reset your password',
-          text: `Reset your password using the link below (valid for 1 hour):\n\n${link}\n\nIf you didn't request this, you can ignore this email.`,
-        });
+        await sendEmail({ to: user.email, ...passwordResetEmail(link) });
       } catch (err) {
         req.log.error({ err }, 'password reset email failed to send');
       }
