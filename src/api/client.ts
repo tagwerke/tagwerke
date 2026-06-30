@@ -146,6 +146,13 @@ export const api = {
     rsvp: (eventId: ID, occurrenceDate: string, status: AttendanceStatus) =>
       req(`/api/events/${eventId}/attendance`, { method: 'PUT', body: JSON.stringify({ occurrenceDate, status }) }),
   },
+  activity: {
+    // Board presence: who has seen/edited the board and when (read → live).
+    get: (tabId: ID) => req<{ activity: BoardActivityRow[] }>(`/api/tabs/${tabId}/activity`),
+    // Beacon: mark myself present on the board. Best-effort — swallow errors so a failed
+    // ping never surfaces to the user.
+    seen: (tabId: ID) => req(`/api/tabs/${tabId}/seen`, { method: 'POST' }).catch(() => undefined),
+  },
   admin: {
     users: () => req<{ users: AdminUser[] }>('/api/admin/users'),
     invites: () => req<{ invites: AdminInvite[] }>('/api/admin/invites'),
@@ -156,6 +163,13 @@ export const api = {
       req(`/api/admin/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
   },
 };
+
+export interface BoardActivityRow {
+  userId: ID;
+  email: string;
+  lastSeenAt: string | null;
+  lastEditedAt: string | null;
+}
 
 export type BoardRole = 'viewer' | 'editor' | 'admin';
 export interface BoardMember {

@@ -11,6 +11,7 @@ import { desc, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
 import { requireAdmin } from '../auth/guard.ts';
+import { recordAudit } from '../lib/audit.ts';
 
 const inviteBody = z.object({
   maxUses: z.number().int().min(1).max(1000).default(1),
@@ -67,7 +68,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!b.success) return reply.code(400).send({ error: 'invalid role' });
     if (id === req.user!.id && b.data.role !== 'admin')
       return reply.code(409).send({ error: 'cannot demote yourself' });
+
+    const beforeRows = await db.select({ role: schema.users.role }).from(schema.users).where(eq(schema.users.id, id)).limit(1);
     await db.update(schema.users).set({ role: b.data.role }).where(eq(schema.users.id, id));
+
+    req.auditHandled = true;
+    recordAudit({
+      actorId: req.user!.id,
+      action: 'platform_role_change',
+      targetType: 'user',
+      targetId: id,
+      payload: { from: beforeRows[0]?.role ?? null, to: b.data.role },
+      status: 200,
+    });
     return reply.send({ ok: true });
   });
 }

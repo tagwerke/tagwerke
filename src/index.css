@@ -1700,3 +1700,18 @@ input, select, textarea { font: inherit; color: inherit; }
   .planner-grid.mode-week > .planner-day { scroll-snap-align: start; }
   .planner-grid.mode-day { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── board activity strip ("seen by / edited by + time") ──────────────── */
+.board-activity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 7px 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+.board-activity .ba-chip { display: inline-flex; align-items: baseline; gap: 5px; }
+.board-activity .ba-name { color: var(--ink-soft); font-weight: 600; }
+.board-activity .ba-when { color: var(--ink-mute); }

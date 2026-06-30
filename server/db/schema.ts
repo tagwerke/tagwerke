@@ -19,6 +19,17 @@ import {
   index,
 } from 'drizzle-orm/pg-core';
 
+// Singleton workspace/org record — ONE row per self-hosted instance: the org IS the
+// deployment (if you have an account, you're in the org). Holds the workspace name and
+// a `config` blob that is the future home for SSO/SCIM settings. Seeded on boot with a
+// fixed id. See AUTH_IMPLEMENTATION_PLAN.md (Slice 1).
+export const org = pgTable('org', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  config: jsonb('config'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const users = pgTable('users', {
   id: text('id').primaryKey(),
   email: text('email').notNull().unique(),
@@ -214,3 +225,50 @@ export const timeBlocks = pgTable(
 
 // (Retired) The Today aggregation tab's blocks/snapshots were dropped in migration
 // 0006 when the Planner (time_blocks) replaced them.
+
+// Per-member board presence — ONE row per (board, member). Powers the "seen by / edited
+// by + time" activity strip next to a board. `lastSeenAt` is bumped by a lightweight
+// client beacon when a member opens the board; `lastEditedAt` is bumped (fire-and-forget)
+// whenever a member makes a successful write to it. NOT the audit log: this is a compact,
+// upsert-in-place presence layer, not an append-only trail. See AUTH_IMPLEMENTATION_PLAN.md.
+export const boardActivity = pgTable(
+  'board_activity',
+  {
+    tabId: text('tab_id')
+      .notNull()
+      .references(() => tabs.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    lastEditedAt: timestamp('last_edited_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tabId, t.userId] }),
+    index('board_activity_tab_idx').on(t.tabId),
+  ],
+);
+
+// Append-only audit trail. `actorId` is intentionally NOT a foreign key: erasing a user
+// must PSEUDONYMIZE (not cascade-delete) their trail, and unauthenticated attempts log a
+// null actor. Routine content edits write a COARSE row (payload null, high volume from the
+// persist path); security/structural events write FULL (redacted) detail. Only the
+// retention prune deletes rows. See AUTH_IMPLEMENTATION_PLAN.md (Slice 2).
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: text('id').primaryKey(),
+    actorId: text('actor_id'), // NO fk — see note above
+    action: text('action').notNull(),
+    targetType: text('target_type'),
+    targetId: text('target_id'),
+    method: text('method'),
+    payload: jsonb('payload'), // null for coarse rows
+    status: integer('status'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('audit_log_created_idx').on(t.createdAt),
+    index('audit_log_target_idx').on(t.targetType, t.targetId),
+  ],
+);

@@ -10,6 +10,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
+import { recordAudit } from '../lib/audit.ts';
 
 const roleEnum = z.enum(['viewer', 'editor', 'admin']);
 const addBody = z.object({ email: z.string().email().max(320), role: roleEnum.default('viewer') });
@@ -93,20 +94,32 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
       const b = patchBody.safeParse(req.body);
       if (!b.success) return reply.code(400).send({ error: 'invalid request' });
 
-      if (b.data.role !== 'admin' && (await adminCount(id)) <= 1) {
-        const isTargetAdmin = await db
-          .select({ role: schema.boardMembers.role })
-          .from(schema.boardMembers)
-          .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId)))
-          .limit(1);
-        if (isTargetAdmin[0]?.role === 'admin')
-          return reply.code(409).send({ error: 'cannot demote the last admin' });
+      // Prior role: reused by the last-admin guard and the audit row below.
+      const beforeRows = await db
+        .select({ role: schema.boardMembers.role })
+        .from(schema.boardMembers)
+        .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId)))
+        .limit(1);
+      const fromRole = beforeRows[0]?.role ?? null;
+
+      if (b.data.role !== 'admin' && fromRole === 'admin' && (await adminCount(id)) <= 1) {
+        return reply.code(409).send({ error: 'cannot demote the last admin' });
       }
 
       await db
         .update(schema.boardMembers)
         .set({ role: b.data.role })
         .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId)));
+
+      req.auditHandled = true;
+      recordAudit({
+        actorId: req.user!.id,
+        action: 'board_role_change',
+        targetType: 'board_member',
+        targetId: userId,
+        payload: { tabId: id, from: fromRole, to: b.data.role },
+        status: 200,
+      });
       return reply.send({ ok: true });
     },
   );

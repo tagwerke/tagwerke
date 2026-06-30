@@ -11,6 +11,15 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 
+declare module 'fastify' {
+  interface FastifyRequest {
+    // The board id resolved during the permission check, stashed so downstream
+    // (the audit hook, board-activity) can scope a write to its board for free —
+    // no second lookup. Set by requireBoardRole.
+    boardScope?: string;
+  }
+}
+
 export type BoardRole = 'viewer' | 'editor' | 'admin';
 
 const RANK: Record<BoardRole, number> = { viewer: 1, editor: 2, admin: 3 };
@@ -58,6 +67,7 @@ export function requireBoardRole(min: BoardRole, getTabId: TabIdResolver) {
       reply.code(400).send({ error: 'missing board reference' });
       return;
     }
+    req.boardScope = tabId; // for the audit hook / board-activity; resolved here anyway
     const role = await boardRole(userId, tabId);
     if (!role) {
       reply.code(404).send({ error: 'not found' });

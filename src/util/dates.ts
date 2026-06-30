@@ -49,6 +49,21 @@ export function formatDateChip(iso: string, now = new Date()): string {
   return sameYear ? `${m} ${d.getDate()}` : `${m} ${d.getDate()} ${d.getFullYear()}`;
 }
 
+/** Compact relative time for presence stamps: "just now", "5m ago", "3h ago", "2d ago". */
+export function timeAgo(iso: string, now = new Date()): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const secs = Math.max(0, Math.floor((now.getTime() - then) / 1000));
+  if (secs < 45) return 'just now';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return formatDateChip(toISO(new Date(then)), now);
+}
+
 export function isDueSoon(iso: string, now = new Date()): boolean {
   const today = new Date(toISO(now) + 'T00:00:00');
   const target = new Date(iso + 'T00:00:00');

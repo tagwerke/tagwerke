@@ -13,6 +13,7 @@ import {
   setSessionCookie,
 } from './session.ts';
 import { seedUser } from '../lib/seed.ts';
+import { recordAudit } from '../lib/audit.ts';
 
 const credentials = z.object({
   email: z.string().email().max(320),
@@ -62,6 +63,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const sessionId = await createSession(id);
     setSessionCookie(reply, sessionId);
+    recordAudit({ actorId: id, action: 'user_signup', targetType: 'user', targetId: id, payload: { email, via: 'invite' }, status: 201 });
     return reply.code(201).send({ user: { id, email, role: 'member' } });
   });
 
@@ -85,10 +87,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const user = rows[0];
 
     // Generic 401 for unknown email (don't leak existence).
-    if (!user) return reply.code(401).send({ error: 'invalid email or password' });
+    if (!user) {
+      recordAudit({ actorId: null, action: 'login_failed', targetType: 'user', payload: { email, reason: 'unknown_email' }, status: 401 });
+      return reply.code(401).send({ error: 'invalid email or password' });
+    }
 
     if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
       const mins = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+      recordAudit({ actorId: null, action: 'login_locked', targetType: 'user', targetId: user.id, payload: { email, reason: 'already_locked' }, status: 429 });
       return reply.code(429).send({ error: `account locked, try again in ${mins} min` });
     }
 
@@ -102,6 +108,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           lockedUntil: locked ? new Date(Date.now() + LOCK_MS) : null,
         })
         .where(eq(schema.users.id, user.id));
+      recordAudit({
+        actorId: null,
+        action: locked ? 'login_locked' : 'login_failed',
+        targetType: 'user',
+        targetId: user.id,
+        payload: { email, reason: 'bad_password' },
+        status: locked ? 429 : 401,
+      });
       return reply.code(locked ? 429 : 401).send({
         error: locked ? 'too many attempts, account locked for 15 min' : 'invalid email or password',
       });
@@ -114,6 +128,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const sessionId = await createSession(user.id);
     setSessionCookie(reply, sessionId);
+    recordAudit({ actorId: user.id, action: 'login_success', targetType: 'user', targetId: user.id, status: 200 });
     return reply.send({ user: { id: user.id, email: user.email, role: user.role === 'admin' ? 'admin' : 'member' } });
   });
 

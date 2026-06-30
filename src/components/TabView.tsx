@@ -4,6 +4,7 @@ import { TabEditor } from '../editor/Editor';
 import { hexToRgba } from '../util/color';
 import { SharePanel } from './SharePanel';
 import { EventsPanel } from './EventsPanel';
+import { BoardActivity } from './BoardActivity';
 
 export function TabView({ tabId }: { tabId: string }) {
   const tab = useStore((s) => s.tabs[tabId]);
@@ -66,6 +67,7 @@ export function TabView({ tabId }: { tabId: string }) {
           </>
         )}
       </header>
+      {tab.type !== 'today' && <BoardActivity tabId={tab.id} />}
       <div className="tab-view-body">
         <TabEditor tabId={tab.id} autoFocus />
       </div>
