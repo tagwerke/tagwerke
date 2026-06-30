@@ -8,6 +8,8 @@ import { db, schema } from '../db/client.ts';
 
 export const SESSION_COOKIE = 'do_session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+// Step-up ("sudo") grant lifetime — admin actions require a re-auth this recent.
+const SUDO_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 function expiry(): Date {
   return new Date(nowMs() + SESSION_TTL_MS);
@@ -31,6 +33,30 @@ export async function destroySession(id: string): Promise<void> {
 /** Destroy ALL of a user's sessions (log out everywhere) — used by password reset. */
 export async function deleteUserSessions(userId: string): Promise<void> {
   await db.delete(schema.sessions).where(eq(schema.sessions.userId, userId));
+}
+
+/** The current session id from the signed cookie, or null. */
+export function sessionIdFromReq(req: FastifyRequest): string | null {
+  const token = req.cookies[SESSION_COOKIE];
+  if (!token) return null;
+  const unsigned = req.unsignCookie(token);
+  return unsigned.valid && unsigned.value ? unsigned.value : null;
+}
+
+/** Grant a fresh step-up ("sudo") on the current session. */
+export async function grantSudo(req: FastifyRequest): Promise<void> {
+  const id = sessionIdFromReq(req);
+  if (!id) return;
+  await db.update(schema.sessions).set({ sudoAt: new Date() }).where(eq(schema.sessions.id, id));
+}
+
+/** True when the current session has a step-up grant within the TTL. */
+export async function sudoActive(req: FastifyRequest): Promise<boolean> {
+  const id = sessionIdFromReq(req);
+  if (!id) return false;
+  const rows = await db.select({ sudoAt: schema.sessions.sudoAt }).from(schema.sessions).where(eq(schema.sessions.id, id)).limit(1);
+  const at = rows[0]?.sudoAt;
+  return !!at && nowMs() - at.getTime() < SUDO_TTL_MS;
 }
 
 export interface SessionUser {

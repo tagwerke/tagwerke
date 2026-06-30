@@ -5,7 +5,6 @@ import type { Panel } from '../App';
 // Overflow sheet for the mobile bottom nav: secondary actions that don't earn a
 // permanent tab slot. Slides up from the bottom (styled as a sheet on phones).
 export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (panel: Panel) => void }) {
-  const isAdmin = useSession((s) => s.user?.role === 'admin');
   const needs2fa = useSession((s) => !!s.user && !s.user.totpEnabled);
   const logout = useSession((s) => s.logout);
   const resetFilter = useStore((s) => s.resetFilter);
@@ -30,12 +29,6 @@ export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (p
           <button className="sheet-row" onClick={() => { resetFilter(); onClose(); }}>
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M4 4l8 8M12 4L4 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
             <span>clear filters</span>
-          </button>
-        )}
-        {isAdmin && (
-          <button className="sheet-row" onClick={() => onOpen('admin')}>
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8 2l5 2v3.5c0 3-2.1 5.3-5 6.5-2.9-1.2-5-3.5-5-6.5V4l5-2z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
-            <span>admin</span>
           </button>
         )}
         <button className="sheet-row" onClick={() => onOpen('security')}>

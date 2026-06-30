@@ -33,7 +33,12 @@ export const org = pgTable('org', {
 export const users = pgTable('users', {
   id: text('id').primaryKey(),
   email: text('email').notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
+  // Nullable: SSO-provisioned (OIDC) users have no password. Password login is rejected
+  // when this is null. See AUTH_IMPLEMENTATION_PLAN.md (Slice 6 / SSO).
+  passwordHash: text('password_hash'),
+  // OIDC subject (`sub` claim) — the stable identity for a returning SSO user (email can
+  // change). Set on first SSO login (JIT or account-link).
+  oidcSubject: text('oidc_subject'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   // Brute-force protection: failed login counter + temporary lock.
   failedAttempts: integer('failed_attempts').notNull().default(0),
@@ -71,6 +76,9 @@ export const sessions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    // Step-up ("sudo") grant: set when an admin re-authenticates; admin actions require it
+    // to be recent (short TTL). Per-session. See AUTH_IMPLEMENTATION_PLAN.md (admin page).
+    sudoAt: timestamp('sudo_at', { withTimezone: true }),
   },
   (t) => [index('sessions_user_idx').on(t.userId)],
 );

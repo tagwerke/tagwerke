@@ -8,6 +8,7 @@ import fastifyStatic from '@fastify/static';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { db, pool, schema } from './db/client.ts';
 import { authRoutes } from './auth/routes.ts';
+import { oidcRoutes } from './auth/oidc.ts';
 import { stateRoutes } from './routes/state.ts';
 import { projectRoutes } from './routes/projects.ts';
 import { tabRoutes } from './routes/tabs.ts';
@@ -16,6 +17,8 @@ import { timeBlockRoutes } from './routes/timeBlocks.ts';
 import { memberRoutes } from './routes/members.ts';
 import { eventRoutes } from './routes/events.ts';
 import { adminRoutes } from './routes/admin.ts';
+import { auditRoutes } from './routes/audit.ts';
+import { sudoRoutes } from './routes/sudo.ts';
 import { orgRoutes, ORG_ID } from './routes/org.ts';
 import { activityRoutes } from './routes/activity.ts';
 import { registerAuditHook } from './lib/audit.ts';
@@ -70,6 +73,7 @@ app.get('/health', async (_req, reply) => {
 });
 
 await app.register(authRoutes);
+await app.register(oidcRoutes);
 await app.register(stateRoutes);
 await app.register(projectRoutes);
 await app.register(tabRoutes);
@@ -77,7 +81,9 @@ await app.register(taskRoutes);
 await app.register(timeBlockRoutes);
 await app.register(memberRoutes);
 await app.register(eventRoutes);
+await app.register(sudoRoutes);
 await app.register(adminRoutes);
+await app.register(auditRoutes);
 await app.register(orgRoutes);
 await app.register(activityRoutes);
 

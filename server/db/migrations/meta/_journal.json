@@ -92,6 +92,20 @@
       "when": 1782797884812,
       "tag": "0012_volatile_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1782837562554,
+      "tag": "0013_silent_kitty_pryde",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1782840032921,
+      "tag": "0014_soft_mephisto",
+      "breakpoints": true
     }
   ]
 }

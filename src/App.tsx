@@ -11,15 +11,17 @@ import { PlannerView } from './components/planner/PlannerView';
 import { NewTabDialog } from './components/NewTabDialog';
 import { FilterPanel } from './components/FilterPanel';
 import { SearchPalette } from './components/SearchPalette';
-import { AdminPanel } from './components/AdminPanel';
+import { AdminPage } from './components/AdminPage';
 import { SecurityPanel } from './components/SecurityPanel';
 import { MoreSheet } from './components/MoreSheet';
+import { usePath } from './util/router';
 
-export type Panel = 'new' | 'filter' | 'search' | 'admin' | 'security' | 'more';
+export type Panel = 'new' | 'filter' | 'search' | 'security' | 'more';
 
 export default function App() {
   const status = useSession((s) => s.status);
   const init = useSession((s) => s.init);
+  const path = usePath();
 
   useEffect(() => {
     void init();
@@ -30,6 +32,10 @@ export default function App() {
   }
   if (status === 'unauthenticated') {
     return <AuthScreen />;
+  }
+  // /admin is its own page (no link to it — type the URL). It self-bounces non-admins.
+  if (path === '/admin') {
+    return <AdminPage />;
   }
   return <Workspace />;
 }
@@ -77,7 +83,6 @@ function Workspace() {
       {panel === 'new' && <NewTabDialog onClose={closePanel} />}
       {panel === 'filter' && <FilterPanel onClose={closePanel} />}
       {panel === 'search' && <SearchPalette onClose={closePanel} />}
-      {panel === 'admin' && <AdminPanel onClose={closePanel} />}
       {panel === 'security' && <SecurityPanel onClose={closePanel} />}
       {panel === 'more' && <MoreSheet onClose={closePanel} onOpen={setPanel} />}
     </div>

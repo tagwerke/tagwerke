@@ -4,7 +4,6 @@ import { OfflinePill } from './OfflinePill';
 import type { Panel } from '../App';
 
 export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
-  const isAdmin = useSession((s) => s.user?.role === 'admin');
   const needs2fa = useSession((s) => !!s.user && !s.user.totpEnabled);
   const activeTabId = useStore((s) => s.activeTabId);
   const setActiveTab = useStore((s) => s.setActiveTab);
@@ -45,11 +44,6 @@ export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
         </button>
         {filterCount > 0 && (
           <button className="btn ghost tiny" onClick={resetFilter} title="Clear filters">×</button>
-        )}
-        {isAdmin && (
-          <button className="btn ghost" onClick={() => onOpen('admin')} title="Admin dashboard">
-            admin
-          </button>
         )}
         <button className="btn ghost" onClick={() => onOpen('security')} title={needs2fa ? 'Security — two-factor not set up' : 'Security & two-factor'}>
           security

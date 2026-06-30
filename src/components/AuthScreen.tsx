@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from '../session/useSession';
-import { ApiError, auth as authApi } from '../api/client';
+import { ApiError, auth as authApi, type OidcPublic } from '../api/client';
 
 type Mode = 'login' | 'signup' | 'forgot' | 'reset';
 
@@ -8,6 +8,22 @@ type Mode = 'login' | 'signup' | 'forgot' | 'reset';
 function initialResetToken(): string | null {
   if (typeof window === 'undefined') return null;
   return new URLSearchParams(window.location.search).get('token');
+}
+
+// The OIDC callback redirects back with ?sso_error=<code> on failure.
+function ssoErrorMessage(code: string): string {
+  switch (code) {
+    case 'domain': return 'Your email domain isn’t allowed to sign in here.';
+    case 'deactivated': return 'This account has been deactivated.';
+    case 'disabled': return 'SSO is not enabled.';
+    case 'no_email': return 'Your identity provider didn’t share a verified email.';
+    default: return 'SSO sign-in failed. Please try again.';
+  }
+}
+function initialSsoError(): string | null {
+  if (typeof window === 'undefined') return null;
+  const code = new URLSearchParams(window.location.search).get('sso_error');
+  return code ? ssoErrorMessage(code) : null;
 }
 
 function messageFor(err: unknown): string {
@@ -38,10 +54,20 @@ export function AuthScreen() {
   const [inviteCode, setInviteCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialSsoError());
   const [notice, setNotice] = useState<string | null>(null);
   const [totpRequired, setTotpRequired] = useState(false);
   const [totp, setTotp] = useState('');
+  const [sso, setSso] = useState<OidcPublic | null>(null);
+
+  useEffect(() => {
+    // Discover whether SSO is offered (drives the button + ssoOnly form-hiding).
+    authApi.oidcPublic().then(setSso).catch(() => {});
+    // Strip a one-shot ?sso_error from the URL (the message is already in state).
+    if (new URLSearchParams(window.location.search).get('sso_error')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   const goto = (m: Mode) => {
     setMode(m);
@@ -93,8 +119,10 @@ export function AuthScreen() {
     : mode === 'signup' ? 'Create your account'
     : mode === 'forgot' ? 'Reset your password'
     : 'Choose a new password';
-  const showEmail = mode === 'login' || mode === 'signup' || mode === 'forgot';
-  const showPasswordField = mode === 'login' || mode === 'signup' || mode === 'reset';
+  // When the org enforces SSO-only, the login screen shows just the SSO button.
+  const ssoOnlyLogin = mode === 'login' && !!sso?.ssoOnly;
+  const showEmail = (mode === 'login' || mode === 'signup' || mode === 'forgot') && !ssoOnlyLogin;
+  const showPasswordField = (mode === 'login' || mode === 'signup' || mode === 'reset') && !ssoOnlyLogin;
   const submitLabel =
     mode === 'login' ? 'Sign in'
     : mode === 'signup' ? 'Sign up'
@@ -184,31 +212,48 @@ export function AuthScreen() {
         {notice && <div className="auth-notice">{notice}</div>}
         {error && <div className="auth-error">{error}</div>}
 
-        <button className="btn primary auth-submit" type="submit" disabled={busy}>
-          {busy ? '…' : submitLabel}
-        </button>
+        {!ssoOnlyLogin && (
+          <button className="btn primary auth-submit" type="submit" disabled={busy}>
+            {busy ? '…' : submitLabel}
+          </button>
+        )}
 
-        {mode === 'login' && (
+        {mode === 'login' && sso?.enabled && (
+          <>
+            {!ssoOnlyLogin && <div className="auth-divider"><span>or</span></div>}
+            <button
+              type="button"
+              className="btn auth-sso"
+              onClick={() => { window.location.href = '/api/auth/oidc/start'; }}
+            >
+              Sign in with {sso.buttonLabel}
+            </button>
+          </>
+        )}
+
+        {mode === 'login' && !ssoOnlyLogin && (
           <button type="button" className="auth-toggle" onClick={() => goto('forgot')}>
             Forgot your password?
           </button>
         )}
 
-        <button
-          type="button"
-          className="auth-toggle"
-          onClick={() => {
-            if (mode === 'login') goto('signup');
-            else if (mode === 'signup') goto('login');
-            else goto('login'); // forgot / reset → back to sign in
-          }}
-        >
-          {mode === 'login'
-            ? 'Need an account? Sign up'
-            : mode === 'signup'
-              ? 'Have an account? Sign in'
-              : 'Back to sign in'}
-        </button>
+        {!ssoOnlyLogin && (
+          <button
+            type="button"
+            className="auth-toggle"
+            onClick={() => {
+              if (mode === 'login') goto('signup');
+              else if (mode === 'signup') goto('login');
+              else goto('login'); // forgot / reset → back to sign in
+            }}
+          >
+            {mode === 'login'
+              ? 'Need an account? Sign up'
+              : mode === 'signup'
+                ? 'Have an account? Sign in'
+                : 'Back to sign in'}
+          </button>
+        )}
       </form>
     </div>
   );

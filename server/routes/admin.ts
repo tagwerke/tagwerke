@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { desc, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
-import { requireAdmin } from '../auth/guard.ts';
+import { requireAdmin, requireSudo } from '../auth/guard.ts';
 import { recordAudit } from '../lib/audit.ts';
 import { deleteUserSessions } from '../auth/session.ts';
 
@@ -22,6 +22,7 @@ const inviteBody = z.object({
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAdmin);
+  app.addHook('preHandler', requireSudo);
 
   app.get('/api/admin/users', async () => {
     const users = await db

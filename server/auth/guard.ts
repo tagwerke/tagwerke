@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { resolveUser, type SessionUser } from './session.ts';
+import { resolveUser, sudoActive, type SessionUser } from './session.ts';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -17,7 +17,10 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply): Pro
   req.user = user;
 }
 
-/** preHandler that requires a platform admin. Replies 401/403 and stops otherwise. */
+/**
+ * preHandler that requires a platform admin. A non-admin gets **404 (not 403)** so the
+ * admin surface isn't even probeable — mirrors the 404-not-403 board hardening (boards.ts).
+ */
 export async function requireAdmin(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const user = await resolveUser(req);
   if (!user) {
@@ -25,8 +28,20 @@ export async function requireAdmin(req: FastifyRequest, reply: FastifyReply): Pr
     return;
   }
   if (user.role !== 'admin') {
-    reply.code(403).send({ error: 'admin only' });
+    reply.code(404).send({ error: 'not found' });
     return;
   }
   req.user = user;
+}
+
+/**
+ * preHandler that requires a fresh step-up ("sudo") grant. Must run AFTER requireAdmin.
+ * Replies 401 `sudo required` when the grant is missing/expired so the client can prompt
+ * for re-authentication.
+ */
+export async function requireSudo(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!(await sudoActive(req))) {
+    reply.code(401).send({ error: 'sudo required' });
+    return;
+  }
 }

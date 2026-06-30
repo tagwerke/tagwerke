@@ -8,7 +8,7 @@
 import type { FastifyInstance } from 'fastify';
 import { asc, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
-import { requireAuth, requireAdmin } from '../auth/guard.ts';
+import { requireAuth, requireAdmin, requireSudo } from '../auth/guard.ts';
 import { recordAudit } from '../lib/audit.ts';
 
 // Fixed primary key for the singleton org row (seeded on boot in index.ts).
@@ -40,19 +40,43 @@ export async function orgRoutes(app: FastifyInstance): Promise<void> {
   // config here. The storage surface is in place now; the protocol handlers are
   // DEFERRED pending an IdP choice (Google Workspace / Okta / Entra) — see
   // AUTH_IMPLEMENTATION_PLAN.md §Slice 6–7. Admin-only.
-  app.get('/api/org/config', { preHandler: requireAdmin }, async () => {
+  app.get('/api/org/config', { preHandler: [requireAdmin, requireSudo] }, async () => {
     const rows = await db.select({ config: schema.org.config }).from(schema.org).limit(1);
-    return { config: (rows[0]?.config as Record<string, unknown> | null) ?? {} };
+    const cfg = (rows[0]?.config as Record<string, unknown> | null) ?? {};
+    // Never return the OIDC client secret — mask it so the admin form shows "set" without
+    // exposing the value. The PATCH below preserves it when the mask is sent back unchanged.
+    const oidc = cfg.oidc as Record<string, unknown> | undefined;
+    if (oidc && typeof oidc.clientSecret === 'string' && oidc.clientSecret) {
+      cfg.oidc = { ...oidc, clientSecret: SECRET_MASK };
+    }
+    return { config: cfg };
   });
 
   // Shallow-merge a partial config patch (so one setting group can be updated in isolation).
-  app.patch('/api/org/config', { preHandler: requireAdmin }, async (req, reply) => {
+  app.patch('/api/org/config', { preHandler: [requireAdmin, requireSudo] }, async (req, reply) => {
     const patch = (req.body ?? {}) as Record<string, unknown>;
     const rows = await db.select({ config: schema.org.config }).from(schema.org).limit(1);
     const current = (rows[0]?.config as Record<string, unknown> | null) ?? {};
-    await db.update(schema.org).set({ config: { ...current, ...patch } }).where(eq(schema.org.id, ORG_ID));
+    const next: Record<string, unknown> = { ...current, ...patch };
+
+    // `oidc` is a nested group: deep-merge it, and preserve the stored clientSecret when the
+    // incoming value is empty or the mask (the admin saved the form without re-typing it).
+    if (patch.oidc && typeof patch.oidc === 'object') {
+      const cur = (current.oidc as Record<string, unknown>) ?? {};
+      const inc = patch.oidc as Record<string, unknown>;
+      const merged = { ...cur, ...inc };
+      if (inc.clientSecret === undefined || inc.clientSecret === '' || inc.clientSecret === SECRET_MASK) {
+        merged.clientSecret = cur.clientSecret;
+      }
+      next.oidc = merged;
+    }
+
+    await db.update(schema.org).set({ config: next }).where(eq(schema.org.id, ORG_ID));
     req.auditHandled = true;
     recordAudit({ actorId: req.user!.id, action: 'org_config_update', targetType: 'org', targetId: ORG_ID, payload: { keys: Object.keys(patch) }, status: 200 });
     return reply.send({ ok: true });
   });
 }
+
+// Sentinel returned in place of a stored client secret; treated as "unchanged" on save.
+const SECRET_MASK = '••••••••';

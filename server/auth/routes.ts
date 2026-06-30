@@ -17,6 +17,7 @@ import { seedUser } from '../lib/seed.ts';
 import { recordAudit } from '../lib/audit.ts';
 import { sendEmail, appUrl, passwordResetEmail } from '../lib/email.ts';
 import { requireAuth } from './guard.ts';
+import { getOidc } from './oidc.ts';
 import { newSecret, otpauthURL, verifyTotp, newBackupCodes, hashCodes, consumeBackupCode } from '../lib/totp.ts';
 import QRCode from 'qrcode';
 
@@ -48,6 +49,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/auth/signup', authRateLimit, async (req, reply) => {
     const parsed = signupBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid credentials' });
+    if ((await getOidc()).ssoOnly) return reply.code(403).send({ error: 'sign-up is disabled — use SSO' });
     const email = parsed.data.email.toLowerCase();
 
     const existing = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email)).limit(1);
@@ -85,6 +87,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: 'invalid credentials' });
     const email = parsed.data.email.toLowerCase();
 
+    // When the org enforces SSO-only, password login is disabled.
+    if ((await getOidc()).ssoOnly) return reply.code(403).send({ error: 'password login is disabled — use SSO' });
+
     const rows = await db
       .select({
         id: schema.users.id,
@@ -113,6 +118,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const mins = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
       recordAudit({ actorId: null, action: 'login_locked', targetType: 'user', targetId: user.id, payload: { email, reason: 'already_locked' }, status: 429 });
       return reply.code(429).send({ error: `account locked, try again in ${mins} min` });
+    }
+
+    // SSO-provisioned accounts have no password.
+    if (!user.passwordHash) {
+      recordAudit({ actorId: null, action: 'login_failed', targetType: 'user', targetId: user.id, payload: { email, reason: 'no_password' }, status: 401 });
+      return reply.code(401).send({ error: 'this account signs in with SSO' });
     }
 
     if (!(await verifyPassword(user.passwordHash, parsed.data.password))) {

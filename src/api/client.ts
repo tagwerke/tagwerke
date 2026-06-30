@@ -90,7 +90,27 @@ export const auth = {
     req<{ secret: string; otpauthUrl: string; qr: string; backupCodes: string[] }>('/api/auth/totp/enroll', { method: 'POST' }),
   totpVerify: (code: string) => req('/api/auth/totp/verify', { method: 'POST', body: JSON.stringify({ code }) }),
   totpDisable: (code: string) => req('/api/auth/totp/disable', { method: 'POST', body: JSON.stringify({ code }) }),
+  // SSO: tells the login screen whether to show the button (no secrets).
+  oidcPublic: () => req<OidcPublic>('/api/auth/oidc/public'),
 };
+
+export interface OidcPublic {
+  enabled: boolean;
+  buttonLabel: string;
+  ssoOnly: boolean;
+}
+export interface OidcConfig {
+  enabled?: boolean;
+  issuer?: string;
+  clientId?: string;
+  clientSecret?: string;
+  allowedDomain?: string;
+  buttonLabel?: string;
+}
+export interface OrgConfig {
+  oidc?: OidcConfig;
+  ssoOnly?: boolean;
+}
 
 export const getState = () => req('/api/state');
 
@@ -173,8 +193,51 @@ export const api = {
       req(`/api/admin/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
     setActive: (id: ID, active: boolean) =>
       req(`/api/admin/users/${id}/active`, { method: 'PATCH', body: JSON.stringify({ active }) }),
+    orgConfig: () => req<{ config: OrgConfig }>('/api/org/config'),
+    setOrgConfig: (patch: OrgConfig) => req('/api/org/config', { method: 'PATCH', body: JSON.stringify(patch) }),
+    audit: (p: AuditParams = {}) =>
+      req<{ entries: AuditEntry[]; nextCursor: string | null }>(`/api/admin/audit?${auditQuery(p)}`),
+    // Step-up ("sudo"): status doubles as the admin probe (404 ⇒ not an admin).
+    sudoStatus: () => req<{ active: boolean }>('/api/admin/sudo'),
+    sudo: (creds: { password?: string; totp?: string }) =>
+      req('/api/admin/sudo', { method: 'POST', body: JSON.stringify(creds) }),
   },
 };
+
+export interface AuditParams {
+  limit?: number;
+  cursor?: string;
+  action?: string;
+  actor?: string;
+  from?: string;
+  to?: string;
+  category?: 'all' | 'security';
+}
+export interface AuditEntry {
+  id: ID;
+  actorId: ID | null;
+  actorEmail: string | null;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  method: string | null;
+  status: number | null;
+  createdAt: string;
+  payload: unknown;
+}
+
+function auditQuery(p: AuditParams): string {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(p)) if (v != null && v !== '') qs.set(k, String(v));
+  return qs.toString();
+}
+
+/** URL for a filtered audit export download (browser GETs it directly with the session cookie). */
+export function auditExportUrl(format: 'csv' | 'ndjson', p: AuditParams = {}): string {
+  const qs = new URLSearchParams({ format });
+  for (const [k, v] of Object.entries(p)) if (v != null && v !== '') qs.set(k, String(v));
+  return `/api/admin/audit/export?${qs.toString()}`;
+}
 
 export interface BoardActivityRow {
   userId: ID;

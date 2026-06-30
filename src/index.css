@@ -1745,3 +1745,53 @@ input, select, textarea { font: inherit; color: inherit; }
 .mobile-nav .mnav-item { position: relative; }
 .mnav-dot { position:absolute; top:5px; left:calc(50% + 7px); width:7px; height:7px; border-radius:50%; background: var(--pop); }
 .security-add { align-self:flex-start; }
+
+/* ── SSO: login button + divider, admin config form ───────────────────── */
+.auth-divider { display:flex; align-items:center; gap:10px; color:var(--ink-mute); font-size:11px; text-transform:uppercase; letter-spacing:1px; margin:4px 0; }
+.auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background:var(--line); }
+.btn.auth-sso { width:100%; justify-content:center; border:1px solid var(--line-strong); color:var(--ink); background:var(--bg-paper); }
+.btn.auth-sso:hover { border-color:var(--ink); }
+.sso-form { display:flex; flex-direction:column; gap:12px; max-width:440px; }
+.sso-row { display:flex; flex-direction:column; gap:4px; }
+.sso-row:not(.sso-check) > span { font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--ink-mute); }
+.sso-row input { border:1px solid var(--line); border-radius:var(--r-sm); background:var(--bg-elev); padding:8px 10px; font-size:14px; outline:none; }
+.sso-row input:focus { border-color:var(--pop); }
+.sso-row input::placeholder { color:var(--ink-mute); }
+.sso-row.sso-check { flex-direction:row; align-items:center; gap:8px; }
+.sso-check > span { font-size:13px; color:var(--ink-soft); }
+.sso-check input[type=checkbox] { width:15px; height:15px; accent-color:var(--pop); }
+.sso-hint { font-size:11px; color:var(--ink-mute); }
+.sso-hint code { font-family: ui-monospace, Menlo, monospace; word-break:break-all; }
+
+/* ── audit-log viewer (admin) ─────────────────────────────────────────── */
+.audit-panel { background: var(--bg-elev); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); width: min(960px, 95vw); max-height: 88vh; display: flex; flex-direction: column; padding: 18px 20px; }
+.audit-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 12px; }
+.audit-filters input, .audit-filters select {
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
+  padding: 6px 8px; font-size: 13px; outline: none;
+}
+.audit-filters input:focus, .audit-filters select:focus { border-color: var(--pop); }
+.audit-filters > input { min-width: 170px; }
+.audit-filters .audit-date { display: flex; align-items: center; gap: 5px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-mute); }
+.audit-table { overflow: auto; border: 1px solid var(--line); border-radius: var(--r-sm); }
+.audit-row { display: grid; grid-template-columns: 92px 180px 1fr 1fr 48px; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 12px; align-items: center; cursor: pointer; }
+.audit-row:last-child { border-bottom: none; }
+.audit-head { position: sticky; top: 0; background: var(--bg-paper); font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .5px; font-size: 10px; cursor: default; }
+.audit-row:not(.audit-head):hover { background: var(--bg-paper); }
+.audit-action { font-family: ui-monospace, Menlo, monospace; color: var(--ink); }
+.audit-target { color: var(--ink-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audit-payload { grid-column: 1 / -1; margin: 6px 0 0; padding: 8px; background: var(--bg); border-radius: var(--r-sm); font-size: 11px; overflow: auto; max-height: 240px; }
+.audit-foot { padding-top: 10px; text-align: center; }
+.audit-end { font-size: 11px; color: var(--ink-mute); }
+
+/* ── /admin page (dedicated, step-up gated) ───────────────────────────── */
+.admin-page { min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; }
+.admin-sudo { max-width: 360px; margin: 14vh auto 0; }
+.admin-page-head { display: flex; align-items: center; gap: 16px; padding: 14px 22px; border-bottom: 1px solid var(--line); background: var(--bg-paper); }
+.admin-page-title { font-size: 15px; }
+.admin-tabs { display: flex; gap: 4px; margin-left: auto; }
+.admin-tabs button { font: inherit; font-size: 13px; padding: 6px 12px; border: 1px solid transparent; border-radius: var(--r-sm); background: none; color: var(--ink-mute); cursor: pointer; }
+.admin-tabs button:hover { color: var(--ink); }
+.admin-tabs button.is-active { color: var(--ink); border-color: var(--line-strong); background: var(--bg-elev); }
+.admin-page-body { flex: 1; overflow: auto; max-width: 960px; width: 100%; margin: 0 auto; padding: 20px 22px 40px; }
+.admin-console { display: flex; flex-direction: column; gap: 22px; }
