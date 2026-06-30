@@ -5,6 +5,7 @@ import type { Panel } from '../App';
 
 export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
   const isAdmin = useSession((s) => s.user?.role === 'admin');
+  const needs2fa = useSession((s) => !!s.user && !s.user.totpEnabled);
   const activeTabId = useStore((s) => s.activeTabId);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const setPlannerOpen = useStore((s) => s.setPlannerOpen);
@@ -50,8 +51,9 @@ export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
             admin
           </button>
         )}
-        <button className="btn ghost" onClick={() => onOpen('security')} title="Security & two-factor">
+        <button className="btn ghost" onClick={() => onOpen('security')} title={needs2fa ? 'Security — two-factor not set up' : 'Security & two-factor'}>
           security
+          {needs2fa && <span className="nav-dot" aria-label="two-factor not set up" />}
         </button>
         <button className="btn ghost" onClick={() => void logout()} title="Sign out">
           sign out

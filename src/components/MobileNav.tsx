@@ -1,4 +1,5 @@
 import { useStore } from '../store';
+import { useSession } from '../session/useSession';
 import type { Panel } from '../App';
 
 // Fixed bottom tab bar — phones only (hidden ≥ 720px via CSS). Primary navigation
@@ -8,6 +9,7 @@ export function MobileNav({ onOpen }: { onOpen: (panel: Panel) => void }) {
   const plannerOpen = useStore((s) => s.plannerOpen);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const setPlannerOpen = useStore((s) => s.setPlannerOpen);
+  const needs2fa = useSession((s) => !!s.user && !s.user.totpEnabled);
 
   const onHome = () => { setPlannerOpen(false); setActiveTab(null); };
   const onPlanner = () => { setActiveTab(null); setPlannerOpen(true); };
@@ -37,6 +39,7 @@ export function MobileNav({ onOpen }: { onOpen: (panel: Panel) => void }) {
       <button className="mnav-item" onClick={() => onOpen('more')} aria-label="More">
         <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden><circle cx="4" cy="10" r="1.6" fill="currentColor"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/><circle cx="16" cy="10" r="1.6" fill="currentColor"/></svg>
         <span>more</span>
+        {needs2fa && <span className="mnav-dot" aria-hidden />}
       </button>
     </nav>
   );

@@ -8,6 +8,7 @@ import { auth } from '../api/client';
 
 interface Enroll {
   qr: string;
+  otpauthUrl: string;
   secret: string;
   backupCodes: string[];
 }
@@ -39,7 +40,7 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
   const startEnroll = () =>
     run(async () => {
       const r = await auth.totpEnroll();
-      setEnroll({ qr: r.qr, secret: r.secret, backupCodes: r.backupCodes });
+      setEnroll({ qr: r.qr, otpauthUrl: r.otpauthUrl, secret: r.secret, backupCodes: r.backupCodes });
     });
 
   const confirmEnroll = () =>
@@ -83,10 +84,13 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
 
           {!enabled && enroll && (
             <div className="security-enroll">
-              <p>Scan this with an authenticator app, then enter a code to confirm.</p>
+              <p>Scan the QR with an authenticator app — or, on this device, add it directly. Then enter a code to confirm.</p>
               <img className="security-qr" src={enroll.qr} alt="TOTP QR code" />
+              {/* On phones the QR is on the same device, so offer a direct deep link. */}
+              <a className="btn ghost security-add" href={enroll.otpauthUrl}>Add to authenticator app</a>
               <p className="security-secret">
-                Or enter this key manually: <code>{enroll.secret}</code>
+                Or enter this key manually: <code>{enroll.secret}</code>{' '}
+                <button type="button" className="link-btn" onClick={() => { void navigator.clipboard?.writeText(enroll.secret); setNotice('Key copied.'); }}>copy</button>
               </p>
               <div className="security-backup">
                 <strong>Backup codes</strong> — save these now, each works once:

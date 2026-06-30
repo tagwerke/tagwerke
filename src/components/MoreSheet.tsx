@@ -6,6 +6,7 @@ import type { Panel } from '../App';
 // permanent tab slot. Slides up from the bottom (styled as a sheet on phones).
 export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (panel: Panel) => void }) {
   const isAdmin = useSession((s) => s.user?.role === 'admin');
+  const needs2fa = useSession((s) => !!s.user && !s.user.totpEnabled);
   const logout = useSession((s) => s.logout);
   const resetFilter = useStore((s) => s.resetFilter);
   const filterCount = useStore((s) => {
@@ -37,6 +38,11 @@ export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (p
             <span>admin</span>
           </button>
         )}
+        <button className="sheet-row" onClick={() => onOpen('security')}>
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8 2l5 2v3.5c0 3-2.1 5.3-5 6.5-2.9-1.2-5-3.5-5-6.5V4l5-2z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M6 8l1.5 1.5L11 6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span>security</span>
+          {needs2fa && <span className="sheet-dot" aria-label="two-factor not set up" />}
+        </button>
         <button className="sheet-row danger" onClick={() => void logout()}>
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M10 2H4v12h6M7 8h7m0 0l-2.5-2.5M14 8l-2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
           <span>sign out</span>

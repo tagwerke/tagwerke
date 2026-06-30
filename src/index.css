@@ -1738,3 +1738,10 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* deactivated user row in the admin panel */
 .share-member.is-deactivated .share-email { color: var(--ink-mute); text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.25); }
+
+/* ── "two-factor not set up" nudge dots (a gentle hint, not an alarm) ──── */
+.nav-dot { display:inline-block; width:6px; height:6px; margin-left:5px; border-radius:50%; background: var(--pop); vertical-align:middle; }
+.sheet-dot { margin-left:auto; width:8px; height:8px; border-radius:50%; background: var(--pop); }
+.mobile-nav .mnav-item { position: relative; }
+.mnav-dot { position:absolute; top:5px; left:calc(50% + 7px); width:7px; height:7px; border-radius:50%; background: var(--pop); }
+.security-add { align-self:flex-start; }
