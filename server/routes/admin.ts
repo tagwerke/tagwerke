@@ -12,6 +12,7 @@ import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
 import { requireAdmin } from '../auth/guard.ts';
 import { recordAudit } from '../lib/audit.ts';
+import { deleteUserSessions } from '../auth/session.ts';
 
 const inviteBody = z.object({
   maxUses: z.number().int().min(1).max(1000).default(1),
@@ -29,10 +30,37 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         email: schema.users.email,
         role: schema.users.role,
         createdAt: schema.users.createdAt,
+        deactivatedAt: schema.users.deactivatedAt,
       })
       .from(schema.users)
       .orderBy(desc(schema.users.createdAt));
     return { users };
+  });
+
+  // Deactivate / reactivate a user (suspend without deleting; the hook SCIM deprovisioning
+  // uses). Deactivating also drops their sessions. Can't deactivate yourself.
+  app.patch('/api/admin/users/:id/active', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const b = z.object({ active: z.boolean() }).safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: 'invalid request' });
+    if (id === req.user!.id && !b.data.active)
+      return reply.code(409).send({ error: 'cannot deactivate yourself' });
+
+    await db
+      .update(schema.users)
+      .set({ deactivatedAt: b.data.active ? null : new Date() })
+      .where(eq(schema.users.id, id));
+    if (!b.data.active) await deleteUserSessions(id);
+
+    req.auditHandled = true;
+    recordAudit({
+      actorId: req.user!.id,
+      action: b.data.active ? 'user_reactivated' : 'user_deactivated',
+      targetType: 'user',
+      targetId: id,
+      status: 200,
+    });
+    return reply.send({ ok: true });
   });
 
   app.get('/api/admin/invites', async () => {

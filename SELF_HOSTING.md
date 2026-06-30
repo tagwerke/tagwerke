@@ -20,6 +20,16 @@ cp .env.example .env
 #    Edit .env and set at least:
 #      SESSION_SECRET      -> a long random string  (e.g. `openssl rand -base64 48`)
 #      POSTGRES_PASSWORD   -> a strong database password
+#    Optional:
+#      ORG_NAME            -> workspace name shown in the app (default "Workspace")
+#      APP_URL             -> public base URL, used in password-reset links
+#    Email (password reset / 2FA) — point at Amazon SES SMTP in an EU region, or any SMTP.
+#    If unset, reset emails are logged to the server console in dev and FAIL in production:
+#      SMTP_HOST           -> e.g. email-smtp.eu-west-1.amazonaws.com
+#      SMTP_PORT           -> 587 (STARTTLS) or 465 (set SMTP_SECURE=true)
+#      SMTP_SECURE         -> "true" for port 465
+#      SMTP_USER/SMTP_PASS -> SES SMTP credentials
+#      MAIL_FROM           -> a verified sender address
 
 # 3. Build and start (app + database)
 docker compose up -d --build

@@ -21,7 +21,10 @@
     "import:state": "tsx server/scripts/import-state.ts",
     "invite": "tsx server/scripts/create-invite.ts",
     "backup": "tsx server/scripts/backup-json.ts",
-    "reset-pw": "tsx server/scripts/reset-password.ts"
+    "reset-pw": "tsx server/scripts/reset-password.ts",
+    "prune-audit": "tsx server/scripts/prune-audit.ts",
+    "erase-user": "tsx server/scripts/erase-user.ts",
+    "export-user": "tsx server/scripts/export-user.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -34,11 +37,16 @@
     "@tiptap/pm": "^3.23.5",
     "@tiptap/react": "^3.23.5",
     "@tiptap/starter-kit": "^3.23.5",
+    "@types/nodemailer": "^8.0.1",
+    "@types/qrcode": "^1.5.6",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.8.5",
     "nanoid": "^5.1.11",
+    "nodemailer": "^9.0.2",
+    "otpauth": "^9.5.1",
     "pg": "^8.21.0",
+    "qrcode": "^1.5.4",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "rrule": "^2.8.1",

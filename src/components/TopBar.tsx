@@ -50,6 +50,9 @@ export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
             admin
           </button>
         )}
+        <button className="btn ghost" onClick={() => onOpen('security')} title="Security & two-factor">
+          security
+        </button>
         <button className="btn ghost" onClick={() => void logout()} title="Sign out">
           sign out
         </button>

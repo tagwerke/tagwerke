@@ -100,20 +100,33 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
           <ul className="share-members">
             {users?.map((u) => {
               const self = u.id === me?.id;
+              const deactivated = !!u.deactivatedAt;
               return (
-                <li key={u.id} className="share-member">
-                  <span className="share-email">{u.email}{self && <em> (you)</em>}</span>
+                <li key={u.id} className={`share-member ${deactivated ? 'is-deactivated' : ''}`}>
+                  <span className="share-email">
+                    {u.email}{self && <em> (you)</em>}{deactivated && <em> · deactivated</em>}
+                  </span>
                   {self ? (
                     <span className="share-role">{u.role}</span>
                   ) : (
-                    <select
-                      value={u.role}
-                      disabled={busy}
-                      onChange={(e) => run(() => api.admin.setRole(u.id, e.target.value as 'admin' | 'member'))}
-                    >
-                      <option value="member">member</option>
-                      <option value="admin">admin</option>
-                    </select>
+                    <>
+                      <select
+                        value={u.role}
+                        disabled={busy || deactivated}
+                        onChange={(e) => run(() => api.admin.setRole(u.id, e.target.value as 'admin' | 'member'))}
+                      >
+                        <option value="member">member</option>
+                        <option value="admin">admin</option>
+                      </select>
+                      <button
+                        className="icon-btn"
+                        disabled={busy}
+                        title={deactivated ? 'reactivate' : 'deactivate'}
+                        onClick={() => run(() => api.admin.setActive(u.id, deactivated))}
+                      >
+                        {deactivated ? '↺' : '⏻'}
+                      </button>
+                    </>
                   )}
                 </li>
               );

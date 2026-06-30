@@ -1715,3 +1715,26 @@ input, select, textarea { font: inherit; color: inherit; }
 .board-activity .ba-chip { display: inline-flex; align-items: baseline; gap: 5px; }
 .board-activity .ba-name { color: var(--ink-soft); font-weight: 600; }
 .board-activity .ba-when { color: var(--ink-mute); }
+
+/* password-reset / success notice on the auth screen */
+.auth-notice {
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+
+/* ── security / two-factor panel ──────────────────────────────────────── */
+.security-body { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
+.security-status { font-size: 14px; color: var(--ink-soft); }
+.security-enroll, .security-disable { display: flex; flex-direction: column; gap: 10px; }
+.security-qr { width: 180px; height: 180px; align-self: center; image-rendering: pixelated; border: 1px solid var(--line); border-radius: var(--r-sm); }
+.security-secret { font-size: 12px; color: var(--ink-mute); }
+.security-secret code, .security-backup code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.security-backup { font-size: 12px; color: var(--ink-soft); background: var(--bg-paper); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; }
+.security-backup ul { margin: 6px 0 0; padding-left: 18px; columns: 2; }
+
+/* deactivated user row in the admin panel */
+.share-member.is-deactivated .share-email { color: var(--ink-mute); text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.25); }

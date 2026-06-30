@@ -71,6 +71,27 @@
       "when": 1782795640649,
       "tag": "0009_clear_malcolm_colcord",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782797292905,
+      "tag": "0010_faithful_argent",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782797514684,
+      "tag": "0011_talented_lionheart",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782797884812,
+      "tag": "0012_volatile_lady_deathstrike",
+      "breakpoints": true
     }
   ]
 }

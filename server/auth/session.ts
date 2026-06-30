@@ -28,10 +28,16 @@ export async function destroySession(id: string): Promise<void> {
   await db.delete(schema.sessions).where(eq(schema.sessions.id, id));
 }
 
+/** Destroy ALL of a user's sessions (log out everywhere) — used by password reset. */
+export async function deleteUserSessions(userId: string): Promise<void> {
+  await db.delete(schema.sessions).where(eq(schema.sessions.userId, userId));
+}
+
 export interface SessionUser {
   id: string;
   email: string;
   role: 'admin' | 'member';
+  totpEnabled: boolean;
 }
 
 /** Resolve the logged-in user from the request cookie, refreshing expiry. Returns null if unauthenticated. */
@@ -49,6 +55,8 @@ export async function resolveUser(req: FastifyRequest): Promise<SessionUser | nu
       userId: schema.users.id,
       email: schema.users.email,
       role: schema.users.role,
+      totpEnabled: schema.users.totpEnabled,
+      deactivatedAt: schema.users.deactivatedAt,
     })
     .from(schema.sessions)
     .innerJoin(schema.users, eq(schema.sessions.userId, schema.users.id))
@@ -61,6 +69,11 @@ export async function resolveUser(req: FastifyRequest): Promise<SessionUser | nu
     await destroySession(sessionId);
     return null;
   }
+  // Deactivated accounts are treated as logged-out and their session is dropped.
+  if (row.deactivatedAt) {
+    await destroySession(sessionId);
+    return null;
+  }
 
   // Sliding expiry refresh.
   await db
@@ -68,7 +81,7 @@ export async function resolveUser(req: FastifyRequest): Promise<SessionUser | nu
     .set({ expiresAt: expiry() })
     .where(eq(schema.sessions.id, sessionId));
 
-  return { id: row.userId, email: row.email, role: row.role === 'admin' ? 'admin' : 'member' };
+  return { id: row.userId, email: row.email, role: row.role === 'admin' ? 'admin' : 'member', totpEnabled: row.totpEnabled };
 }
 
 export function setSessionCookie(reply: FastifyReply, sessionId: string): void {

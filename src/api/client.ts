@@ -71,15 +71,25 @@ export interface SessionUser {
   id: string;
   email: string;
   role: 'admin' | 'member';
+  totpEnabled: boolean;
 }
 
 export const auth = {
   signup: (email: string, password: string, inviteCode: string) =>
     req<{ user: SessionUser }>('/api/auth/signup', { method: 'POST', body: JSON.stringify({ email, password, inviteCode }) }),
-  login: (email: string, password: string) =>
-    req<{ user: SessionUser }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  // Returns `{ user }` on success, or `{ totpRequired: true }` when a 2FA code is needed.
+  login: (email: string, password: string, totp?: string) =>
+    req<{ user?: SessionUser; totpRequired?: boolean }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password, totp }) }),
   logout: () => req('/api/auth/logout', { method: 'POST' }),
   me: () => req<{ user: SessionUser }>('/api/me'),
+  forgot: (email: string) => req('/api/auth/forgot', { method: 'POST', body: JSON.stringify({ email }) }),
+  reset: (token: string, password: string) =>
+    req('/api/auth/reset', { method: 'POST', body: JSON.stringify({ token, password }) }),
+  // MFA / TOTP (authenticated).
+  totpEnroll: () =>
+    req<{ secret: string; otpauthUrl: string; qr: string; backupCodes: string[] }>('/api/auth/totp/enroll', { method: 'POST' }),
+  totpVerify: (code: string) => req('/api/auth/totp/verify', { method: 'POST', body: JSON.stringify({ code }) }),
+  totpDisable: (code: string) => req('/api/auth/totp/disable', { method: 'POST', body: JSON.stringify({ code }) }),
 };
 
 export const getState = () => req('/api/state');
@@ -161,6 +171,8 @@ export const api = {
     revokeInvite: (code: string) => req(`/api/admin/invites/${code}`, { method: 'DELETE' }),
     setRole: (id: ID, role: 'admin' | 'member') =>
       req(`/api/admin/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+    setActive: (id: ID, active: boolean) =>
+      req(`/api/admin/users/${id}/active`, { method: 'PATCH', body: JSON.stringify({ active }) }),
   },
 };
 
@@ -205,6 +217,7 @@ export interface AdminUser {
   email: string;
   role: 'admin' | 'member';
   createdAt: string;
+  deactivatedAt: string | null;
 }
 export interface AdminInvite {
   code: string;

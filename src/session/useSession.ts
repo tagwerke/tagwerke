@@ -66,9 +66,11 @@ interface SessionState {
   user: SessionUser | null;
   error: string | null;
   init(): Promise<void>;
-  login(email: string, password: string): Promise<void>;
+  // Resolves `{ totpRequired: true }` when a second factor is needed (no session yet).
+  login(email: string, password: string, totp?: string): Promise<{ totpRequired?: boolean }>;
   signup(email: string, password: string, inviteCode: string): Promise<void>;
   logout(): Promise<void>;
+  refreshUser(): Promise<void>;
 }
 
 export const useSession = create<SessionState>((set) => ({
@@ -101,11 +103,13 @@ export const useSession = create<SessionState>((set) => ({
     }
   },
 
-  async login(email, password) {
-    const { user } = await auth.login(email, password);
-    saveCachedUser(user);
+  async login(email, password, totp) {
+    const res = await auth.login(email, password, totp);
+    if (!res.user) return { totpRequired: !!res.totpRequired };
+    saveCachedUser(res.user);
     await loadState();
-    set({ user, status: 'ready', error: null });
+    set({ user: res.user, status: 'ready', error: null });
+    return {};
   },
 
   async signup(email, password, inviteCode) {
@@ -124,5 +128,15 @@ export const useSession = create<SessionState>((set) => ({
     clearSnapshot();
     clearOutbox();
     set({ user: null, status: 'unauthenticated', error: null });
+  },
+
+  async refreshUser() {
+    try {
+      const { user } = await auth.me();
+      saveCachedUser(user);
+      set({ user });
+    } catch {
+      /* offline / transient — keep the cached user */
+    }
   },
 }));

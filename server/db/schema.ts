@@ -41,6 +41,15 @@ export const users = pgTable('users', {
   // Platform role. 'admin' may mint signup invites and access the admin dashboard.
   // The extra admin auth layer (Tailscale-style) is infra, not modeled here.
   role: text('role').notNull().default('member'),
+  // MFA (TOTP). `totpSecret` is the base32 shared secret; `totpEnabled` flips on only
+  // after the first code is verified; `backupCodes` is a jsonb array of HASHED one-time
+  // codes (Argon2). See AUTH_IMPLEMENTATION_PLAN.md (Slice 5).
+  totpSecret: text('totp_secret'),
+  totpEnabled: boolean('totp_enabled').notNull().default(false),
+  backupCodes: jsonb('backup_codes'),
+  // Account deactivation (suspend without deleting). A non-null timestamp blocks login and
+  // invalidates sessions. The hook SCIM deprovisioning will set. See AUTH_IMPLEMENTATION_PLAN.md (Slice 7).
+  deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
 });
 
 // Signup invites. A code may allow multiple uses and/or expire. Later this can
@@ -225,6 +234,21 @@ export const timeBlocks = pgTable(
 
 // (Retired) The Today aggregation tab's blocks/snapshots were dropped in migration
 // 0006 when the Planner (time_blocks) replaced them.
+
+// Self-serve password reset tokens. Short-lived, single-use (usedAt set on redemption).
+// Cascade-deleted with the user. See AUTH_IMPLEMENTATION_PLAN.md (Slice 4).
+export const passwordResetTokens = pgTable(
+  'password_reset_tokens',
+  {
+    token: text('token').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+  },
+  (t) => [index('password_reset_user_idx').on(t.userId)],
+);
 
 // Per-member board presence — ONE row per (board, member). Powers the "seen by / edited
 // by + time" activity strip next to a board. `lastSeenAt` is bumped by a lightweight
