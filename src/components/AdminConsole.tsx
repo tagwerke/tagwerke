@@ -118,6 +118,8 @@ export function AdminConsole() {
                       <option value="member">member</option>
                       <option value="admin">admin</option>
                     </select>
+                    <button className="link-btn" disabled={busy} title="Clear this user's 2FA (lost authenticator)" onClick={() => run(() => api.admin.resetTwoFactor(u.id))}>reset 2FA</button>
+                    <button className="link-btn" disabled={busy} title="Remove this user's passkeys (lost devices)" onClick={() => run(() => api.admin.resetPasskeys(u.id))}>reset passkeys</button>
                     <button
                       className="icon-btn"
                       disabled={busy}

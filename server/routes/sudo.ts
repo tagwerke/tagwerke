@@ -6,11 +6,18 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
+import {
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+  type AuthenticationResponseJSON,
+  type AuthenticatorTransportFuture,
+} from '@simplewebauthn/server';
 import { db, schema } from '../db/client.ts';
 import { requireAdmin } from '../auth/guard.ts';
 import { grantSudo, sudoActive } from '../auth/session.ts';
 import { verifyPassword } from '../auth/password.ts';
 import { verifyTotp, consumeBackupCode } from '../lib/totp.ts';
+import { webauthnRp, setWebauthnChallenge, readWebauthnChallenge, clearWebauthnChallenge } from '../auth/webauthn.ts';
 import { recordAudit } from '../lib/audit.ts';
 
 const sudoBody = z.object({ password: z.string().optional(), totp: z.string().optional() });
@@ -64,6 +71,68 @@ export async function sudoRoutes(app: FastifyInstance): Promise<void> {
     }
     await grantSudo(req);
     recordAudit({ actorId: userId, action: 'sudo_granted', targetType: 'user', targetId: userId, status: 200 });
+    return reply.send({ ok: true });
+  });
+
+  // Passkey step-up — the elevation path for admins who sign in via SSO (no password/TOTP).
+  app.post('/api/admin/sudo/passkey/options', async (req, reply) => {
+    const creds = await db
+      .select({ credentialId: schema.webauthnCredentials.credentialId, transports: schema.webauthnCredentials.transports })
+      .from(schema.webauthnCredentials)
+      .where(eq(schema.webauthnCredentials.userId, req.user!.id));
+    if (!creds.length) return reply.code(400).send({ error: 'no passkey registered' });
+    const { rpID } = webauthnRp();
+    const options = await generateAuthenticationOptions({
+      rpID,
+      userVerification: 'preferred',
+      allowCredentials: creds.map((c) => ({ id: c.credentialId, transports: (c.transports as AuthenticatorTransportFuture[] | null) ?? undefined })),
+    });
+    setWebauthnChallenge(reply, options.challenge);
+    return options;
+  });
+
+  app.post('/api/admin/sudo/passkey/verify', async (req, reply) => {
+    const challenge = readWebauthnChallenge(req);
+    clearWebauthnChallenge(reply);
+    if (!challenge) return reply.code(400).send({ error: 'no challenge' });
+    const body = req.body as { response: AuthenticationResponseJSON };
+    const credId = body.response?.id;
+    if (!credId) return reply.code(400).send({ error: 'invalid response' });
+
+    const rows = await db.select().from(schema.webauthnCredentials).where(eq(schema.webauthnCredentials.credentialId, credId)).limit(1);
+    const cred = rows[0];
+    // The passkey must belong to the elevating admin.
+    if (!cred || cred.userId !== req.user!.id) return reply.code(401).send({ error: 'invalid passkey' });
+
+    const { rpID, origin } = webauthnRp();
+    let verification;
+    try {
+      verification = await verifyAuthenticationResponse({
+        response: body.response,
+        expectedChallenge: challenge,
+        expectedOrigin: origin,
+        expectedRPID: rpID,
+        credential: {
+          id: cred.credentialId,
+          publicKey: new Uint8Array(Buffer.from(cred.publicKey, 'base64url')),
+          counter: cred.counter,
+          transports: (cred.transports as AuthenticatorTransportFuture[] | null) ?? undefined,
+        },
+        requireUserVerification: false,
+      });
+    } catch {
+      return reply.code(401).send({ error: 'verification failed' });
+    }
+    if (!verification.verified) return reply.code(401).send({ error: 'not verified' });
+
+    await db
+      .update(schema.webauthnCredentials)
+      .set({ counter: verification.authenticationInfo.newCounter, lastUsedAt: new Date() })
+      .where(eq(schema.webauthnCredentials.id, cred.id));
+
+    req.auditHandled = true;
+    await grantSudo(req);
+    recordAudit({ actorId: req.user!.id, action: 'sudo_granted', targetType: 'user', targetId: req.user!.id, payload: { via: 'passkey' }, status: 200 });
     return reply.send({ ok: true });
   });
 }

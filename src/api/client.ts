@@ -7,6 +7,7 @@
 // collaboration/admin endpoints that need a live response (members, events, admin),
 // stay as direct fetches and simply fail while offline.
 
+import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import type { ID, TaskStatus, TimeBlock } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
@@ -92,12 +93,41 @@ export const auth = {
   totpDisable: (code: string) => req('/api/auth/totp/disable', { method: 'POST', body: JSON.stringify({ code }) }),
   // SSO: tells the login screen whether to show the button (no secrets).
   oidcPublic: () => req<OidcPublic>('/api/auth/oidc/public'),
+  // Passkeys (WebAuthn). The ceremonies wrap @simplewebauthn/browser.
+  passkey: {
+    list: () => req<{ passkeys: PasskeyInfo[] }>('/api/auth/passkey'),
+    rename: (id: ID, nickname: string) => req(`/api/auth/passkey/${id}`, { method: 'PATCH', body: JSON.stringify({ nickname }) }),
+    remove: (id: ID) => req(`/api/auth/passkey/${id}`, { method: 'DELETE' }),
+    register: async (nickname?: string) => {
+      const options = await req<Parameters<typeof startRegistration>[0]['optionsJSON']>('/api/auth/passkey/register/options', { method: 'POST' });
+      const response = await startRegistration({ optionsJSON: options });
+      return req('/api/auth/passkey/register/verify', { method: 'POST', body: JSON.stringify({ response, nickname }) });
+    },
+    login: async () => {
+      const options = await req<Parameters<typeof startAuthentication>[0]['optionsJSON']>('/api/auth/passkey/login/options', { method: 'POST' });
+      const response = await startAuthentication({ optionsJSON: options });
+      return req<{ user: SessionUser }>('/api/auth/passkey/login/verify', { method: 'POST', body: JSON.stringify({ response }) });
+    },
+    // Conditional-UI (autofill) login — resolves when the user picks a passkey from the field.
+    loginConditional: async () => {
+      const options = await req<Parameters<typeof startAuthentication>[0]['optionsJSON']>('/api/auth/passkey/login/options', { method: 'POST' });
+      const response = await startAuthentication({ optionsJSON: options, useBrowserAutofill: true });
+      return req<{ user: SessionUser }>('/api/auth/passkey/login/verify', { method: 'POST', body: JSON.stringify({ response }) });
+    },
+  },
 };
 
 export interface OidcPublic {
   enabled: boolean;
   buttonLabel: string;
-  ssoOnly: boolean;
+  passwordDisabled: boolean;
+}
+export interface PasskeyInfo {
+  id: ID;
+  nickname: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  deviceType: string | null;
 }
 export interface OidcConfig {
   enabled?: boolean;
@@ -201,6 +231,15 @@ export const api = {
     sudoStatus: () => req<{ active: boolean }>('/api/admin/sudo'),
     sudo: (creds: { password?: string; totp?: string }) =>
       req('/api/admin/sudo', { method: 'POST', body: JSON.stringify(creds) }),
+    // Elevate via a passkey (for admins who signed in with SSO — no password/TOTP).
+    sudoPasskey: async () => {
+      const options = await req<Parameters<typeof startAuthentication>[0]['optionsJSON']>('/api/admin/sudo/passkey/options', { method: 'POST' });
+      const response = await startAuthentication({ optionsJSON: options });
+      return req('/api/admin/sudo/passkey/verify', { method: 'POST', body: JSON.stringify({ response }) });
+    },
+    // Recovery: unlock a user who lost their 2FA / all their passkeys.
+    resetTwoFactor: (id: ID) => req(`/api/admin/users/${id}/reset-2fa`, { method: 'POST' }),
+    resetPasskeys: (id: ID) => req(`/api/admin/users/${id}/reset-passkeys`, { method: 'POST' }),
   },
 };
 

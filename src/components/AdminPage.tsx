@@ -3,6 +3,7 @@
 // requires a fresh step-up ("sudo") re-auth — see requireSudo on the server.
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { api, ApiError } from '../api/client';
 import { navigate } from '../util/router';
 import { useSession } from '../session/useSession';
@@ -48,6 +49,19 @@ export function AdminPage() {
     }
   }
 
+  async function elevatePasskey() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.admin.sudoPasskey();
+      setGate('ready');
+    } catch (err) {
+      if (!(err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'AbortError'))) setError('Passkey verification failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (gate === 'checking') return <div className="app app-loading" />;
 
   if (gate === 'need-sudo') {
@@ -68,6 +82,9 @@ export function AdminPage() {
           )}
           {error && <div className="auth-error">{error}</div>}
           <button className="btn primary auth-submit" type="submit" disabled={busy}>{busy ? '…' : 'Continue'}</button>
+          {browserSupportsWebAuthn() && (
+            <button type="button" className="btn auth-sso" disabled={busy} onClick={elevatePasskey}>Use a passkey</button>
+          )}
           <button type="button" className="auth-toggle" onClick={() => navigate('/')}>Back to app</button>
         </form>
       </div>

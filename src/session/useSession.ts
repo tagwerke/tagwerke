@@ -69,6 +69,8 @@ interface SessionState {
   // Resolves `{ totpRequired: true }` when a second factor is needed (no session yet).
   login(email: string, password: string, totp?: string): Promise<{ totpRequired?: boolean }>;
   signup(email: string, password: string, inviteCode: string): Promise<void>;
+  passkeyLogin(): Promise<void>;
+  passkeyConditional(): Promise<void>;
   logout(): Promise<void>;
   refreshUser(): Promise<void>;
 }
@@ -114,6 +116,20 @@ export const useSession = create<SessionState>((set) => ({
 
   async signup(email, password, inviteCode) {
     const { user } = await auth.signup(email, password, inviteCode);
+    saveCachedUser(user);
+    await loadState();
+    set({ user, status: 'ready', error: null });
+  },
+
+  async passkeyLogin() {
+    const { user } = await auth.passkey.login();
+    saveCachedUser(user);
+    await loadState();
+    set({ user, status: 'ready', error: null });
+  },
+
+  async passkeyConditional() {
+    const { user } = await auth.passkey.loginConditional();
     saveCachedUser(user);
     await loadState();
     set({ user, status: 'ready', error: null });

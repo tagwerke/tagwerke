@@ -49,7 +49,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/auth/signup', authRateLimit, async (req, reply) => {
     const parsed = signupBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid credentials' });
-    if ((await getOidc()).ssoOnly) return reply.code(403).send({ error: 'sign-up is disabled — use SSO' });
+    if ((await getOidc()).passwordDisabled) return reply.code(403).send({ error: 'sign-up is disabled — use SSO' });
     const email = parsed.data.email.toLowerCase();
 
     const existing = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email)).limit(1);
@@ -87,8 +87,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: 'invalid credentials' });
     const email = parsed.data.email.toLowerCase();
 
-    // When the org enforces SSO-only, password login is disabled.
-    if ((await getOidc()).ssoOnly) return reply.code(403).send({ error: 'password login is disabled — use SSO' });
+    // When the org has disabled password login, only SSO / passkeys are allowed.
+    if ((await getOidc()).passwordDisabled) return reply.code(403).send({ error: 'password login is disabled — use SSO or a passkey' });
 
     const rows = await db
       .select({

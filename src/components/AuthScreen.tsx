@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
+import { browserSupportsWebAuthn, browserSupportsWebAuthnAutofill } from '@simplewebauthn/browser';
 import { useSession } from '../session/useSession';
 import { ApiError, auth as authApi, type OidcPublic } from '../api/client';
+
+// A user cancelling/dismissing a passkey prompt throws NotAllowedError — treat as a no-op.
+function isPasskeyCancel(err: unknown): boolean {
+  return err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'AbortError');
+}
 
 type Mode = 'login' | 'signup' | 'forgot' | 'reset';
 
@@ -47,6 +53,8 @@ function messageFor(err: unknown): string {
 export function AuthScreen() {
   const login = useSession((s) => s.login);
   const signup = useSession((s) => s.signup);
+  const passkeyLogin = useSession((s) => s.passkeyLogin);
+  const passkeyConditional = useSession((s) => s.passkeyConditional);
   const resetToken = initialResetToken();
   const [mode, setMode] = useState<Mode>(resetToken ? 'reset' : 'login');
   const [email, setEmail] = useState('');
@@ -59,15 +67,41 @@ export function AuthScreen() {
   const [totpRequired, setTotpRequired] = useState(false);
   const [totp, setTotp] = useState('');
   const [sso, setSso] = useState<OidcPublic | null>(null);
+  const [pkBusy, setPkBusy] = useState(false);
+  const pkSupported = browserSupportsWebAuthn();
 
   useEffect(() => {
-    // Discover whether SSO is offered (drives the button + ssoOnly form-hiding).
+    // Discover whether SSO is offered (drives the button + password-form hiding).
     authApi.oidcPublic().then(setSso).catch(() => {});
     // Strip a one-shot ?sso_error from the URL (the message is already in state).
     if (new URLSearchParams(window.location.search).get('sso_error')) {
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
+
+  // Conditional-UI (autofill): if supported, quietly start a passkey ceremony so returning
+  // users get a passkey suggestion in the email field. Resolves on pick; ignore cancels.
+  useEffect(() => {
+    let cancelled = false;
+    browserSupportsWebAuthnAutofill()
+      .then((ok) => {
+        if (ok && !cancelled) passkeyConditional().catch(() => {});
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [passkeyConditional]);
+
+  const doPasskey = async () => {
+    setPkBusy(true);
+    setError(null);
+    try {
+      await passkeyLogin();
+    } catch (err) {
+      if (!isPasskeyCancel(err)) setError('Passkey sign-in failed. Try again.');
+    } finally {
+      setPkBusy(false);
+    }
+  };
 
   const goto = (m: Mode) => {
     setMode(m);
@@ -119,10 +153,10 @@ export function AuthScreen() {
     : mode === 'signup' ? 'Create your account'
     : mode === 'forgot' ? 'Reset your password'
     : 'Choose a new password';
-  // When the org enforces SSO-only, the login screen shows just the SSO button.
-  const ssoOnlyLogin = mode === 'login' && !!sso?.ssoOnly;
-  const showEmail = (mode === 'login' || mode === 'signup' || mode === 'forgot') && !ssoOnlyLogin;
-  const showPasswordField = (mode === 'login' || mode === 'signup' || mode === 'reset') && !ssoOnlyLogin;
+  // When the org has disabled password login, the login screen shows only passkey + SSO.
+  const pwDisabledLogin = mode === 'login' && !!sso?.passwordDisabled;
+  const showEmail = (mode === 'login' || mode === 'signup' || mode === 'forgot') && !pwDisabledLogin;
+  const showPasswordField = (mode === 'login' || mode === 'signup' || mode === 'reset') && !pwDisabledLogin;
   const submitLabel =
     mode === 'login' ? 'Sign in'
     : mode === 'signup' ? 'Sign up'
@@ -140,7 +174,7 @@ export function AuthScreen() {
             <span>email</span>
             <input
               type="email"
-              autoComplete="email"
+              autoComplete="email webauthn"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -212,32 +246,40 @@ export function AuthScreen() {
         {notice && <div className="auth-notice">{notice}</div>}
         {error && <div className="auth-error">{error}</div>}
 
-        {!ssoOnlyLogin && (
+        {!pwDisabledLogin && (
           <button className="btn primary auth-submit" type="submit" disabled={busy}>
             {busy ? '…' : submitLabel}
           </button>
         )}
 
-        {mode === 'login' && sso?.enabled && (
+        {mode === 'login' && (pkSupported || sso?.enabled) && (
           <>
-            {!ssoOnlyLogin && <div className="auth-divider"><span>or</span></div>}
-            <button
-              type="button"
-              className="btn auth-sso"
-              onClick={() => { window.location.href = '/api/auth/oidc/start'; }}
-            >
-              Sign in with {sso.buttonLabel}
-            </button>
+            {!pwDisabledLogin && <div className="auth-divider"><span>or</span></div>}
+            {pkSupported && (
+              <button type="button" className="btn auth-sso auth-passkey" disabled={pkBusy} onClick={doPasskey}>
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden><circle cx="9" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M9 13c-3 0-5 2-5 4v1h7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><circle cx="16.5" cy="12.5" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M16.5 15v4l1.2 1-1.2 1" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
+                {pkBusy ? 'Waiting…' : 'Sign in with a passkey'}
+              </button>
+            )}
+            {sso?.enabled && (
+              <button
+                type="button"
+                className="btn auth-sso"
+                onClick={() => { window.location.href = '/api/auth/oidc/start'; }}
+              >
+                Sign in with {sso.buttonLabel}
+              </button>
+            )}
           </>
         )}
 
-        {mode === 'login' && !ssoOnlyLogin && (
+        {mode === 'login' && !pwDisabledLogin && (
           <button type="button" className="auth-toggle" onClick={() => goto('forgot')}>
             Forgot your password?
           </button>
         )}
 
-        {!ssoOnlyLogin && (
+        {!pwDisabledLogin && (
           <button
             type="button"
             className="auth-toggle"

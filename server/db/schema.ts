@@ -11,6 +11,7 @@ import {
   pgTable,
   text,
   integer,
+  bigint,
   smallint,
   boolean,
   jsonb,
@@ -242,6 +243,30 @@ export const timeBlocks = pgTable(
 
 // (Retired) The Today aggregation tab's blocks/snapshots were dropped in migration
 // 0006 when the Planner (time_blocks) replaced them.
+
+// Passkeys (WebAuthn). One row per registered credential; a user may have several.
+// `publicKey` is the COSE key stored base64url; `counter` is the signature counter (clone
+// detection); `credentialId` is the base64url credential id (unique). Discoverable/resident
+// keys enable usernameless "Sign in with passkey". See AUTH_IMPLEMENTATION_PLAN.md (Slice 8).
+export const webauthnCredentials = pgTable(
+  'webauthn_credentials',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    credentialId: text('credential_id').notNull().unique(),
+    publicKey: text('public_key').notNull(),
+    counter: bigint('counter', { mode: 'number' }).notNull().default(0),
+    transports: jsonb('transports'),
+    deviceType: text('device_type'),
+    backedUp: boolean('backed_up').notNull().default(false),
+    nickname: text('nickname').notNull().default('Passkey'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  },
+  (t) => [index('webauthn_user_idx').on(t.userId)],
+);
 
 // Self-serve password reset tokens. Short-lived, single-use (usedAt set on redemption).
 // Cascade-deleted with the user. See AUTH_IMPLEMENTATION_PLAN.md (Slice 4).

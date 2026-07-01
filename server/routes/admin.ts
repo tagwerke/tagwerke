@@ -89,6 +89,24 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true });
   });
 
+  // Recovery: clear a user's 2FA (lost authenticator + backup codes) or their passkeys
+  // (lost all devices). Sudo-gated (the plugin hooks) + audited.
+  app.post('/api/admin/users/:id/reset-2fa', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    await db.update(schema.users).set({ totpSecret: null, totpEnabled: false, backupCodes: null }).where(eq(schema.users.id, id));
+    req.auditHandled = true;
+    recordAudit({ actorId: req.user!.id, action: 'totp_reset', targetType: 'user', targetId: id, status: 200 });
+    return reply.send({ ok: true });
+  });
+
+  app.post('/api/admin/users/:id/reset-passkeys', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    await db.delete(schema.webauthnCredentials).where(eq(schema.webauthnCredentials.userId, id));
+    req.auditHandled = true;
+    recordAudit({ actorId: req.user!.id, action: 'passkey_reset', targetType: 'user', targetId: id, status: 200 });
+    return reply.send({ ok: true });
+  });
+
   // Promote/demote a user. Cannot demote yourself (avoid locking the platform out of
   // its last admin by accident).
   app.patch('/api/admin/users/:id/role', async (req, reply) => {

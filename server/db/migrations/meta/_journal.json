@@ -106,6 +106,13 @@
       "when": 1782840032921,
       "tag": "0014_soft_mephisto",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1782929357817,
+      "tag": "0015_pink_vanisher",
+      "breakpoints": true
     }
   ]
 }

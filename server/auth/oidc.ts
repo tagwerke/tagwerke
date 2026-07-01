@@ -37,8 +37,12 @@ async function readOrgConfig(): Promise<Record<string, unknown>> {
   return (rows[0]?.config as Record<string, unknown> | null) ?? {};
 }
 
-/** Resolve the effective OIDC settings. `ssoOnly` is forced off unless SSO is fully configured (no lockout). */
-export async function getOidc(): Promise<{ oidc: OidcSettings | null; ssoOnly: boolean }> {
+/**
+ * Resolve the effective OIDC settings. `passwordDisabled` ("disable password login") is
+ * forced off unless SSO is fully configured, so it can never lock everyone out (SSO or a
+ * passkey remains a way in). Reads `passwordDisabled`, falling back to the legacy `ssoOnly`.
+ */
+export async function getOidc(): Promise<{ oidc: OidcSettings | null; passwordDisabled: boolean }> {
   const cfg = await readOrgConfig();
   const o = cfg.oidc as Partial<OidcSettings> | undefined;
   const configured = !!(o && o.enabled && o.issuer && o.clientId && o.clientSecret);
@@ -52,7 +56,8 @@ export async function getOidc(): Promise<{ oidc: OidcSettings | null; ssoOnly: b
         buttonLabel: o!.buttonLabel || 'SSO',
       }
     : null;
-  return { oidc: settings, ssoOnly: !!cfg.ssoOnly && configured };
+  const disabled = cfg.passwordDisabled ?? cfg.ssoOnly; // back-compat with the old key
+  return { oidc: settings, passwordDisabled: !!disabled && configured };
 }
 
 // Cache the discovered IdP configuration; rebuild whenever issuer/client/secret change.
@@ -68,8 +73,8 @@ async function getDiscovered(o: OidcSettings): Promise<oidc.Configuration> {
 export async function oidcRoutes(app: FastifyInstance): Promise<void> {
   // Unauthenticated: tells the login screen whether to show the SSO button. No secrets.
   app.get('/api/auth/oidc/public', async () => {
-    const { oidc: o, ssoOnly } = await getOidc();
-    return { enabled: !!o, buttonLabel: o?.buttonLabel ?? 'SSO', ssoOnly };
+    const { oidc: o, passwordDisabled } = await getOidc();
+    return { enabled: !!o, buttonLabel: o?.buttonLabel ?? 'SSO', passwordDisabled };
   });
 
   // Begin the login: stash state/nonce/PKCE in a signed cookie, redirect to the IdP.

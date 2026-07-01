@@ -2,9 +2,11 @@
 // one-time backup codes (shown ONCE), then requires a code to turn 2FA on. Disabling also
 // requires a current or backup code. See AUTH_IMPLEMENTATION_PLAN.md (Slice 5).
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { useSession } from '../session/useSession';
-import { auth } from '../api/client';
+import { auth, type PasskeyInfo } from '../api/client';
+import { timeAgo } from '../util/dates';
 
 interface Enroll {
   qr: string;
@@ -17,12 +19,49 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
   const user = useSession((s) => s.user);
   const refreshUser = useSession((s) => s.refreshUser);
   const enabled = !!user?.totpEnabled;
+  const pkSupported = browserSupportsWebAuthn();
 
   const [enroll, setEnroll] = useState<Enroll | null>(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [passkeys, setPasskeys] = useState<PasskeyInfo[]>([]);
+  const [pkName, setPkName] = useState('');
+
+  const loadPasskeys = async () => {
+    try {
+      const r = await auth.passkey.list();
+      setPasskeys(r.passkeys);
+    } catch {
+      /* ignore */
+    }
+  };
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadPasskeys();
+  }, []);
+
+  const addPasskey = async () => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await auth.passkey.register(pkName.trim() || undefined);
+      setPkName('');
+      await loadPasskeys();
+      setNotice('Passkey added.');
+    } catch (e) {
+      if (!(e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'AbortError'))) setError('Could not add that passkey.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const removePasskey = (id: string) => run(async () => { await auth.passkey.remove(id); await loadPasskeys(); });
+  const renamePasskey = (id: string, current: string) => {
+    const name = window.prompt('Rename passkey', current);
+    if (name && name.trim()) run(async () => { await auth.passkey.rename(id, name.trim()); await loadPasskeys(); });
+  };
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -117,6 +156,29 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
               <button className="btn ghost" disabled={busy} onClick={disable}>Disable two-factor</button>
             </div>
           )}
+
+          <div className="security-passkeys">
+            <p className="security-status">Passkeys <span className="security-sub">— sign in with Face ID / fingerprint / a security key</span></p>
+            <ul className="passkey-list">
+              {passkeys.map((p) => (
+                <li key={p.id} className="passkey-item">
+                  <span className="passkey-name">{p.nickname}</span>
+                  <span className="passkey-meta">added {timeAgo(p.createdAt)}{p.lastUsedAt ? ` · used ${timeAgo(p.lastUsedAt)}` : ''}</span>
+                  <button className="link-btn" disabled={busy} onClick={() => renamePasskey(p.id, p.nickname)}>rename</button>
+                  <button className="icon-btn" disabled={busy} title="remove passkey" onClick={() => removePasskey(p.id)}>✕</button>
+                </li>
+              ))}
+              {!passkeys.length && <li className="share-empty">No passkeys yet.</li>}
+            </ul>
+            {pkSupported ? (
+              <div className="passkey-add">
+                <input value={pkName} onChange={(e) => setPkName(e.target.value)} placeholder="name (optional, e.g. iPhone)" />
+                <button className="btn primary" disabled={busy} onClick={addPasskey}>Add a passkey</button>
+              </div>
+            ) : (
+              <p className="security-secret">This browser doesn’t support passkeys.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

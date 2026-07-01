@@ -9,6 +9,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { db, pool, schema } from './db/client.ts';
 import { authRoutes } from './auth/routes.ts';
 import { oidcRoutes } from './auth/oidc.ts';
+import { passkeyRoutes } from './auth/webauthn.ts';
 import { stateRoutes } from './routes/state.ts';
 import { projectRoutes } from './routes/projects.ts';
 import { tabRoutes } from './routes/tabs.ts';
@@ -74,6 +75,7 @@ app.get('/health', async (_req, reply) => {
 
 await app.register(authRoutes);
 await app.register(oidcRoutes);
+await app.register(passkeyRoutes);
 await app.register(stateRoutes);
 await app.register(projectRoutes);
 await app.register(tabRoutes);
