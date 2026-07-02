@@ -8,16 +8,23 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError, type BoardMember, type BoardRole } from '../api/client';
 import { useSession } from '../session/useSession';
+import { useStore } from '../store';
+import { HistoryDrawer } from './HistoryDrawer';
+import { TrashPanel } from './TrashPanel';
 
 const ROLES: BoardRole[] = ['viewer', 'editor', 'admin'];
 
 export function SharePanel({ tabId, tabName, onClose }: { tabId: string; tabName: string; onClose: () => void }) {
   const me = useSession((s) => s.user);
+  const settings = useStore((s) => s.tabs[tabId]?.settings);
+  const setTabSettings = useStore((s) => s.setTabSettings);
   const [members, setMembers] = useState<BoardMember[] | null>(null);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<BoardRole>('editor');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
 
   async function refresh() {
     try {
@@ -124,6 +131,38 @@ export function SharePanel({ tabId, tabName, onClose }: { tabId: string; tabName
             <button type="submit" disabled={busy || !email.trim()}>Add</button>
           </form>
         )}
+
+        {(myRole === 'editor' || myRole === 'admin') && (
+          <div className="share-footer">
+            <button className="btn ghost" onClick={() => setHistoryOpen(true)}>Board history</button>
+            <button className="btn ghost" onClick={() => setTrashOpen(true)}>Trash</button>
+          </div>
+        )}
+
+        {isAdmin && (
+          <div className="board-settings">
+            <strong>Board settings</strong>
+            <label className="board-setting">
+              <input
+                type="checkbox"
+                checked={!!settings?.requireReview}
+                onChange={(e) => setTabSettings(tabId, { ...settings, requireReview: e.target.checked })}
+              />
+              Require review before Done
+            </label>
+            <label className="board-setting">
+              <input
+                type="checkbox"
+                checked={settings?.restrictDelete === 'admin'}
+                onChange={(e) => setTabSettings(tabId, { ...settings, restrictDelete: e.target.checked ? 'admin' : undefined })}
+              />
+              Only admins can delete
+            </label>
+          </div>
+        )}
+
+        {historyOpen && <HistoryDrawer kind="tab" id={tabId} boardId={tabId} title={tabName} onClose={() => setHistoryOpen(false)} />}
+        {trashOpen && <TrashPanel tabId={tabId} tabName={tabName} onClose={() => setTrashOpen(false)} />}
       </div>
     </div>
   );

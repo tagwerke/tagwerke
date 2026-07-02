@@ -4,6 +4,25 @@ import { and, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
+import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
+
+// Opt-in per-board guardrails (AUDIT_IMPLEMENTATION_PLAN §F4). Admin-only to change.
+const settingsBody = z.object({
+  requireReview: z.boolean().optional(),
+  restrictDelete: z.union([z.literal('admin'), z.null()]).optional(),
+});
+type BoardSettings = { requireReview?: boolean; restrictDelete?: 'admin' };
+
+/** Merge a settings patch onto the stored bag; a null clears that key. */
+function mergeSettings(existing: BoardSettings, patch: z.infer<typeof settingsBody>): BoardSettings {
+  const out: BoardSettings = { ...existing };
+  if (patch.requireReview !== undefined) out.requireReview = patch.requireReview;
+  if (patch.restrictDelete !== undefined) {
+    if (patch.restrictDelete === null) delete out.restrictDelete;
+    else out.restrictDelete = patch.restrictDelete;
+  }
+  return out;
+}
 
 const createBody = z.object({
   id: z.string().min(1),
@@ -20,6 +39,8 @@ const patchBody = z.object({
   dateKey: z.string().nullable().optional(),
   docJSON: z.any().optional(),
   location: z.string().nullable().optional(),
+  // Board guardrails (admin-only; lives on the shared tab):
+  settings: settingsBody.optional(),
   // Per-user view state (lives on this caller's board_members row):
   projectId: z.string().min(1).optional(), // = the caller's category
   starred: z.boolean().optional(),
@@ -64,14 +85,27 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     if (!b.success) return reply.code(400).send({ error: 'invalid patch' });
     const userId = req.user!.id;
 
-    // Split: content updates the shared tab; view state updates the caller's membership.
-    const { projectId, starred, starredPosition, ...content } = b.data;
+    // Split three ways: shared content (name/doc/…), admin guardrails (settings), and this
+    // caller's personal view state (category/starred).
+    const { projectId, starred, starredPosition, settings, docJSON, ...contentRest } = b.data;
+    const editingContent = Object.keys(contentRest).length > 0 || docJSON !== undefined;
 
-    // Authorize: must be a member; editing shared content requires editor+.
+    // Authorize: must be a member; content requires editor+; settings require admin.
     const role = await boardRole(userId, id);
     if (!role) return reply.code(404).send({ error: 'not found' });
-    if (Object.keys(content).length && role === 'viewer')
+    if (editingContent && role === 'viewer')
       return reply.code(403).send({ error: 'insufficient permission' });
+    if (settings !== undefined && role !== 'admin')
+      return reply.code(403).send({ error: 'only admins may change board settings' });
+
+    // Prior row: for content diffs + settings merge.
+    const before = (await db.select().from(schema.tabs).where(eq(schema.tabs.id, id)).limit(1))[0];
+    if (!before) return reply.code(404).send({ error: 'not found' });
+
+    const contentToWrite: Record<string, unknown> = { ...contentRest };
+    if (docJSON !== undefined) contentToWrite.docJSON = docJSON;
+    const mergedSettings =
+      settings !== undefined ? mergeSettings((before.settings as BoardSettings) ?? {}, settings) : undefined;
 
     const memberPatch: Record<string, unknown> = {};
     if (projectId !== undefined) memberPatch.categoryId = projectId;
@@ -79,8 +113,11 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     if (starredPosition !== undefined) memberPatch.starredPosition = starredPosition;
 
     await db.transaction(async (tx) => {
-      if (Object.keys(content).length) {
-        await tx.update(schema.tabs).set(content).where(eq(schema.tabs.id, id));
+      if (Object.keys(contentToWrite).length) {
+        await tx.update(schema.tabs).set(contentToWrite).where(eq(schema.tabs.id, id));
+      }
+      if (mergedSettings) {
+        await tx.update(schema.tabs).set({ settings: mergedSettings }).where(eq(schema.tabs.id, id));
       }
       if (Object.keys(memberPatch).length) {
         await tx
@@ -89,6 +126,18 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
           .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId)));
       }
     });
+
+    // Attribution: diff scalar content; rich-text doc edits log a coarse marker (prosemirror
+    // snapshotting is deferred). Settings changes get an explicit structural row.
+    const changes = diffChanges(before as Record<string, unknown>, contentRest, ['name', 'dateKey', 'location']);
+    if (docJSON !== undefined) changes.push({ field: 'docJSON', from: '(document)', to: '(edited)' });
+    auditEdit(req, { action: 'PATCH /api/tabs/:id', targetType: 'tab', targetId: id, scopeId: id, changes });
+    if (mergedSettings) {
+      recordAudit({
+        actorId: userId, action: 'board_settings_change', targetType: 'tab', targetId: id,
+        scopeId: id, method: 'PATCH', status: 200, payload: { settings: mergedSettings },
+      });
+    }
     return reply.send({ ok: true });
   });
 
@@ -129,9 +178,16 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireBoardRole('admin', paramTabId) },
     async (req, reply) => {
       const { id } = req.params as { id: string };
+      const before = (await db.select({ name: schema.tabs.name }).from(schema.tabs).where(eq(schema.tabs.id, id)).limit(1))[0];
       // Deleting the tab cascades its tasks, memberships, events, and the time_blocks
-      // that reference it (all FK on delete cascade).
+      // that reference it (all FK on delete cascade). (Delete requires admin via preHandler,
+      // so the per-board restrictDelete guardrail is already satisfied.)
       await db.delete(schema.tabs).where(eq(schema.tabs.id, id));
+      req.auditHandled = true;
+      recordAudit({
+        actorId: req.user!.id, action: 'DELETE /api/tabs/:id', targetType: 'tab', targetId: id,
+        scopeId: id, method: 'DELETE', status: 200, payload: before ? { snapshot: { name: before.name } } : null,
+      });
       return reply.send({ ok: true });
     },
   );

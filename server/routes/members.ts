@@ -151,6 +151,20 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
     await db
       .delete(schema.boardMembers)
       .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId)));
+
+    // Explicit audit (was a blind spot): access revocation must be visible. Distinguishes
+    // self-leave from an admin removing someone.
+    req.auditHandled = true;
+    recordAudit({
+      actorId: me,
+      action: userId === me ? 'board_leave' : 'board_member_remove',
+      targetType: 'board_member',
+      targetId: userId,
+      scopeId: id,
+      method: 'DELETE',
+      status: 200,
+      payload: { tabId: id, removed: userId, role: targetRows[0].role },
+    });
     return reply.send({ ok: true });
   });
 }

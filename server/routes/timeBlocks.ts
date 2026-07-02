@@ -14,6 +14,10 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { boardRole, requireBoardRole } from '../auth/boards.ts';
 import { reorderByIndex } from '../lib/reorder.ts';
+import { auditEdit, diffChanges } from '../lib/audit.ts';
+
+// Block fields worth a trail (skip position/filter — reorder noise / bulky projection).
+const TB_AUDITED = ['tabId', 'date', 'start', 'end', 'label', 'assigneeId'] as const;
 
 const DATE = z.string().min(8).max(10); // 'YYYY-MM-DD'
 
@@ -41,16 +45,6 @@ const patchBody = z.object({
 });
 
 const reorderBody = z.object({ order: z.array(z.string().min(1)) });
-
-/** True when `id` is one of the caller's own time blocks. */
-async function ownsBlock(userId: string, id: string): Promise<boolean> {
-  const rows = await db
-    .select({ id: schema.timeBlocks.id })
-    .from(schema.timeBlocks)
-    .where(and(eq(schema.timeBlocks.id, id), eq(schema.timeBlocks.userId, userId)))
-    .limit(1);
-  return rows.length > 0;
-}
 
 export async function timeBlockRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
@@ -127,7 +121,9 @@ export async function timeBlockRoutes(app: FastifyInstance): Promise<void> {
     const b = patchBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid patch' });
     const userId = req.user!.id;
-    if (!(await ownsBlock(userId, id))) return reply.code(404).send({ error: 'not found' });
+    // Read the current block: ownership check + field diffs.
+    const before = (await db.select().from(schema.timeBlocks).where(eq(schema.timeBlocks.id, id)).limit(1))[0];
+    if (!before || before.userId !== userId) return reply.code(404).send({ error: 'not found' });
     // Rebinding to a new board requires at least viewer there.
     if (b.data.tabId !== undefined && !(await boardRole(userId, b.data.tabId)))
       return reply.code(404).send({ error: 'not found' });
@@ -136,6 +132,8 @@ export async function timeBlockRoutes(app: FastifyInstance): Promise<void> {
       .update(schema.timeBlocks)
       .set(b.data as Record<string, unknown>)
       .where(eq(schema.timeBlocks.id, id));
+    const changes = diffChanges(before as Record<string, unknown>, b.data as Record<string, unknown>, TB_AUDITED);
+    auditEdit(req, { action: 'PATCH /api/time-blocks/:id', targetType: 'time_block', targetId: id, scopeId: before.tabId, changes });
     return reply.send({ ok: true });
   });
 

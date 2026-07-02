@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
-import type { Filter, ID, PlannerMode, Project, RootState, Tab, Task, TaskStatus, TimeBlock } from './types';
+import type { BoardSettings, Filter, ID, PlannerMode, Project, RootState, Tab, Task, TaskStatus, TimeBlock } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { api, enqueue } from './api/client';
@@ -19,13 +19,14 @@ interface Actions {
   createTab(projectId: ID, name: string): Tab;
   renameTab(id: ID, name: string): void;
   setTabLocation(id: ID, location: string): void;
+  setTabSettings(id: ID, settings: BoardSettings): void;
   setTabStarred(id: ID, starred: boolean): void;
   setTabDoc(id: ID, doc: unknown): void;
   deleteTab(id: ID): void;
   setActiveTab(id: ID | null): void;
 
   upsertTask(t: Partial<Task> & { id: ID; homeTabId: ID; text: string }): Task;
-  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'position'>>): void;
+  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'reviewerId' | 'position'>>): void;
   setTaskText(id: ID, text: string): void;
   setTaskStatus(id: ID, status: TaskStatus): void;
   setTaskAssignee(id: ID, assigneeId: ID | undefined): void;
@@ -198,6 +199,16 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       setTabLocation(id, location) {
         set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], location } } }));
         enqueue(() => api.tabs.update(id, { location }));
+      },
+      setTabSettings(id, settings) {
+        set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], settings } } }));
+        // Send explicit values so the server replaces (a null clears restrictDelete) rather
+        // than partial-merging, keeping the persisted bag exactly what the UI shows.
+        enqueue(() =>
+          api.tabs.update(id, {
+            settings: { requireReview: settings.requireReview ?? false, restrictDelete: settings.restrictDelete ?? null },
+          }),
+        );
       },
       setTabStarred(id, starred) {
         set((s) => {

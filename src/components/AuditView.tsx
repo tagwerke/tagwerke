@@ -4,8 +4,41 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError, auditExportUrl, type AuditEntry, type AuditParams } from '../api/client';
 import { timeAgo } from '../util/dates';
+import { fieldLabel } from '../util/audit';
 
 const EMPTY: AuditParams = { category: 'all' };
+
+/** Render the target as "type:id", falling back to em-dash when neither is known. */
+function targetLabel(e: AuditEntry): string {
+  if (!e.targetType && !e.targetId) return '—';
+  return `${e.targetType ?? '?'}${e.targetId ? `:${e.targetId}` : ''}`;
+}
+
+/** A readable payload: field diffs as "field: from → to", plus snapshots/created markers. */
+function renderPayload(payload: unknown): React.ReactNode {
+  if (payload == null || typeof payload !== 'object') return '(no payload)';
+  const p = payload as Record<string, unknown>;
+  if (Array.isArray(p.changes)) {
+    return (
+      <div className="audit-changes">
+        {(p.changes as { field: string; from: unknown; to: unknown }[]).map((c, i) => (
+          <div key={i} className="audit-change">
+            <span className="audit-field">{fieldLabel(c.field)}</span>: <span className="audit-from">{fmt(c.from)}</span> → <span className="audit-to">{fmt(c.to)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (p.snapshot) return <div className="audit-change">deleted: {fmt(p.snapshot)}</div>;
+  if (p.created) return <div className="audit-change">created: {fmt(p.created)}</div>;
+  return <pre className="audit-payload">{JSON.stringify(payload, null, 2)}</pre>;
+}
+
+function fmt(v: unknown): string {
+  if (v == null || v === '') return '∅';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
 
 export function AuditView() {
   const [draft, setDraft] = useState<AuditParams>(EMPTY);
@@ -64,11 +97,12 @@ export function AuditView() {
             <span title={e.createdAt}>{timeAgo(e.createdAt)}</span>
             <span>{e.actorEmail ?? (e.actorId ? e.actorId : 'system')}</span>
             <span className="audit-action">{e.action}</span>
-            <span className="audit-target">{e.targetType ? `${e.targetType}${e.targetId ? `:${e.targetId}` : ''}` : '—'}</span>
+            <span className="audit-target" title={e.scopeId ? `on tab:${e.scopeId}` : undefined}>
+              {targetLabel(e)}
+              {e.scopeId && e.scopeId !== e.targetId ? <span className="audit-scope"> · tab:{e.scopeId}</span> : null}
+            </span>
             <span>{e.status ?? ''}</span>
-            {expanded === e.id && (
-              <pre className="audit-payload">{e.payload != null ? JSON.stringify(e.payload, null, 2) : '(no payload)'}</pre>
-            )}
+            {expanded === e.id && <div className="audit-payload">{renderPayload(e.payload)}</div>}
           </div>
         ))}
         {!entries.length && !busy && <div className="share-empty">No matching entries.</div>}

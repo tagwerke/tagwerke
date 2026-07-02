@@ -28,6 +28,7 @@ export interface AuditEntry {
   action: string;
   targetType?: string | null;
   targetId?: string | null;
+  scopeId?: string | null; // the board/tab the action happened on
   method?: string | null;
   payload?: unknown; // null for coarse rows
   status?: number | null;
@@ -43,6 +44,7 @@ export function recordAudit(entry: AuditEntry): void {
       action: entry.action,
       targetType: entry.targetType ?? null,
       targetId: entry.targetId ?? null,
+      scopeId: entry.scopeId ?? null,
       method: entry.method ?? null,
       payload: entry.payload ?? null,
       status: entry.status ?? null,
@@ -50,6 +52,56 @@ export function recordAudit(entry: AuditEntry): void {
     .catch(() => {
       /* best-effort: a failed audit write must not affect the request */
     });
+}
+
+/** One before→after field change, the unit of an enriched content-edit payload. */
+export interface FieldChange {
+  field: string;
+  from: unknown;
+  to: unknown;
+}
+
+/**
+ * Field-level diff over a fixed key set: the changed fields, each with before/after.
+ * `before` is the row as it was; `after` is the validated patch (only its present keys
+ * are compared). Nullish is normalized so undefined↔null isn't reported as a change.
+ */
+export function diffChanges(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  fields: readonly string[],
+): FieldChange[] {
+  const changes: FieldChange[] = [];
+  for (const field of fields) {
+    if (!(field in after)) continue; // field wasn't part of this write
+    const from = before[field] ?? null;
+    const to = after[field] ?? null;
+    if (from !== to) changes.push({ field, from, to });
+  }
+  return changes;
+}
+
+/**
+ * Record an enriched content-edit row (field diffs) and mark the request handled so the
+ * generic hook skips it. No-op when nothing changed. Use from handlers that already read
+ * the row (tasks/tabs/time-blocks). See AUDIT_IMPLEMENTATION_PLAN §B2.
+ */
+export function auditEdit(
+  req: { user?: { id: string } | null; auditHandled?: boolean; method?: string },
+  entry: { action: string; targetType: string; targetId: string; scopeId?: string | null; changes: FieldChange[]; status?: number },
+): void {
+  req.auditHandled = true;
+  if (!entry.changes.length) return;
+  recordAudit({
+    actorId: req.user?.id ?? null,
+    action: entry.action,
+    targetType: entry.targetType,
+    targetId: entry.targetId,
+    scopeId: entry.scopeId ?? null,
+    method: req.method ?? null,
+    payload: { changes: entry.changes },
+    status: entry.status ?? 200,
+  });
 }
 
 // High-frequency content routes → coarse rows (no payload). Everything else mutating →
@@ -60,6 +112,19 @@ function isContentRoute(path: string): boolean {
   if (CONTENT_PREFIXES.some((p) => path.startsWith(p))) return true;
   if (path.startsWith('/api/tabs') && !path.includes('/members')) return true;
   return false;
+}
+
+/** Coarse entity classification of a mutation route, for the audit `targetType`. */
+function targetTypeForPath(path: string): string | null {
+  if (path.startsWith('/api/tasks')) return 'task';
+  if (path.startsWith('/api/time-blocks')) return 'time_block';
+  if (path.startsWith('/api/events')) return 'event';
+  if (path.startsWith('/api/tabs')) {
+    if (path.includes('/events')) return 'event';
+    if (path.includes('/members')) return 'board_member';
+    return 'tab';
+  }
+  return null;
 }
 
 // Secrets never reach the log. Applied to non-content bodies; auth routes are skipped
@@ -88,7 +153,11 @@ export function registerAuditHook(app: FastifyInstance): void {
     recordAudit({
       actorId: req.user?.id ?? null,
       action: `${req.method} ${req.routeOptions?.url ?? path}`,
+      targetType: targetTypeForPath(path),
       targetId: (req.params as { id?: string } | undefined)?.id ?? null,
+      // The board this write targeted, resolved for free by requireBoardRole. Makes the
+      // row legible ("task X on tab Y") without a second lookup.
+      scopeId: req.boardScope ?? null,
       method: req.method,
       payload: coarse ? null : redact(req.body),
       status: reply.statusCode,

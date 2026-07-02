@@ -1,9 +1,14 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { and, eq, notInArray } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, notInArray } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
-import { requireBoardRole, boardRole } from '../auth/boards.ts';
+import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, paramTabId } from '../auth/boards.ts';
+import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
+
+// Fields whose changes are worth an accountability trail. `position` is excluded (reorder
+// noise); `done`/`owner` are derived/legacy. See AUDIT_IMPLEMENTATION_PLAN §B2.
+const AUDITED_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority'] as const;
 
 /** Resolve a task's home board (for routes whose body doesn't carry it). */
 async function taskBoard(req: FastifyRequest): Promise<string | undefined> {
@@ -24,6 +29,7 @@ const upsertBody = z.object({
   text: z.string(),
   status: statusEnum.optional(),
   assigneeId: z.string().nullable().optional(),
+  reviewerId: z.string().nullable().optional(),
   date: z.string().nullable().optional(),
   priority: priority.nullable().optional(),
   position: z.number().int().optional(),
@@ -35,6 +41,7 @@ const patchBody = z.object({
   text: z.string().optional(),
   status: statusEnum.optional(),
   assigneeId: z.string().nullable().optional(),
+  reviewerId: z.string().nullable().optional(),
   date: z.string().nullable().optional(),
   priority: priority.nullable().optional(),
   position: z.number().int().optional(),
@@ -71,9 +78,14 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       if (!b.success) return reply.code(400).send({ error: 'invalid task' });
       if (!(await assigneeAllowed(b.data.homeTabId, b.data.assigneeId)))
         return reply.code(400).send({ error: 'assignee is not a member of the home board' });
+      if (!(await assigneeAllowed(b.data.homeTabId, b.data.reviewerId)))
+        return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
       const userId = req.user!.id;
       // status is authoritative; `done` is the derived back-compat mirror.
       const status = b.data.status ?? (b.data.done ? 'done' : 'todo');
+      // Prior row (if any): distinguishes create vs replace for the audit trail.
+      const before = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0];
+      const hasTitle = b.data.text.trim().length > 0;
       const values = {
         id,
         createdBy: userId,
@@ -81,29 +93,46 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         text: b.data.text,
         status,
         assigneeId: b.data.assigneeId ?? null,
+        reviewerId: b.data.reviewerId ?? null,
         date: b.data.date ?? null,
         priority: b.data.priority ?? null,
         position: b.data.position ?? 0,
         owner: b.data.owner ?? null,
         done: status === 'done',
+        // Retain a recognizable Trash label; null only when genuinely never titled (§G).
+        lastTitle: hasTitle ? b.data.text : null,
       };
-      await db
-        .insert(schema.tasks)
-        .values(values)
-        .onConflictDoUpdate({
-          target: schema.tasks.id,
-          set: {
-            homeTabId: values.homeTabId,
-            text: values.text,
-            status: values.status,
-            assigneeId: values.assigneeId,
-            date: values.date,
-            priority: values.priority,
-            position: values.position,
-            owner: values.owner,
-            done: values.done,
-          },
+      const onConflictSet: Record<string, unknown> = {
+        homeTabId: values.homeTabId,
+        text: values.text,
+        status: values.status,
+        assigneeId: values.assigneeId,
+        reviewerId: values.reviewerId,
+        date: values.date,
+        priority: values.priority,
+        position: values.position,
+        owner: values.owner,
+        done: values.done,
+        // Resurrect: re-adding a task (e.g. editor undo / re-typing a line) clears any
+        // soft-delete, so Ctrl+Z restores it in place. See AUDIT_IMPLEMENTATION_PLAN §H.
+        deletedAt: null,
+        deletedBy: null,
+      };
+      // Only advance last_title on non-empty text; emptying must never erase it.
+      if (hasTitle) onConflictSet.lastTitle = b.data.text;
+      await db.insert(schema.tasks).values(values).onConflictDoUpdate({ target: schema.tasks.id, set: onConflictSet });
+      // Attribution: diff a replace; record a create when the task is new.
+      if (before) {
+        const changes = diffChanges(before as Record<string, unknown>, values, [...AUDITED_FIELDS, 'homeTabId']);
+        auditEdit(req, { action: 'PUT /api/tasks/:id', targetType: 'task', targetId: id, scopeId: values.homeTabId, changes });
+      } else {
+        req.auditHandled = true;
+        recordAudit({
+          actorId: userId, action: 'PUT /api/tasks/:id', targetType: 'task', targetId: id,
+          scopeId: values.homeTabId, method: 'PUT', status: 200,
+          payload: { created: { text: values.text, status: values.status } },
         });
+      }
       return reply.send({ ok: true });
     },
   );
@@ -115,17 +144,38 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const { id } = req.params as { id: string };
       const b = patchBody.safeParse(req.body);
       if (!b.success) return reply.code(400).send({ error: 'invalid patch' });
-      // Enforce assignee membership against the task's own home board.
-      if (b.data.assigneeId != null) {
-        const homeTabId = await taskBoard(req);
-        if (!homeTabId) return reply.code(404).send({ error: 'not found' });
-        if (!(await assigneeAllowed(homeTabId, b.data.assigneeId)))
-          return reply.code(400).send({ error: 'assignee is not a member of the home board' });
-      }
+      // Read the current row once: needed for membership scope, field diffs, and approval.
+      const before = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0];
+      if (!before) return reply.code(404).send({ error: 'not found' });
+      const homeTabId = before.homeTabId;
+      // Enforce assignee/reviewer membership against the task's own home board.
+      if (b.data.assigneeId != null && !(await assigneeAllowed(homeTabId, b.data.assigneeId)))
+        return reply.code(400).send({ error: 'assignee is not a member of the home board' });
+      if (b.data.reviewerId != null && !(await assigneeAllowed(homeTabId, b.data.reviewerId)))
+        return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
+
       // Keep the derived `done` mirror in sync whenever status is patched.
-      const set = { ...b.data } as typeof b.data & { done?: boolean };
+      const set = { ...b.data } as Record<string, unknown>;
       if (b.data.status !== undefined) set.done = b.data.status === 'done';
+      // Retain the last non-empty title for Trash; emptying the text never clears it (§G).
+      if (typeof b.data.text === 'string' && b.data.text.trim().length > 0) set.lastTitle = b.data.text;
+      // Approval capture (F3): the in_review → done transition stamps the approver.
+      const approving = b.data.status === 'done' && before.status === 'in_review';
+      if (approving) {
+        set.approvedBy = req.user!.id;
+        set.approvedAt = new Date();
+      }
       await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
+
+      // Enriched audit: field diffs, plus an explicit approval row for legibility.
+      const changes = diffChanges(before as Record<string, unknown>, b.data as Record<string, unknown>, AUDITED_FIELDS);
+      auditEdit(req, { action: 'PATCH /api/tasks/:id', targetType: 'task', targetId: id, scopeId: homeTabId, changes });
+      if (approving) {
+        recordAudit({
+          actorId: req.user!.id, action: 'task_approved', targetType: 'task', targetId: id,
+          scopeId: homeTabId, method: 'PATCH', status: 200, payload: { reviewerId: before.reviewerId ?? null },
+        });
+      }
       return reply.send({ ok: true });
     },
   );
@@ -135,7 +185,30 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireBoardRole('editor', taskBoard) },
     async (req, reply) => {
       const { id } = req.params as { id: string };
-      await db.delete(schema.tasks).where(eq(schema.tasks.id, id));
+      const userId = req.user!.id;
+      // Read before deleting: needed for the restrict-delete check and the audit snapshot.
+      const t = (await db
+        .select({ homeTabId: schema.tasks.homeTabId, text: schema.tasks.text, status: schema.tasks.status })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, id))
+        .limit(1))[0];
+      if (!t) return reply.send({ ok: true }); // already gone — nothing to audit
+      // Opt-in preventive control (F4): some boards restrict deletion to admins.
+      if ((await restrictsDeleteToAdmin(t.homeTabId)) && !(await hasBoardRole(userId, t.homeTabId, 'admin')))
+        return reply.code(403).send({ error: 'only admins may delete on this board' });
+
+      // Soft delete: trash the row (recoverable) instead of destroying it (§G). Idempotent.
+      await db
+        .update(schema.tasks)
+        .set({ deletedAt: new Date(), deletedBy: userId })
+        .where(and(eq(schema.tasks.id, id), isNull(schema.tasks.deletedAt)));
+      // Snapshot the title so the trail reads "deleted 'Buy milk'".
+      req.auditHandled = true;
+      recordAudit({
+        actorId: userId, action: 'DELETE /api/tasks/:id', targetType: 'task', targetId: id,
+        scopeId: t.homeTabId, method: 'DELETE', status: 200,
+        payload: { snapshot: { text: t.text, status: t.status } },
+      });
       return reply.send({ ok: true });
     },
   );
@@ -146,10 +219,54 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const b = orphanBody.safeParse(req.body);
       if (!b.success) return reply.code(400).send({ error: 'invalid request' });
-      const conds = [eq(schema.tasks.homeTabId, b.data.homeTabId)];
+      const userId = req.user!.id;
+      // Soft delete orphans (tasks no longer in the doc) — recoverable, not destroyed (§G).
+      const conds = [eq(schema.tasks.homeTabId, b.data.homeTabId), isNull(schema.tasks.deletedAt)];
       if (b.data.keepIds.length) conds.push(notInArray(schema.tasks.id, b.data.keepIds));
-      await db.delete(schema.tasks).where(and(...conds));
+      await db.update(schema.tasks).set({ deletedAt: new Date(), deletedBy: userId }).where(and(...conds));
       return reply.send({ ok: true });
+    },
+  );
+
+  // Restore a trashed task (editor+ on its board). Idempotent. See §G/§H.
+  app.post(
+    '/api/tasks/:id/restore',
+    { preHandler: requireBoardRole('editor', taskBoard) },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      await db.update(schema.tasks).set({ deletedAt: null, deletedBy: null }).where(eq(schema.tasks.id, id));
+      req.auditHandled = true;
+      recordAudit({
+        actorId: req.user!.id, action: 'task_restore', targetType: 'task', targetId: id,
+        scopeId: req.boardScope ?? null, method: 'POST', status: 200,
+      });
+      return reply.send({ ok: true });
+    },
+  );
+
+  // Trash: a board's soft-deleted tasks (editor+). Powers the Trash view / restore surface.
+  app.get(
+    '/api/tabs/:id/trash',
+    { preHandler: requireBoardRole('editor', paramTabId) },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      const rows = await db
+        .select({
+          id: schema.tasks.id,
+          text: schema.tasks.text,
+          lastTitle: schema.tasks.lastTitle,
+          status: schema.tasks.status,
+          assigneeId: schema.tasks.assigneeId,
+          deletedAt: schema.tasks.deletedAt,
+          deletedBy: schema.tasks.deletedBy,
+          deleterEmail: schema.users.email,
+        })
+        .from(schema.tasks)
+        .leftJoin(schema.users, eq(schema.users.id, schema.tasks.deletedBy))
+        .where(and(eq(schema.tasks.homeTabId, id), isNotNull(schema.tasks.deletedAt)))
+        .orderBy(desc(schema.tasks.deletedAt))
+        .limit(200);
+      return { tasks: rows.map((r) => ({ ...r, deletedAt: r.deletedAt?.toISOString() ?? null })) };
     },
   );
 }

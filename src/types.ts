@@ -12,6 +12,12 @@ export interface Project {
 // they're removed by migration. New tabs are always 'normal'.
 export type TabType = 'normal' | 'today';
 
+/** Opt-in per-board guardrails (accountability model §F). Absent keys = off (flat/fast). */
+export interface BoardSettings {
+  requireReview?: boolean; // route Done through in_review; capture the approver
+  restrictDelete?: 'admin'; // only board admins may delete content here
+}
+
 export interface Tab {
   id: ID;
   projectId: ID;
@@ -21,6 +27,7 @@ export interface Tab {
   type: TabType;
   docJSON?: unknown;
   location?: string; // board's place facet (v2)
+  settings?: BoardSettings;
 }
 
 export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
@@ -34,6 +41,11 @@ export interface Task {
   status?: TaskStatus;
   // P0: real user id of the assignee (a member of the home board). Supersedes `owner`.
   assigneeId?: ID;
+  // Accountability chain (§F1): who signs off. approvedBy/approvedAt mirror the
+  // in_review → done approval (DB-managed; read-only on the client).
+  reviewerId?: ID;
+  approvedBy?: ID;
+  approvedAt?: number;
   date?: string;
   priority?: 1 | 2 | 3;
   position?: number;

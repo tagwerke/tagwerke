@@ -34,6 +34,7 @@ type TaskPatch = {
   text?: string;
   status?: Task['status'];
   assigneeId?: ID | null;
+  reviewerId?: ID | null;
   date?: string | null;
   priority?: 1 | 2 | 3 | null;
   position?: number;
@@ -44,9 +45,12 @@ function changedFields(p: Task, t: Task): TaskPatch | null {
   if (p.text !== t.text) patch.text = t.text;
   if ((p.status ?? 'todo') !== (t.status ?? 'todo')) patch.status = t.status ?? 'todo';
   if ((p.assigneeId ?? null) !== (t.assigneeId ?? null)) patch.assigneeId = t.assigneeId ?? null;
+  if ((p.reviewerId ?? null) !== (t.reviewerId ?? null)) patch.reviewerId = t.reviewerId ?? null;
   if ((p.date ?? null) !== (t.date ?? null)) patch.date = t.date ?? null;
   if ((p.priority ?? null) !== (t.priority ?? null)) patch.priority = t.priority ?? null;
   if ((p.position ?? 0) !== (t.position ?? 0)) patch.position = t.position ?? 0;
+  // approvedBy/approvedAt are DB-managed (set on the in_review → done transition) and never
+  // sent from the client.
   return Object.keys(patch).length ? patch : null;
 }
 
@@ -56,6 +60,7 @@ function fullBody(t: Task) {
     text: t.text,
     status: t.status ?? 'todo',
     assigneeId: t.assigneeId ?? null,
+    reviewerId: t.reviewerId ?? null,
     date: t.date ?? null,
     priority: t.priority ?? null,
     position: t.position ?? 0,

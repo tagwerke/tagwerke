@@ -19,6 +19,7 @@ import { memberRoutes } from './routes/members.ts';
 import { eventRoutes } from './routes/events.ts';
 import { adminRoutes } from './routes/admin.ts';
 import { auditRoutes } from './routes/audit.ts';
+import { historyRoutes } from './routes/history.ts';
 import { sudoRoutes } from './routes/sudo.ts';
 import { orgRoutes, ORG_ID } from './routes/org.ts';
 import { activityRoutes } from './routes/activity.ts';
@@ -86,6 +87,7 @@ await app.register(eventRoutes);
 await app.register(sudoRoutes);
 await app.register(adminRoutes);
 await app.register(auditRoutes);
+await app.register(historyRoutes);
 await app.register(orgRoutes);
 await app.register(activityRoutes);
 

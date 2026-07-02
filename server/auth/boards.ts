@@ -45,6 +45,21 @@ export async function hasBoardRole(userId: string, tabId: string, min: BoardRole
   return role != null && RANK[role] >= RANK[min];
 }
 
+/**
+ * The one opt-in preventive control (AUDIT_IMPLEMENTATION_PLAN §F4): when a board sets
+ * `settings.restrictDelete === 'admin'`, only board admins may delete its content. Default
+ * (unset) = today's behavior (editor may delete). Best-effort: a missing board reads false.
+ */
+export async function restrictsDeleteToAdmin(tabId: string): Promise<boolean> {
+  const rows = await db
+    .select({ settings: schema.tabs.settings })
+    .from(schema.tabs)
+    .where(eq(schema.tabs.id, tabId))
+    .limit(1);
+  const s = rows[0]?.settings as { restrictDelete?: string } | null | undefined;
+  return s?.restrictDelete === 'admin';
+}
+
 type TabIdResolver = (req: FastifyRequest) => string | undefined | Promise<string | undefined>;
 
 /** Common resolver: the board id is the `:id` route param. */

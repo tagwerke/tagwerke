@@ -9,7 +9,7 @@
 // the member's category, `tab.order`/`starred` come from the membership — so the
 // client is untouched by the ownership pivot.
 
-import { asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 
 export async function assembleState(userId: string) {
@@ -22,6 +22,7 @@ export async function assembleState(userId: string) {
       type: schema.tabs.type,
       docJSON: schema.tabs.docJSON,
       location: schema.tabs.location,
+      settings: schema.tabs.settings,
       categoryId: schema.boardMembers.categoryId,
       position: schema.boardMembers.position,
       starred: schema.boardMembers.starred,
@@ -36,9 +37,9 @@ export async function assembleState(userId: string) {
 
   const [projectRows, taskRows] = await Promise.all([
     db.select().from(schema.projects).where(eq(schema.projects.userId, userId)).orderBy(asc(schema.projects.position)),
-    // Tasks of any board the user can see (not tasks.userId).
+    // Tasks of any board the user can see (not tasks.userId). Trashed tasks are excluded.
     tabIds.length
-      ? db.select().from(schema.tasks).where(inArray(schema.tasks.homeTabId, tabIds))
+      ? db.select().from(schema.tasks).where(and(inArray(schema.tasks.homeTabId, tabIds), isNull(schema.tasks.deletedAt)))
       : Promise.resolve([] as (typeof schema.tasks.$inferSelect)[]),
   ]);
 
@@ -61,6 +62,7 @@ export async function assembleState(userId: string) {
       starred: t.starred,
       type: t.type,
       docJSON: t.docJSON ?? undefined,
+      settings: t.settings ?? {},
       ...(t.location != null ? { location: t.location } : {}),
     };
     tabOrder.push(t.id);
@@ -80,6 +82,9 @@ export async function assembleState(userId: string) {
       createdAt: t.createdAt instanceof Date ? t.createdAt.getTime() : undefined,
       updatedAt: t.updatedAt instanceof Date ? t.updatedAt.getTime() : undefined,
       ...(t.assigneeId != null ? { assigneeId: t.assigneeId } : {}),
+      ...(t.reviewerId != null ? { reviewerId: t.reviewerId } : {}),
+      ...(t.approvedBy != null ? { approvedBy: t.approvedBy } : {}),
+      ...(t.approvedAt instanceof Date ? { approvedAt: t.approvedAt.getTime() } : {}),
       ...(t.date != null ? { date: t.date } : {}),
       ...(t.priority != null ? { priority: t.priority } : {}),
       ...(t.owner != null ? { owner: t.owner } : {}),

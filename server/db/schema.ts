@@ -112,6 +112,10 @@ export const tabs = pgTable(
     // Board facets / attribution.
     location: text('location'),
     createdBy: text('created_by'), // attribution; access derives from board_members
+    // Opt-in per-board guardrails (accountability model, AUDIT_IMPLEMENTATION_PLAN §F).
+    // Migration-free growth: a jsonb bag, e.g. { requireReview?: boolean,
+    // restrictDelete?: 'admin' }. Default {} = flat/fast (today's behavior).
+    settings: jsonb('settings').notNull().default({}),
   },
 );
 
@@ -128,6 +132,12 @@ export const tasks = pgTable(
     status: text('status').notNull().default('todo'),
     // P0: real user id of the assignee, constrained in app logic to a member of the home board.
     assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
+    // Accountability chain (AUDIT_IMPLEMENTATION_PLAN §F1): who signs off. Constrained in
+    // app logic to a member of the home board, like assigneeId. approvedBy/approvedAt are a
+    // denormalized display mirror of the `in_review → done` approval — the audit log is truth.
+    reviewerId: text('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
+    approvedBy: text('approved_by'),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
     date: text('date'),
     priority: smallint('priority'),
     // P0: explicit order — doc order ≠ Kanban/My-Tasks order. Backfilled 0; editor assigns.
@@ -136,6 +146,15 @@ export const tasks = pgTable(
     owner: text('owner'),
     done: boolean('done').notNull().default(false),
     createdBy: text('created_by'), // attribution; access derives from the home tab's board
+    // Soft delete (AUDIT_IMPLEMENTATION_PLAN §G): a set deleted_at trashes the row instead of
+    // destroying it — recoverable, and the metadata/history survive. Reads filter it out; the
+    // PUT upsert clears it (re-adding a task resurrects it). Retention prune hard-deletes later.
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedBy: text('deleted_by'),
+    // Last non-empty title, retained so a task deleted by backspacing its text still shows a
+    // recognizable label in Trash. Set on any write with non-empty text; never cleared by
+    // emptying — makes a soft-deleted row self-describing at rest. See AUDIT_IMPLEMENTATION_PLAN §G.
+    lastTitle: text('last_title'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     // Auto-bumped by a BEFORE UPDATE trigger (see migration) so every write path is covered.
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -188,6 +207,9 @@ export const events = pgTable(
     externalEventId: text('external_event_id'),
     externalCalId: text('external_cal_id'),
     syncToken: text('sync_token'),
+    // Attribution (AUDIT_IMPLEMENTATION_PLAN §B4): events were previously untracked.
+    createdBy: text('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('events_tab_idx').on(t.tabId)],
 );
@@ -319,6 +341,9 @@ export const auditLog = pgTable(
     action: text('action').notNull(),
     targetType: text('target_type'),
     targetId: text('target_id'),
+    // The board/tab the action happened on (from req.boardScope). Lets a row say "task X
+    // ON tab Y" and powers per-board activity queries. See AUDIT_IMPLEMENTATION_PLAN §A.
+    scopeId: text('scope_id'),
     method: text('method'),
     payload: jsonb('payload'), // null for coarse rows
     status: integer('status'),
@@ -327,5 +352,6 @@ export const auditLog = pgTable(
   (t) => [
     index('audit_log_created_idx').on(t.createdAt),
     index('audit_log_target_idx').on(t.targetType, t.targetId),
+    index('audit_log_scope_idx').on(t.scopeId, t.createdAt),
   ],
 );

@@ -1628,6 +1628,7 @@ input, select, textarea { font: inherit; color: inherit; }
   .tab-card .tab-card-actions,
   .meta-add-date { opacity: 0.6; }
   .status-caret { opacity: 0.4; }
+  .task-history-btn { opacity: 0.4; }
   .chip-project-wrap .chip-delete { opacity: 0.5; }
 }
 
@@ -1807,3 +1808,68 @@ input, select, textarea { font: inherit; color: inherit; }
 .passkey-add { display: flex; gap: 6px; margin-top: 8px; }
 .passkey-add input { flex: 1; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev); padding: 8px 10px; font-size: 14px; outline: none; }
 .passkey-add input:focus { border-color: var(--pop); }
+
+/* ── accountability: reviewer / approve / history (task meta tokens) ───────
+   Match the quiet caption-token aesthetic of .meta-date — mono, small, borderless,
+   revealed on hover so default boards stay calm. */
+.meta-reviewer {
+  font-family: var(--mono); font-size: 10px; line-height: 1;
+  color: var(--ink-mute); background: transparent; border: none;
+  padding: 0; margin: 0; cursor: pointer; outline: none;
+  appearance: none; -webkit-appearance: none;
+}
+.meta-reviewer.set { color: var(--ink-soft); }
+.meta-reviewer:hover { color: var(--ink); }
+.meta-reviewer:not(.set) { opacity: 0; }
+.task-item:hover .meta-reviewer:not(.set),
+.task-row:hover .meta-reviewer:not(.set) { opacity: 0.6; }
+.meta-reviewer:not(.set):hover { opacity: 1; }
+
+.meta-approve {
+  font-family: var(--mono); font-size: 10px; line-height: 1;
+  height: 18px; padding: 0 8px; cursor: pointer;
+  color: var(--pop); background: rgba(255,106,61,0.06);
+  border: 1px solid rgba(255,106,61,0.35); border-radius: 999px;
+}
+.meta-approve:hover { background: rgba(255,106,61,0.12); border-color: var(--pop); }
+
+/* History affordance: a quiet trailing action on the task row, revealed on hover — present
+   on every task regardless of metadata. */
+.task-item { position: relative; }
+.task-history-btn {
+  position: absolute; top: 3px; right: 3px;
+  width: 22px; height: 20px; padding: 0; opacity: 0;
+}
+.task-item:hover .task-history-btn { opacity: 0.45; }
+.task-history-btn:hover { opacity: 1; }
+
+/* ── per-object history drawer (Layer A) ─────────────────────────────── */
+.history-panel { max-width: 440px; }
+.history-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
+.history-entry { padding: 8px 2px; border-bottom: 1px solid var(--line); }
+.history-entry:last-child { border-bottom: none; }
+.history-line { display: flex; align-items: baseline; gap: 6px; }
+.history-actor { font-weight: 600; font-size: 13px; color: var(--ink); }
+.history-verb { font-size: 13px; color: var(--ink-soft); }
+.history-time { margin-left: auto; font-size: 11px; color: var(--ink-mute); white-space: nowrap; }
+.history-changes { list-style: none; margin: 4px 0 0; padding: 0 0 0 2px; display: flex; flex-direction: column; gap: 2px; }
+.history-changes li { font-size: 12px; color: var(--ink-soft); font-family: var(--mono); }
+.history-field { color: var(--ink-mute); }
+.history-arrow { color: var(--ink-mute); }
+.history-detail { font-size: 12px; color: var(--ink-mute); margin-top: 4px; }
+
+/* ── trash view (recoverable soft-deletes) ───────────────────────────── */
+.trash-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
+.trash-item { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line); }
+.trash-item:last-child { border-bottom: none; }
+.trash-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.trash-text { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trash-text.is-untitled { color: var(--ink-mute); font-style: italic; }
+.trash-meta { font-size: 11px; color: var(--ink-mute); }
+
+/* ── board settings (Share panel; admin only) ────────────────────────── */
+.share-footer { margin-top: 10px; display: flex; gap: 6px; }
+.board-settings { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.board-settings strong { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-mute); }
+.board-setting { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
+.board-setting input { accent-color: var(--pop); }

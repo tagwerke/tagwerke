@@ -42,6 +42,7 @@ function rowsQuery() {
       action: schema.auditLog.action,
       targetType: schema.auditLog.targetType,
       targetId: schema.auditLog.targetId,
+      scopeId: schema.auditLog.scopeId,
       method: schema.auditLog.method,
       status: schema.auditLog.status,
       createdAt: schema.auditLog.createdAt,
@@ -62,9 +63,9 @@ function encodeCursor(createdAt: Date, id: string): string {
 
 type Row = Awaited<ReturnType<ReturnType<typeof rowsQuery>['limit']>>[number];
 const csvEsc = (v: unknown) => `"${(v == null ? '' : String(v)).replace(/"/g, '""')}"`;
-const CSV_HEADER = 'createdAt,actorEmail,actorId,action,targetType,targetId,method,status,payload';
+const CSV_HEADER = 'createdAt,actorEmail,actorId,action,targetType,targetId,scopeId,method,status,payload';
 function csvLine(r: Row): string {
-  return [r.createdAt.toISOString(), r.actorEmail, r.actorId, r.action, r.targetType, r.targetId, r.method, r.status, r.payload != null ? JSON.stringify(r.payload) : '']
+  return [r.createdAt.toISOString(), r.actorEmail, r.actorId, r.action, r.targetType, r.targetId, r.scopeId, r.method, r.status, r.payload != null ? JSON.stringify(r.payload) : '']
     .map(csvEsc)
     .join(',') + '\n';
 }

@@ -161,16 +161,16 @@ export const api = {
       submitMutation(M('POST', '/api/tabs', b)),
     update: (
       id: ID,
-      patch: { name?: string; projectId?: ID; starred?: boolean; starredPosition?: number | null; dateKey?: string | null; docJSON?: unknown; location?: string | null },
+      patch: { name?: string; projectId?: ID; starred?: boolean; starredPosition?: number | null; dateKey?: string | null; docJSON?: unknown; location?: string | null; settings?: { requireReview?: boolean; restrictDelete?: 'admin' | null } },
     ) => submitMutation(M('PATCH', `/api/tabs/${id}`, patch)),
     remove: (id: ID) => submitMutation(M('DELETE', `/api/tabs/${id}`)),
     reorder: (order: ID[]) => submitMutation(M('POST', '/api/tabs/reorder', { order })),
     reorderStarred: (order: ID[]) => submitMutation(M('POST', '/api/tabs/reorder-starred', { order })),
   },
   tasks: {
-    upsert: (id: ID, b: { homeTabId: ID; text: string; status?: TaskStatus; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; position?: number; owner?: string | null; done?: boolean }) =>
+    upsert: (id: ID, b: { homeTabId: ID; text: string; status?: TaskStatus; assigneeId?: ID | null; reviewerId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; position?: number; owner?: string | null; done?: boolean }) =>
       submitMutation(M('PUT', `/api/tasks/${id}`, b)),
-    patch: (id: ID, patch: { text?: string; status?: TaskStatus; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; position?: number; owner?: string | null; done?: boolean }) =>
+    patch: (id: ID, patch: { text?: string; status?: TaskStatus; assigneeId?: ID | null; reviewerId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; position?: number; owner?: string | null; done?: boolean }) =>
       submitMutation(M('PATCH', `/api/tasks/${id}`, patch)),
     remove: (id: ID) => submitMutation(M('DELETE', `/api/tasks/${id}`)),
     deleteOrphans: (homeTabId: ID, keepIds: ID[]) =>
@@ -212,6 +212,16 @@ export const api = {
     // Beacon: mark myself present on the board. Best-effort — swallow errors so a failed
     // ping never surfaces to the user.
     seen: (tabId: ID) => req(`/api/tabs/${tabId}/seen`, { method: 'POST' }).catch(() => undefined),
+  },
+  history: {
+    // Per-object change timeline (Layer A). Editor+ on the item's board (read → live).
+    task: (id: ID) => req<{ entries: HistoryEntry[] }>(`/api/tasks/${id}/history`),
+    tab: (id: ID) => req<{ entries: HistoryEntry[] }>(`/api/tabs/${id}/history`),
+  },
+  trash: {
+    // A board's soft-deleted tasks + restore (recoverability, §G). Editor+ (read/act → live).
+    list: (tabId: ID) => req<{ tasks: TrashedTask[] }>(`/api/tabs/${tabId}/trash`),
+    restore: (id: ID) => req(`/api/tasks/${id}/restore`, { method: 'POST' }),
   },
   admin: {
     users: () => req<{ users: AdminUser[] }>('/api/admin/users'),
@@ -259,10 +269,33 @@ export interface AuditEntry {
   action: string;
   targetType: string | null;
   targetId: string | null;
+  scopeId: string | null;
   method: string | null;
   status: number | null;
   createdAt: string;
   payload: unknown;
+}
+
+/** One row of a per-object history timeline (Layer A). Actor-scoped projection of the audit log. */
+export interface HistoryEntry {
+  id: ID;
+  actorId: ID | null;
+  actorEmail: string | null;
+  action: string;
+  payload: unknown;
+  createdAt: string;
+}
+
+/** A trashed (soft-deleted) task shown in the Trash view. */
+export interface TrashedTask {
+  id: ID;
+  text: string;
+  lastTitle: string | null; // retained non-empty title, for tasks emptied before deletion
+  status: string;
+  assigneeId: ID | null;
+  deletedAt: string | null;
+  deletedBy: ID | null;
+  deleterEmail: string | null;
 }
 
 function auditQuery(p: AuditParams): string {
