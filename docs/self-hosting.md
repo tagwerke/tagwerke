@@ -1,7 +1,7 @@
 # Self-hosting do-app
 
 Stand up your own private do-app instance in a few minutes on a single machine. All data
-stays on your server — see [DATA_RESIDENCY.md](DATA_RESIDENCY.md).
+stays on your server — see [data-residency.md](data-residency.md).
 
 ## Requirements
 
@@ -50,7 +50,6 @@ The first signups are regular members. To mint invites from the in-app admin pan
 of the CLI) and manage users, promote your account:
 
 ```bash
-docker compose exec app npm run -s start >/dev/null 2>&1 # (already running; skip)
 docker compose exec app npx tsx server/scripts/promote-admin.ts your@email.com
 ```
 
@@ -101,15 +100,34 @@ npm run build
 npm run start        # migrates, then serves dist/ + /api on PORT (default 5174)
 ```
 
+## Security & compliance features
+
+- **SSO via OIDC** (Authorization Code + PKCE): configured in-app from the admin console —
+  works with Keycloak, Authentik, Entra ID, Okta, or any standards-compliant IdP. Supports
+  domain-gated just-in-time provisioning and an enforced-SSO mode (password login disabled,
+  with a lockout-proof fallback). Local email/password auth always remains available as a
+  deployment option — you are never forced into an external IdP.
+- **Two-factor auth:** TOTP (authenticator apps) and **WebAuthn passkeys**.
+- **Audit log:** append-only, covers every mutating API call, with field-level diffs for
+  content edits. Admins can view and export it from the admin console. Retention pruning:
+  `docker compose exec app npm run prune-audit` (default keeps 12 months; run it from cron
+  until scheduled retention ships).
+- **Per-object history** (task/board timelines) and **soft-delete with trash + restore**
+  for tasks (30-day default purge).
+- **Admin console** behind a sudo step-up (re-authentication for sensitive actions).
+
 ## Notes & current limitations
 
-- **Air-gapped:** after the images are built/pulled once, the stack makes no outbound calls.
-  To deploy on an isolated network, build the images on a connected machine and transfer
-  them (e.g. `docker save` / `docker load`).
+- **Air-gapped:** the app makes **no outbound calls by default** — no telemetry, no
+  license checks. Two optional features do reach out *if you configure them*: SMTP (password
+  reset email, to the server you specify) and OIDC SSO (to your IdP). Leave both
+  unconfigured for a fully isolated deployment: after the images are built/pulled once, the
+  stack runs air-gapped. To deploy on an isolated network, build the images on a connected
+  machine and transfer them (e.g. `docker save` / `docker load`).
 - **Concurrent same-board editing** is last-write-wins today (no real-time merge). Fine for
   typical small-team workflows; avoid two people editing the *same* board's text at the
   exact same moment until real-time sync ships.
-- **Not yet included** (roadmap for regulated buyers): SSO (SAML/OIDC), audit logging,
-  finer-grained RBAC. See [DATA_RESIDENCY.md](DATA_RESIDENCY.md).
+- **Not yet included** (roadmap): SAML, SCIM provisioning, custom roles beyond the built-in
+  viewer/editor/admin. See [data-residency.md](data-residency.md).
 - TLS: terminate HTTPS at a reverse proxy in front of the app (Caddy/Traefik/nginx) for
   production; the app sets Secure cookies when `NODE_ENV=production`.

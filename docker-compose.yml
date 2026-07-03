@@ -6,8 +6,9 @@
 #
 # Two containers only: the app and its Postgres. Postgres is NOT published to the
 # host — all data stays inside the compose network + a local named volume. The app
-# makes no outbound network calls, so this runs fully air-gapped once images are
-# pulled. See SELF_HOSTING.md and DATA_RESIDENCY.md.
+# makes no outbound network calls by default (SMTP/OIDC only if you configure them),
+# so this runs fully air-gapped once images are pulled.
+# See docs/self-hosting.md and docs/data-residency.md.
 
 services:
   db:

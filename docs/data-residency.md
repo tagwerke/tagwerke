@@ -2,19 +2,22 @@
 
 Plain-language statement of where your data lives and what leaves your server. This is
 the document to hand to a security reviewer or attach to a DPA. It describes the
-**self-hosted** deployment (`docker compose`, see [SELF_HOSTING.md](SELF_HOSTING.md)).
+**self-hosted** deployment (`docker compose`, see [self-hosting.md](self-hosting.md)).
 
 ## Short version
 
 **All of your data stays on the machine you run do-app on. Nothing is sent to do-app's
 authors, to any analytics service, or to any third party. The application makes no
-outbound network calls during normal operation.** If you run it on a server in your own
-jurisdiction, your data is in your jurisdiction, under your legal control.
+outbound network calls during normal operation** — with two optional, self-configured
+exceptions (your SMTP server and your OIDC identity provider, if you enable them; see
+below). If you run it on a server in your own jurisdiction, your data is in your
+jurisdiction, under your legal control.
 
 ## Where data lives
 
 - **Everything is in one PostgreSQL database** — users, sessions, boards/tabs, tasks,
-  TODAY plans, snapshots, invites, board membership. There is no second datastore.
+  planner time blocks, calendar events, invites, board membership, the audit log, and
+  passkey credentials. There is no second datastore.
 - In the Docker Compose setup, Postgres writes to a **local named volume**
   (`doapp-db`) on your host disk. It does not leave the box.
 - The database container is **not published to the host network** (no `ports:` on the
@@ -29,8 +32,13 @@ jurisdiction, your data is in your jurisdiction, under your legal control.
   or logged in plaintext.
 - **Outbound: none required.** do-app contains no telemetry, no analytics, no
   "phone-home", no license check, and no third-party API calls. After the container
-  images are pulled once, the stack **runs fully air-gapped**.
-- The only time the network is used to reach the public internet is when you *first
+  images are pulled once, the stack **runs fully air-gapped** in its default
+  configuration.
+- **Optional outbound, only if you enable it:** (1) **SMTP** — password-reset emails go
+  to the mail server *you* configure (`SMTP_HOST`); (2) **OIDC SSO** — login redirects
+  and token exchange go to the identity provider *you* configure from the admin console.
+  Both are off by default; neither sends task/board content anywhere.
+- The only other time the network reaches the public internet is when you *first
   build/pull* the Docker images (`node`, `postgres`, npm packages). You can do this on a
   connected machine and move the images to an isolated network.
 
@@ -43,22 +51,45 @@ jurisdiction, your data is in your jurisdiction, under your legal control.
 ## Accounts & access
 
 - **Registration is closed by default.** New accounts require an invite code minted by an
-  operator (`docker compose exec app npm run invite`). There is no open sign-up.
+  operator (`docker compose exec app npm run invite`), or — if you enable OIDC SSO —
+  domain-gated just-in-time provisioning from your own identity provider. There is no
+  open sign-up.
+- **Authentication:** local email/password (Argon2id) with optional TOTP 2FA and WebAuthn
+  passkeys, and/or OIDC SSO (Authorization Code + PKCE) against your IdP, including an
+  enforced-SSO mode that disables password login.
 - Per-board access is role-based (viewer / editor / admin); a platform `admin` role mints
-  invites and reaches the admin panel.
+  invites and reaches the admin console, which is additionally protected by a sudo
+  step-up (fresh re-authentication).
+- **Audit log:** every mutating API call is recorded in an append-only log with
+  field-level diffs for content edits; admins can review and export it. Per-object
+  history is visible in-app. Retention is configurable via a prune command
+  (12-month default).
 
 ## Backup, restore, and portability
 
 - Your data is a standard PostgreSQL database — back it up and move it with ordinary
-  `pg_dump` / `pg_restore`. Exact commands are in [SELF_HOSTING.md](SELF_HOSTING.md#backup--restore).
+  `pg_dump` / `pg_restore`. Exact commands are in [self-hosting.md](self-hosting.md#backup--restore).
 - Because everything is one Postgres DB, a backup is a single dump file you control.
+- Per-user GDPR tooling exists as operator commands: `npm run export-user` (full JSON
+  export, Art. 20) and `npm run erase-user` (erasure, Art. 17).
+
+## Sub-processors
+
+None by design. do-app's authors process none of your data — you are the operator. The
+only parties that touch data in a self-hosted deployment are the ones **you** choose to
+configure: your SMTP provider (reset emails: recipient addresses only) and your OIDC
+identity provider (authentication identities only).
 
 ## Current limitations (honest)
 
-- **No audit log, SSO/SAML/OIDC, or SCIM yet.** These are on the roadmap for regulated
-  buyers; if your compliance process requires them, talk to us before deploying.
+- **No SAML or SCIM yet.** OIDC SSO, TOTP 2FA, passkeys, and audit logging are included
+  (see above). If your compliance process requires SAML or SCIM provisioning
+  specifically, talk to us before deploying.
 - **Encryption at rest** is whatever your host/volume provides (e.g. an encrypted disk);
-  do-app does not add application-level field encryption.
+  do-app does not add application-level field encryption. Encryption in transit is your
+  reverse proxy's TLS (see [self-hosting.md](self-hosting.md)).
 - **Concurrent editing** of the same board by multiple people at the same moment is
   last-write-wins today (no real-time merge). Fine for typical small-team use; see
-  [SELF_HOSTING.md](SELF_HOSTING.md) notes.
+  [self-hosting.md](self-hosting.md) notes.
+- **Audit retention pruning is a manual command** (`npm run prune-audit`) — schedule it
+  from cron; in-app scheduled retention is on the roadmap.
