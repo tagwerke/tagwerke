@@ -12,10 +12,12 @@ import { fieldLabel, USER_FIELDS } from '../util/audit';
 type Kind = 'task' | 'tab';
 
 /** Humanize an audit action token into a short verb phrase. */
-function actionVerb(action: string): string {
-  if (action.startsWith('PUT')) return 'created';
+function actionVerb(action: string, payload: unknown): string {
+  // A PUT is a create only when it carried a `created` marker; otherwise it's a replace/edit.
+  if (action.startsWith('PUT')) return payload && typeof payload === 'object' && 'created' in payload ? 'created' : 'edited';
   if (action.startsWith('PATCH')) return 'edited';
   if (action.startsWith('DELETE')) return 'deleted';
+  if (action === 'task_restore') return 'restored';
   if (action === 'task_approved') return 'approved';
   if (action === 'board_settings_change') return 'changed board settings';
   return action;
@@ -77,6 +79,10 @@ export function HistoryDrawer({ kind, id, boardId, title, onClose }: { kind: Kin
       const s = p.snapshot as Record<string, unknown>;
       return <div className="history-detail">was “{String(s.text ?? s.name ?? '')}”</div>;
     }
+    if (p.created && typeof p.created === 'object') {
+      const c = p.created as Record<string, unknown>;
+      return c.text ? <div className="history-detail">as “{String(c.text)}”</div> : null;
+    }
     return null;
   }
 
@@ -95,7 +101,7 @@ export function HistoryDrawer({ kind, id, boardId, title, onClose }: { kind: Kin
             <li key={e.id} className="history-entry">
               <div className="history-line">
                 <span className="history-actor" title={e.actorEmail ?? undefined}>{e.actorEmail?.split('@')[0] ?? e.actorId ?? 'system'}</span>
-                <span className="history-verb">{actionVerb(e.action)}</span>
+                <span className="history-verb">{actionVerb(e.action, e.payload)}</span>
                 <span className="history-time" title={e.createdAt}>{timeAgo(e.createdAt)}</span>
               </div>
               {details(e.payload)}
