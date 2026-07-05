@@ -9,7 +9,7 @@
 //                            (IndexedDB snapshot + durable write outbox).
 //
 // Bump CACHE to invalidate old precaches on deploy.
-const CACHE = 'do-shell-v1';
+const CACHE = 'tagwerke-shell-v1';
 const PRECACHE = ['/', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {

@@ -24,7 +24,7 @@ export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
     <header className="topbar">
       <button className="brand" onClick={onHome} aria-label="Home">
         <span className="brand-mark" />
-        <span className="brand-name">do</span>
+        <span className="brand-name">Tagwerke</span>
       </button>
 
       <OfflinePill />

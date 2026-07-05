@@ -110,7 +110,7 @@ export async function eventRoutes(app: FastifyInstance): Promise<void> {
       start: b.data.start ?? null,
       end: b.data.end ?? null,
       rrule: b.data.rrule ?? null,
-      uid: `${eventId}@do-app`, // portable iCal identity
+      uid: `${eventId}@tagwerke`, // portable iCal identity
       createdBy: req.user!.id, // attribution (previously untracked)
     });
     return reply.code(201).send({ ok: true, id: eventId });

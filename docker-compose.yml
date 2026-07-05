@@ -1,4 +1,4 @@
-# do-app — one-command self-host stack.
+# Tagwerke — one-command self-host stack.
 #
 #   1. cp .env.example .env   &&   edit .env (set SESSION_SECRET + POSTGRES_PASSWORD)
 #   2. docker compose up -d --build
@@ -15,13 +15,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-doapp}
+      POSTGRES_USER: ${POSTGRES_USER:-tagwerke}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-do_app}
+      POSTGRES_DB: ${POSTGRES_DB:-tagwerke}
     volumes:
-      - doapp-db:/var/lib/postgresql/data
+      - tagwerke-db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-doapp} -d ${POSTGRES_DB:-do_app}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tagwerke} -d ${POSTGRES_DB:-tagwerke}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,7 +35,7 @@ services:
         condition: service_healthy
     environment:
       # Assembled from POSTGRES_* so you set the password in one place.
-      DATABASE_URL: postgres://${POSTGRES_USER:-doapp}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-do_app}
+      DATABASE_URL: postgres://${POSTGRES_USER:-tagwerke}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tagwerke}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       NODE_ENV: production
       PORT: "5174"
@@ -59,4 +59,4 @@ services:
       start_period: 20s
 
 volumes:
-  doapp-db:
+  tagwerke-db:

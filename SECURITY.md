@@ -4,7 +4,7 @@
 
 Please report suspected vulnerabilities **privately**:
 
-- Email: **kirill.k.knyazev@gmail.com** with subject line `[SECURITY] do-app`
+- Email: **kirill.k.knyazev@gmail.com** with subject line `[SECURITY] Tagwerke`
 - Or use GitHub's private vulnerability reporting ("Report a vulnerability" under the
   Security tab) once the repository is public.
 
@@ -38,7 +38,7 @@ What to expect:
   configuration; optional outbound is limited to the SMTP server and OIDC IdP *you*
   configure. See [docs/data-residency.md](docs/data-residency.md).
 - Encryption in transit is terminated at your reverse proxy (TLS); encryption at rest is
-  provided by your host/volume. do-app does not add application-level field encryption.
+  provided by your host/volume. Tagwerke does not add application-level field encryption.
 
 ## Hardening recommendations
 

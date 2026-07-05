@@ -1,4 +1,4 @@
-# Data Residency & Privacy — do-app
+# Data Residency & Privacy — Tagwerke
 
 Plain-language statement of where your data lives and what leaves your server. This is
 the document to hand to a security reviewer or attach to a DPA. It describes the
@@ -6,7 +6,7 @@ the document to hand to a security reviewer or attach to a DPA. It describes the
 
 ## Short version
 
-**All of your data stays on the machine you run do-app on. Nothing is sent to do-app's
+**All of your data stays on the machine you run Tagwerke on. Nothing is sent to Tagwerke's
 authors, to any analytics service, or to any third party. The application makes no
 outbound network calls during normal operation** — with two optional, self-configured
 exceptions (your SMTP server and your OIDC identity provider, if you enable them; see
@@ -19,7 +19,7 @@ jurisdiction, under your legal control.
   planner time blocks, calendar events, invites, board membership, the audit log, and
   passkey credentials. There is no second datastore.
 - In the Docker Compose setup, Postgres writes to a **local named volume**
-  (`doapp-db`) on your host disk. It does not leave the box.
+  (`tagwerke-db`) on your host disk. It does not leave the box.
 - The database container is **not published to the host network** (no `ports:` on the
   `db` service) — only the app container can reach it, over the private compose network.
 - The app container holds **no persistent state** of its own; it can be destroyed and
@@ -30,7 +30,7 @@ jurisdiction, under your legal control.
 - **Inbound:** browser → the app on the port you publish (default `5174`). Session
   auth is a signed, HttpOnly cookie; passwords are hashed with Argon2id and never stored
   or logged in plaintext.
-- **Outbound: none required.** do-app contains no telemetry, no analytics, no
+- **Outbound: none required.** Tagwerke contains no telemetry, no analytics, no
   "phone-home", no license check, and no third-party API calls. After the container
   images are pulled once, the stack **runs fully air-gapped** in its default
   configuration.
@@ -75,7 +75,7 @@ jurisdiction, under your legal control.
 
 ## Sub-processors
 
-None by design. do-app's authors process none of your data — you are the operator. The
+None by design. Tagwerke's authors process none of your data — you are the operator. The
 only parties that touch data in a self-hosted deployment are the ones **you** choose to
 configure: your SMTP provider (reset emails: recipient addresses only) and your OIDC
 identity provider (authentication identities only).
@@ -86,7 +86,7 @@ identity provider (authentication identities only).
   (see above). If your compliance process requires SAML or SCIM provisioning
   specifically, talk to us before deploying.
 - **Encryption at rest** is whatever your host/volume provides (e.g. an encrypted disk);
-  do-app does not add application-level field encryption. Encryption in transit is your
+  Tagwerke does not add application-level field encryption. Encryption in transit is your
   reverse proxy's TLS (see [self-hosting.md](self-hosting.md)).
 - **Concurrent editing** of the same board by multiple people at the same moment is
   last-write-wins today (no real-time merge). Fine for typical small-team use; see

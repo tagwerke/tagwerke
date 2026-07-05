@@ -1,4 +1,4 @@
-// Thin HTTP client for the do-app backend. All calls are same-origin (Vite proxies
+// Thin HTTP client for the Tagwerke backend. All calls are same-origin (Vite proxies
 // /api -> the Fastify server) and carry the session cookie.
 //
 // Offline-critical mutations (tasks, tab docs, projects, tabs, time blocks) are

@@ -166,7 +166,7 @@ export function AuthScreen() {
   return (
     <div className="auth-screen">
       <form className="auth-card" onSubmit={submit}>
-        <h1 className="auth-title">do</h1>
+        <h1 className="auth-title">Tagwerke</h1>
         <p className="auth-sub">{title}</p>
 
         {showEmail && (

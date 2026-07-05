@@ -1,10 +1,10 @@
-# Contributing to do-app
+# Contributing to Tagwerke
 
 Thanks for your interest! A few ground rules keep contributions smooth for everyone.
 
 ## Developer Certificate of Origin (DCO) — required
 
-do-app is licensed under the Business Source License 1.1 (converting to Apache 2.0 per
+Tagwerke is licensed under the Business Source License 1.1 (converting to Apache 2.0 per
 release — see [LICENSE](LICENSE)). To keep the project's licensing unambiguous, every
 commit must be **signed off** under the
 [Developer Certificate of Origin 1.1](https://developercertificate.org/):

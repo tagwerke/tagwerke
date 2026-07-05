@@ -1,4 +1,4 @@
-# do-app
+# Tagwerke
 
 **The self-hosted team workspace where work is text-first and lives once.** Type your
 tasks like text, reference them everywhere — boards, the day planner, search all show the
@@ -22,7 +22,7 @@ jurisdiction.
 ## Quick start
 
 ```bash
-git clone <repo-url> do-app && cd do-app
+git clone <repo-url> tagwerke && cd tagwerke
 cp .env.example .env        # set SESSION_SECRET + POSTGRES_PASSWORD
 docker compose up -d --build
 docker compose exec app npm run invite   # mint your first signup invite
@@ -44,19 +44,19 @@ Full guide (backup/restore, upgrades, SSO, running without Docker):
 
 ## Status & honest limitations
 
-do-app is young and moving fast. Today: no real-time multi-user sync (edits appear on
+Tagwerke is young and moving fast. Today: no real-time multi-user sync (edits appear on
 refresh; concurrent same-board editing is last-write-wins), no SAML/SCIM, no importers
 yet. See [docs/self-hosting.md](docs/self-hosting.md#notes--current-limitations) for the
 full list — we'd rather you read it here than discover it in week two.
 
 ## Licensing
 
-do-app is **source-available** under the Business Source License 1.1 (see
+Tagwerke is **source-available** under the Business Source License 1.1 (see
 [LICENSE](LICENSE)):
 
 - **Free:** self-host it in production for your own organization — all features,
   including SSO and the audit log. No seat limits, no feature gates on what's here today.
-- **Not allowed:** offering do-app to third parties as a hosted/managed service.
+- **Not allowed:** offering Tagwerke to third parties as a hosted/managed service.
 - **Becomes open source:** each version automatically converts to **Apache 2.0** four
   years after release.
 

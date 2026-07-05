@@ -1,4 +1,4 @@
-// Drizzle schema for do-app. Normalized, multi-user. Access derives from
+// Drizzle schema for Tagwerke. Normalized, multi-user. Access derives from
 // `board_members` (a tab/board is shared content; per-user view state + role live on
 // the membership row); `tasks` are scoped via their `home_tab_id`. The legacy
 // per-row `user_id`/`project_id`/`starred`/`position` columns on `tabs`/`tasks` were

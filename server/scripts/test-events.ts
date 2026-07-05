@@ -26,7 +26,7 @@ async function main() {
   // Weekly event starting "today".
   const start = new Date(new Date().toISOString().slice(0, 10) + 'T18:00:00.000Z');
   const eventId = nanoid();
-  await db.insert(schema.events).values({ id: eventId, tabId: board.id, start: start.toISOString(), rrule: 'FREQ=WEEKLY', uid: `${eventId}@do-app` });
+  await db.insert(schema.events).values({ id: eventId, tabId: board.id, start: start.toISOString(), rrule: 'FREQ=WEEKLY', uid: `${eventId}@tagwerke` });
 
   try {
     // Expand the next 60 days — weekly should yield ~8-9 occurrences.

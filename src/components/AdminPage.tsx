@@ -68,7 +68,7 @@ export function AdminPage() {
     return (
       <div className="admin-page">
         <form className="admin-sudo auth-card" onSubmit={elevate}>
-          <h1 className="auth-title">do</h1>
+          <h1 className="auth-title">Tagwerke</h1>
           <p className="auth-sub">Confirm it’s you to manage the workspace</p>
           <label className="auth-field">
             <span>password</span>

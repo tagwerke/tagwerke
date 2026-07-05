@@ -1,6 +1,6 @@
-# Self-hosting do-app
+# Self-hosting Tagwerke
 
-Stand up your own private do-app instance in a few minutes on a single machine. All data
+Stand up your own private Tagwerke instance in a few minutes on a single machine. All data
 stays on your server — see [data-residency.md](data-residency.md).
 
 ## Requirements
@@ -13,7 +13,7 @@ stays on your server — see [data-residency.md](data-residency.md).
 
 ```bash
 # 1. Get the code
-git clone <your-do-app-repo-url> do-app && cd do-app
+git clone <your-tagwerke-repo-url> tagwerke && cd tagwerke
 
 # 2. Configure secrets
 cp .env.example .env
@@ -59,7 +59,7 @@ docker compose exec app npx tsx server/scripts/promote-admin.ts your@email.com
 |---|---|---|
 | `app` | Fastify server: serves the web UI **and** the `/api`; applies DB migrations on boot | Yes — host port `APP_PORT` (default **5174**) |
 | `db`  | PostgreSQL 16 — all persistent data | **No** — internal to the compose network only |
-| volume `doapp-db` | Postgres data directory on your host disk | local only |
+| volume `tagwerke-db` | Postgres data directory on your host disk | local only |
 
 Health check: `GET http://<host>:5174/health` returns `{ "ok": true }` when the app and DB
 are up (used by the container healthcheck).
@@ -76,7 +76,7 @@ docker compose exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup.sq
 cat backup.sql | docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 ```
 
-(`$POSTGRES_USER` / `$POSTGRES_DB` default to `doapp` / `do_app` — match your `.env`.)
+(`$POSTGRES_USER` / `$POSTGRES_DB` default to `tagwerke` / `tagwerke` — match your `.env`.)
 Store `backup.sql` wherever your retention policy requires; it never leaves your control.
 
 ## Upgrades

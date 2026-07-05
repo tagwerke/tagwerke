@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to do-app are documented here. The format follows
+All notable changes to Tagwerke are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) (0.x: minor bumps may include breaking
 changes, called out explicitly). Database migrations are forward-only and apply
