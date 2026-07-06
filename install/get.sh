@@ -253,6 +253,15 @@ else
   fi
 fi
 
+# From here on, .env is the single source of truth for where the app lives —
+# a re-run must poll and print the EXISTING deployment, not this run's defaults.
+env_get() { sed -n "s/^$1=//p" .env | head -n1; }
+APP_URL="$(env_get APP_URL)"
+case "$APP_URL" in
+  https://*) MODE="tls"; HOST="$(env_get TAGWERKE_HOST)" ;;
+  *)         MODE="http"; TAGWERKE_PORT="$(env_get APP_PORT)"; [ -n "$TAGWERKE_PORT" ] || TAGWERKE_PORT=5174 ;;
+esac
+
 # ---- optional: age backup key (opt-in) ----------------------------------------
 if [ "$TAGWERKE_BACKUP_KEY" = "1" ] && ! grep -q '^BACKUP_AGE_RECIPIENT=age1' .env 2>/dev/null; then
   step 5/7 "Backup encryption key (age)"

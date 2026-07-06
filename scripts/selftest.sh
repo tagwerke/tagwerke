@@ -8,9 +8,11 @@
 # Tagwerke, your data, or your ./backups), then:
 #
 #   1. waits for the app to come up healthy on a fresh database,
-#   2. waits for the built-in automatic backup to fire (~30s after boot),
-#   3. runs scripts/restore-drill.sh against that backup,
-#   4. tears everything down, volume included.
+#   2. proves the scheme-aware session cookie: login works over plain http
+#      (cookie not Secure), and behind an https proxy the cookie IS Secure,
+#   3. waits for the built-in automatic backup to fire (~30s after boot),
+#   4. runs scripts/restore-drill.sh against that backup,
+#   5. tears everything down, volume included.
 #
 # Exit 0 = install → automatic backup → verified restore all work HERE, on your
 # hardware. Run it before first go-live and after upgrades. ~2-5 min (first run
@@ -50,10 +52,10 @@ services:
       - ./.selftest/backups:/app/backups
 EOF
 
-echo "[1/4] building + starting throwaway stack (project: $PROJECT, port: $PORT)..."
+echo "[1/5] building + starting throwaway stack (project: $PROJECT, port: $PORT)..."
 compose up -d --build --quiet-pull
 
-echo "[2/4] waiting for app health..."
+echo "[2/5] waiting for app health..."
 for i in $(seq 1 30); do
   if curl -fsS "http://localhost:$PORT/health" >/dev/null 2>&1; then break; fi
   [ "$i" = 30 ] && { echo "ERROR: app never became healthy — logs:" >&2; compose logs app | tail -30 >&2; exit 1; }
@@ -61,7 +63,30 @@ for i in $(seq 1 30); do
 done
 echo "  ok: /health is green on a fresh database"
 
-echo "[3/4] waiting for the automatic backup (fires ~30s after boot)..."
+echo "[3/5] scheme-aware session cookie (http login works; https proxy gets Secure)..."
+CODE="$(compose exec -T app npm run --silent invite | sed -n 's/.*invite code:[[:space:]]*//p' | head -n1 | tr -d '[:space:]')"
+[ -n "$CODE" ] || { echo "ERROR: could not mint an invite for the cookie check" >&2; exit 1; }
+HDRS="$(curl -si -X POST "http://localhost:$PORT/api/auth/signup" \
+  -H 'content-type: application/json' \
+  -d '{"email":"selftest@example.com","password":"selftest-password-1","inviteCode":"'"$CODE"'"}')"
+COOKIE_LINE="$(printf '%s' "$HDRS" | grep -i '^set-cookie: do_session' || true)"
+if [ -z "$COOKIE_LINE" ]; then
+  echo "ERROR: signup set no session cookie — response was:" >&2
+  printf '%s\n' "$HDRS" | head -12 >&2
+  exit 1
+fi
+if printf '%s' "$COOKIE_LINE" | grep -qi 'secure'; then
+  echo "ERROR: session cookie marked Secure over plain http — first-run login would silently fail" >&2
+  exit 1
+fi
+HDRS="$(curl -si -X POST "http://localhost:$PORT/api/auth/login" \
+  -H 'content-type: application/json' -H 'X-Forwarded-Proto: https' \
+  -d '{"email":"selftest@example.com","password":"selftest-password-1"}')"
+printf '%s' "$HDRS" | grep -i '^set-cookie: do_session' | grep -qi 'secure' \
+  || { echo "ERROR: session cookie NOT marked Secure behind an https proxy" >&2; exit 1; }
+echo "  ok: cookie is Secure exactly when the request arrived over https"
+
+echo "[4/5] waiting for the automatic backup (fires ~30s after boot)..."
 DUMP=""
 for i in $(seq 1 45); do
   DUMP="$(ls "$TESTDIR"/backups/tagwerke-*.dump 2>/dev/null | head -1 || true)"
@@ -71,9 +96,9 @@ for i in $(seq 1 45); do
 done
 echo "  ok: automatic backup written: $DUMP"
 
-echo "[4/4] restore drill on the automatic backup..."
+echo "[5/5] restore drill on the automatic backup..."
 bash scripts/restore-drill.sh "$DUMP"
 
 echo
-echo "SELF-TEST PASSED — on this machine: fresh install boots, backs itself up"
-echo "automatically, and that backup provably restores."
+echo "SELF-TEST PASSED — on this machine: fresh install boots, login cookies are"
+echo "scheme-aware, it backs itself up automatically, and that backup provably restores."
