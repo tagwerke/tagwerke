@@ -17,10 +17,11 @@ dist-ssr
 .env.*
 !.env.example
 
-# Private material — never commit (purged from history 2026-07-02)
+# Private research / internal material (any folder, any depth)
 research/
-research-v2/
-research-v3/
+research-*/
+**/research/
+**/research-*/
 internal/
 backups/
 verify-out/
@@ -38,3 +39,4 @@ knyazev.ca*
 *.sln
 *.sw?
 .claude/settings.local.json
+.selftest/

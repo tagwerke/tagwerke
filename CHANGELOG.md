@@ -43,6 +43,17 @@ First public, versioned release.
 - Two-container `docker compose` stack (app + Postgres): named volume, healthchecks,
   `restart: unless-stopped`, `/health` endpoint, migrations auto-apply on boot.
 - No telemetry, no phone-home; air-gap-clean in the default configuration.
+- **Automatic daily backups, on by default**: the server dumps its whole database
+  (full `pg_dump -Fc`, every table, with a row-count manifest and optional age
+  encryption) to a host-mounted `./backups/` folder — separate from the database
+  volume — and prunes past `BACKUP_KEEP`. No setup, no cron; opt out with
+  `BACKUP_DISABLED=true`. Nothing is ever uploaded anywhere.
+- Backup tooling: `scripts/backup.sh` takes the same backup on demand;
+  `scripts/restore-drill.sh` restores any dump into a throwaway container and
+  verifies completeness (tables, migrations journal, row counts) — cron-friendly,
+  exits non-zero on a bad backup; `scripts/selftest.sh` proves the whole loop
+  (fresh install → automatic backup → verified restore) in one command on an
+  isolated throwaway stack.
 - Docs: self-hosting guide (backup/restore, upgrades) and data-residency statement.
 
 ### Known limitations

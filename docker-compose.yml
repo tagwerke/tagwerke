@@ -12,7 +12,7 @@
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tagwerke}
@@ -49,6 +49,14 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      # Automatic daily backups (on by default; see docs/self-hosting.md).
+      BACKUP_DISABLED: ${BACKUP_DISABLED:-}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+    volumes:
+      # Automatic backups land here, on the host — outside the db volume on
+      # purpose, so losing one never loses both. Copy them off-site yourself.
+      - ./backups:/app/backups
     ports:
       - "${APP_PORT:-5174}:5174"
     healthcheck:

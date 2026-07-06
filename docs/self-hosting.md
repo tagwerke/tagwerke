@@ -41,11 +41,23 @@ docker compose exec app npm run invite
 # 5. Open the app
 #    http://<your-server>:5174   (or http://localhost:5174 locally)
 #    Sign up with the invite code from step 4. You're in.
+
+# 6. Backups are automatic — the app dumps its whole database to ./backups
+#    daily, starting shortly after first boot. Two things stay yours:
+#    (a) recommended: encrypt them — set BACKUP_AGE_RECIPIENT in .env
+#        (~5 minutes, see "Backup & restore" below);
+#    (b) copy ./backups off the server on your own schedule.
+#    Then prove the whole loop once — boots a throwaway copy of the stack,
+#    waits for its automatic backup, verifies it restores, cleans up (~3 min):
+./scripts/selftest.sh
 ```
 
 That's it. The database schema is created/migrated automatically on first boot.
+Don't skip step 6's drill — a Tagwerke instance isn't production-ready until a
+backup has been taken **and proven to restore**.
 
 ### Make yourself a platform admin (optional)
+
 The first signups are regular members. To mint invites from the in-app admin panel (instead
 of the CLI) and manage users, promote your account:
 
@@ -56,9 +68,9 @@ docker compose exec app npx tsx server/scripts/promote-admin.ts your@email.com
 ## What's running
 
 | Service | Purpose | Exposed? |
-|---|---|---|
+| --- | --- | --- |
 | `app` | Fastify server: serves the web UI **and** the `/api`; applies DB migrations on boot | Yes — host port `APP_PORT` (default **5174**) |
-| `db`  | PostgreSQL 16 — all persistent data | **No** — internal to the compose network only |
+| `db` | PostgreSQL 17 — all persistent data | **No** — internal to the compose network only |
 | volume `tagwerke-db` | Postgres data directory on your host disk | local only |
 
 Health check: `GET http://<host>:5174/health` returns `{ "ok": true }` when the app and DB
@@ -66,18 +78,115 @@ are up (used by the container healthcheck).
 
 ## Backup & restore
 
-Everything is one Postgres database, so a backup is a single dump file.
+Everything is one Postgres database, so a backup is a single dump file — always a **full**
+dump of every table (including the audit log). A word of caution before the commands: the
+dump contains password hashes, 2FA secrets, and session data. **An unencrypted backup is
+exactly as sensitive as your live database** — encrypt it before it leaves the host.
+
+### Automatic backups (built in, on by default)
+
+The app backs itself up: a full dump of every table is written to `./backups/`
+shortly after first boot and then daily, with the oldest pruned past `BACKUP_KEEP`
+(default 14). There is nothing to configure and no cron to add. If backups ever
+stop (misconfiguration, missing `pg_dump` on a non-Docker install), the server
+logs an error on every hourly check — watch your logs.
+
+Opt out with `BACKUP_DISABLED=true` **only** if you already run your own database
+backup pipeline (pgBackRest, managed-Postgres snapshots, volume snapshots); the
+server then reminds you on every boot that backups are your responsibility.
+
+What the automatic job can't do for you: move the files **off the server** (see
+retention below) and prove they restore (run the drill). Both stay in your hands
+by design — nothing is ever uploaded anywhere.
+
+### Taking a manual backup — `scripts/backup.sh`
+
+Same artifacts as the automatic job, on demand — take one before risky changes,
+or use it as your only mechanism when `BACKUP_DISABLED=true`:
 
 ```bash
-# Backup -> ./backup.sql  (run on the host, in the repo dir)
-docker compose exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup.sql
-
-# Restore into a fresh/empty database
-cat backup.sql | docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+./scripts/backup.sh            # compose deployment
+./scripts/backup.sh --direct   # non-Docker deployment (uses DATABASE_URL)
 ```
 
-(`$POSTGRES_USER` / `$POSTGRES_DB` default to `tagwerke` / `tagwerke` — match your `.env`.)
-Store `backup.sql` wherever your retention policy requires; it never leaves your control.
+Each run writes two files to `./backups/`:
+
+- `tagwerke-<timestamp>.dump` — a `pg_dump` custom-format (`-Fc`) dump of the whole
+  database (compressed; restore with `pg_restore`, selectively or in parallel);
+- `tagwerke-<timestamp>.counts.json` — a manifest of per-table row counts captured at
+  dump time, which the restore drill (below) verifies against.
+
+**Encryption (recommended):** install [age](https://age-encryption.org), run
+`age-keygen -o tagwerke-backup-key.txt` once, and set `BACKUP_AGE_RECIPIENT` in `.env`
+to the printed public key. Backups are then piped straight through `age` — plaintext
+never touches disk — and come out as `.dump.age`. Keep the secret-key file **off the
+server** (password manager or offline copy); you only need it to run the drill or to
+restore. If your organization has standardized on GPG instead, leave
+`BACKUP_AGE_RECIPIENT` unset and encrypt the `.dump` file with your usual GPG workflow.
+
+**Retention:** the script keeps the newest `BACKUP_KEEP` dumps locally (default 14) and
+prunes older ones. Copy backups off the server on your own schedule — a reasonable
+starting policy is *14 daily local, 8 weekly + 12 monthly off-site*, adjusted to your
+retention obligations. For off-site storage under the strictest EU posture, prefer
+EU-owned object storage (Hetzner, Scaleway, OVH); see the backups section of
+[data-residency.md](data-residency.md) for why the provider's *ownership*, not just its
+region, matters.
+
+With automatic backups on (the default) there is nothing to schedule. If you set
+`BACKUP_DISABLED=true` but still want dump files, cron the script yourself:
+
+```cron
+15 3 * * * cd /opt/tagwerke && ./scripts/backup.sh >> backups/backup.log 2>&1
+```
+
+### Verifying backups — `scripts/restore-drill.sh`
+
+A backup you have never restored is a hope, not a backup. The drill restores a dump into
+a throwaway Postgres container (never your live one) and asserts the result is complete:
+every application table present, the migrations journal intact, and every row count
+matching the manifest from dump time. Exit code 0 means the backup restores completely.
+
+```bash
+./scripts/restore-drill.sh backups/tagwerke-<timestamp>.dump      # or .dump.age
+```
+
+For encrypted dumps, set `BACKUP_AGE_IDENTITY` to the path of your age secret-key file.
+Run the drill **after every upgrade and at least monthly** (it is cron-friendly — alert
+on non-zero exit). If you ever dump with client tools *newer* than Postgres 17
+(`--direct` mode with a v18 `pg_dump`, say), point the drill at a matching image:
+`DRILL_PG_IMAGE=postgres:18-alpine ./scripts/restore-drill.sh …`.
+
+There is also a one-command **self-test** that proves the entire loop on your machine
+before you trust it with data: `./scripts/selftest.sh` boots a completely isolated
+throwaway copy of the stack (own compose project, own volume, own backups folder,
+port 5999 — it cannot touch a running Tagwerke), waits for its automatic backup,
+drills it, and tears everything down. Exit 0 means install → automatic backup →
+verified restore all work on your hardware. Run it once before go-live.
+
+### Restoring into production
+
+Restore is deliberately manual — it overwrites the live database:
+
+```bash
+docker compose stop app
+
+# Plain dump:
+docker compose exec -T db pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  --clean --if-exists --no-owner < backups/tagwerke-<timestamp>.dump
+
+# Encrypted dump: decrypt in-stream (plaintext never touches disk)
+age -d -i /path/to/tagwerke-backup-key.txt backups/tagwerke-<timestamp>.dump.age \
+  | docker compose exec -T db pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+      --clean --if-exists --no-owner
+
+docker compose start app   # boot re-verifies migrations against the restored schema
+```
+
+(`$POSTGRES_USER` / `$POSTGRES_DB` default to `tagwerke` / `tagwerke` — match your
+`.env`.) After any production restore, run the drill against your next fresh backup.
+
+Point-in-time recovery (WAL archiving) is beyond this guide; the database is standard
+Postgres 17, so standard tooling (`pgBackRest`, `wal-g`) applies if you need it.
 
 ## Upgrades
 

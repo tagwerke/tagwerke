@@ -68,8 +68,28 @@ jurisdiction, under your legal control.
 ## Backup, restore, and portability
 
 - Your data is a standard PostgreSQL database — back it up and move it with ordinary
-  `pg_dump` / `pg_restore`. Exact commands are in [self-hosting.md](self-hosting.md#backup--restore).
-- Because everything is one Postgres DB, a backup is a single dump file you control.
+  `pg_dump` / `pg_restore`. **Automatic daily backups are built in and on by default**
+  (full dump of every table, written only to a local folder on your server, optionally
+  age-encrypted); `scripts/backup.sh` takes the same backup on demand and
+  `scripts/restore-drill.sh` proves any backup restores. Details in
+  [self-hosting.md](self-hosting.md#backup--restore).
+- **Backups are produced and stored entirely by you.** Tagwerke ships the tooling but is
+  never in the data path: the backup script uploads nothing, phones nothing home, and we
+  have no access to your dumps. Backups therefore inherit the residency guarantee of
+  wherever *you* put them.
+- **Choose off-site storage by ownership, not just region.** A US-owned provider (AWS,
+  Google, Cloudflare) is subject to the US CLOUD Act even when the bucket is in an EU
+  region — a US authority can compel disclosure. If your posture requires data to stay
+  under EU jurisdiction, use EU-owned storage (Hetzner, Scaleway, OVH) or your own
+  infrastructure. Encrypting backups with `age` (supported natively by the backup
+  script) reduces the exposure either way, since the provider only ever holds
+  ciphertext.
+- **Backups and the right to erasure (Art. 17):** `npm run erase-user` removes a person
+  from the live database, but they remain in backups taken before the erasure until
+  those age out of your retention window. This is standard and accepted practice —
+  provided your retention window is finite and stated in your records of processing,
+  and backups are not restored in a way that resurrects erased data (after any
+  production restore, re-run erasures performed since that backup was taken).
 - Per-user GDPR tooling exists as operator commands: `npm run export-user` (full JSON
   export, Art. 20) and `npm run erase-user` (erasure, Art. 17).
 

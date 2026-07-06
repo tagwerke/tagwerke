@@ -24,6 +24,7 @@ import { sudoRoutes } from './routes/sudo.ts';
 import { orgRoutes, ORG_ID } from './routes/org.ts';
 import { activityRoutes } from './routes/activity.ts';
 import { registerAuditHook } from './lib/audit.ts';
+import { startBackupScheduler } from './jobs/backup.ts';
 
 const PORT = Number(process.env.PORT ?? 5174);
 // Bind all interfaces by default so the container is reachable; override with HOST.
@@ -53,6 +54,10 @@ await db
   .insert(schema.org)
   .values({ id: ORG_ID, name: process.env.ORG_NAME ?? 'Workspace' })
   .onConflictDoNothing();
+
+// Automatic daily backups — on by default, local-only, opt-out via
+// BACKUP_DISABLED=true (see server/jobs/backup.ts + docs/self-hosting.md).
+await startBackupScheduler(app.log);
 
 await app.register(cookie, { secret });
 

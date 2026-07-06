@@ -4,7 +4,7 @@
 
 Please report suspected vulnerabilities **privately**:
 
-- Email: **kirill.k.knyazev@gmail.com** with subject line `[SECURITY] Tagwerke`
+- Email: **<kirill.k.knyazev@gmail.com>** with subject line `[SECURITY] Tagwerke`
 - Or use GitHub's private vulnerability reporting ("Report a vulnerability" under the
   Security tab) once the repository is public.
 
@@ -20,7 +20,7 @@ What to expect:
 ## Supported versions
 
 | Version | Supported |
-|---|---|
+| --- | --- |
 | 0.1.x (latest minor) | Yes |
 | Older | Upgrade to latest; migrations are forward-only and automatic |
 
@@ -44,6 +44,9 @@ What to expect:
 
 - Run behind a TLS-terminating reverse proxy; set `NODE_ENV=production` (Secure cookies).
 - Keep Postgres unpublished (the provided compose file already does this).
-- Take a `pg_dump` backup before every upgrade
-  ([docs/self-hosting.md](docs/self-hosting.md#backup--restore)).
+- Backups are automatic (daily, on by default, local-only); still take a manual
+  `./scripts/backup.sh` before every upgrade, and verify with
+  `./scripts/restore-drill.sh` ([docs/self-hosting.md](docs/self-hosting.md#backup--restore)).
+  Treat unencrypted dumps exactly like the live database — they contain credential
+  hashes and 2FA secrets. Set `BACKUP_AGE_RECIPIENT` to encrypt them.
 - Schedule `npm run prune-audit` via cron to enforce your audit-retention policy.
