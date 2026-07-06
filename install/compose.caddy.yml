@@ -1,0 +1,27 @@
+# TLS overlay: Caddy terminates HTTPS in front of the app.
+#
+# Caddy obtains and renews the Let's Encrypt certificate for TAGWERKE_HOST
+# automatically (its one outbound dependency — to the ACME service you chose by
+# enabling TLS), redirects :80 → :443, and proxies to the app over the internal
+# compose network. The app itself is NOT published on any host port in this
+# mode — the only way in is through TLS, so session cookies are always Secure.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      TAGWERKE_HOST: ${TAGWERKE_HOST:?set TAGWERKE_HOST in .env (the domain Caddy serves)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - tagwerke-caddy-data:/data     # certificates + ACME account (persist across restarts)
+      - tagwerke-caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  tagwerke-caddy-data:
+  tagwerke-caddy-config:

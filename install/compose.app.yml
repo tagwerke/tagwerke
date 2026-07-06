@@ -1,0 +1,75 @@
+# Tagwerke — published-image compose (used by the one-command installer).
+#
+# This is the pull-image sibling of the repo-root docker-compose.yml (which
+# builds from source for contributors). Same two services, same env, same
+# volumes — the only difference is `image:` instead of `build:`. Keep the two
+# files in sync when either changes.
+#
+# It is combined with exactly one of:
+#   compose.http.yml   — publish the app on a host port (no-domain / eval mode)
+#   compose.caddy.yml  — add Caddy for automatic HTTPS (domain / sslip.io mode)
+# The installer writes COMPOSE_FILE into .env so plain `docker compose` commands
+# in /opt/tagwerke pick the right combination automatically.
+#
+# See docs/self-hosting.md and docs/data-residency.md.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tagwerke}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-tagwerke}
+    volumes:
+      - tagwerke-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tagwerke} -d ${POSTGRES_DB:-tagwerke}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No `ports:` on purpose — the database is reachable only by the app container.
+
+  app:
+    # Pinned release image, built and provenance-signed by .github/workflows/release.yml.
+    # Verify: gh attestation verify oci://ghcr.io/tagwerke/tagwerke:<version> --owner tagwerke
+    # Upgrade: change TAGWERKE_VERSION in .env, then `docker compose pull && docker compose up -d`.
+    image: ghcr.io/tagwerke/tagwerke:${TAGWERKE_VERSION:?set TAGWERKE_VERSION in .env}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Assembled from POSTGRES_* so you set the password in one place.
+      DATABASE_URL: postgres://${POSTGRES_USER:-tagwerke}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tagwerke}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      NODE_ENV: production
+      PORT: "5174"
+      # Public URL — used in password-reset links and WebAuthn passkey binding.
+      APP_URL: ${APP_URL:-http://localhost:5174}
+      ORG_NAME: ${ORG_NAME:-Workspace}
+      # Email (optional; without it, password-reset emails fail — login is unaffected).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      # Automatic daily backups (on by default; see docs/self-hosting.md).
+      BACKUP_DISABLED: ${BACKUP_DISABLED:-}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+    volumes:
+      # Automatic backups land here, on the host — outside the db volume on
+      # purpose, so losing one never loses both. Copy them off-site yourself.
+      - ./backups:/app/backups
+    # No `ports:` here — the http/caddy overlay decides what is exposed.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5174/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  tagwerke-db:

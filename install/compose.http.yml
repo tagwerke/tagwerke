@@ -1,0 +1,13 @@
+# HTTP-only overlay: publish the app directly on a host port.
+#
+# Used when no domain is configured (quick eval / air-gapped LAN). Login works —
+# the session cookie is only marked Secure when a request arrives over https —
+# but it crosses the wire in clear text. For production, add a domain and switch
+# to compose.caddy.yml (re-run the installer with TAGWERKE_DOMAIN set).
+#
+# In TLS mode this file is NOT loaded, so no plain-http port exists at all.
+
+services:
+  app:
+    ports:
+      - "${APP_PORT:-5174}:5174"
