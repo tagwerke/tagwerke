@@ -13,6 +13,9 @@ RUN npm run build
 
 # ---- runtime: production deps + built assets only ----
 FROM node:22-bookworm-slim AS runtime
+# Links the GHCR package to the source repo (provenance) on push, incl. manual
+# `docker push` (the release workflow's metadata-action sets this in CI too).
+LABEL org.opencontainers.image.source="https://github.com/tagwerke/tagwerke"
 WORKDIR /app
 ENV NODE_ENV=production
 # pg_dump 16 (PGDG repo — bookworm's own client is v15, too old to dump our v16 db)

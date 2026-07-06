@@ -1,0 +1,57 @@
+name: release
+
+# Publish the Tagwerke image to GHCR — ONLY on a version tag (never on ordinary
+# commits), so `ghcr.io/tagwerke/tagwerke:X.Y.Z` is reproducible and pinnable.
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read       # read source
+      packages: write      # push to GHCR via the built-in GITHUB_TOKEN (no PAT)
+      id-token: write       # OIDC token for build provenance
+      attestations: write   # record the signed attestation
+    steps:
+      - uses: actions/checkout@v4
+
+      # Multi-arch: build amd64 + arm64 so ARM VPSes can pull the same tag.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Derive image tags + labels from the git tag. Also sets
+      # org.opencontainers.image.source, which auto-links the package to this repo.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/tagwerke/tagwerke
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}.{{minor}}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # Sign "this exact image digest was built from this source by this run".
+      # Verify:  gh attestation verify oci://ghcr.io/tagwerke/tagwerke:0.1.0 --owner tagwerke
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/tagwerke/tagwerke
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
