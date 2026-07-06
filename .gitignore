@@ -18,6 +18,7 @@ dist-ssr
 !.env.example
 
 # Private research / internal material (any folder, any depth)
+MAP.md
 research/
 research-*/
 **/research/

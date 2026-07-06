@@ -19,10 +19,25 @@ jurisdiction.
 - **Works offline:** installable PWA with a durable write outbox — edit on the train,
   it syncs when you're back.
 
+## How it works
+
+Two containers, one image:
+
+- **app** — a single Node process (Fastify). It serves the web UI **and** the `/api`,
+  applies database migrations on boot, and runs the automatic daily backup job. Built
+  from this repo into one Docker image.
+- **db** — PostgreSQL 17. All persistent data, one database, on a local volume, never
+  exposed to the host network.
+
+Your browser (an installable PWA) talks only to the app; the app talks only to
+Postgres. **Outbound calls: none** — unless *you* configure SMTP (your mail server) or
+OIDC SSO (your IdP). Backups are written daily to a local `./backups/` folder and never
+uploaded anywhere.
+
 ## Quick start
 
 ```bash
-git clone <repo-url> tagwerke && cd tagwerke
+git clone https://github.com/tagwerke/tagwerke.git && cd tagwerke
 cp .env.example .env        # set SESSION_SECRET + POSTGRES_PASSWORD
 docker compose up -d --build
 docker compose exec app npm run invite   # mint your first signup invite
