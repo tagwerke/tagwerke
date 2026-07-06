@@ -110,12 +110,22 @@ export async function resolveUser(req: FastifyRequest): Promise<SessionUser | nu
   return { id: row.userId, email: row.email, role: row.role === 'admin' ? 'admin' : 'member', totpEnabled: row.totpEnabled };
 }
 
-export function setSessionCookie(reply: FastifyReply, sessionId: string): void {
+/**
+ * Secure cookies only when the request actually arrived over https — directly or via
+ * a trusted proxy's X-Forwarded-Proto (trustProxy is on in index.ts). This is what
+ * lets a fresh install log in over plain http first and upgrade to a domain later;
+ * behind TLS the cookie is always Secure. See docs/self-hosting.md.
+ */
+export function cookieSecure(req: FastifyRequest): boolean {
+  return req.protocol === 'https';
+}
+
+export function setSessionCookie(req: FastifyRequest, reply: FastifyReply, sessionId: string): void {
   reply.setCookie(SESSION_COOKIE, sessionId, {
     path: '/',
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: cookieSecure(req),
     signed: true,
     maxAge: SESSION_TTL_MS / 1000,
   });

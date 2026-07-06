@@ -11,7 +11,7 @@ import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import * as oidc from 'openid-client';
 import { db, schema } from '../db/client.ts';
-import { createSession, setSessionCookie } from './session.ts';
+import { cookieSecure, createSession, setSessionCookie } from './session.ts';
 import { seedUser } from '../lib/seed.ts';
 import { recordAudit } from '../lib/audit.ts';
 import { appUrl } from '../lib/email.ts';
@@ -30,7 +30,6 @@ export interface OidcSettings {
 
 const base = () => appUrl().replace(/\/$/, '');
 const redirectUri = () => `${base()}/api/auth/oidc/callback`;
-const isProd = () => process.env.NODE_ENV === 'production';
 
 async function readOrgConfig(): Promise<Record<string, unknown>> {
   const rows = await db.select({ config: schema.org.config }).from(schema.org).where(eq(schema.org.id, ORG_ID)).limit(1);
@@ -98,7 +97,7 @@ export async function oidcRoutes(app: FastifyInstance): Promise<void> {
     });
 
     reply.setCookie(OIDC_COOKIE, JSON.stringify({ state, nonce, verifier }), {
-      path: '/', httpOnly: true, sameSite: 'lax', secure: isProd(), signed: true, maxAge: 600,
+      path: '/', httpOnly: true, sameSite: 'lax', secure: cookieSecure(req), signed: true, maxAge: 600,
     });
     return reply.redirect(url.href);
   });
@@ -177,7 +176,7 @@ export async function oidcRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const sessionId = await createSession(user.id);
-    setSessionCookie(reply, sessionId);
+    setSessionCookie(req, reply, sessionId);
     recordAudit({ actorId: user.id, action: 'sso_login', targetType: 'user', targetId: user.id, status: 200 });
     return reply.redirect(`${base()}/`);
   });

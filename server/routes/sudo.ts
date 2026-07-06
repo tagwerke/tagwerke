@@ -87,7 +87,7 @@ export async function sudoRoutes(app: FastifyInstance): Promise<void> {
       userVerification: 'preferred',
       allowCredentials: creds.map((c) => ({ id: c.credentialId, transports: (c.transports as AuthenticatorTransportFuture[] | null) ?? undefined })),
     });
-    setWebauthnChallenge(reply, options.challenge);
+    setWebauthnChallenge(req, reply, options.challenge);
     return options;
   });
 
