@@ -1,0 +1,10 @@
+# Tagwerke reverse proxy — automatic HTTPS.
+#
+# {$TAGWERKE_HOST} is expanded by Caddy from the environment (set in .env, passed
+# in by compose.caddy.yml) — e.g. tw.example.com or 203-0-113-7.sslip.io.
+# Caddy fetches/renews the Let's Encrypt certificate for it automatically and
+# redirects http://:80 to https://:443. Nothing else is configured on purpose.
+
+{$TAGWERKE_HOST} {
+	reverse_proxy app:5174
+}

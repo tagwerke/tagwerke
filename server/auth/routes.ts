@@ -77,7 +77,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     await seedUser(id);
 
     const sessionId = await createSession(id);
-    setSessionCookie(reply, sessionId);
+    setSessionCookie(req, reply, sessionId);
     recordAudit({ actorId: id, action: 'user_signup', targetType: 'user', targetId: id, payload: { email, via: 'invite' }, status: 201 });
     return reply.code(201).send({ user: { id, email, role: 'member', totpEnabled: false } });
   });
@@ -195,7 +195,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const sessionId = await createSession(user.id);
-    setSessionCookie(reply, sessionId);
+    setSessionCookie(req, reply, sessionId);
     recordAudit({ actorId: user.id, action: 'login_success', targetType: 'user', targetId: user.id, status: 200 });
     return reply.send({ user: { id: user.id, email: user.email, role: user.role === 'admin' ? 'admin' : 'member', totpEnabled: user.totpEnabled } });
   });

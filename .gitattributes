@@ -1,2 +1,4 @@
 # Shell scripts must stay LF — they run on Linux hosts (and break under WSL with CRLF).
 *.sh text eol=lf
+# Parsed inside Linux containers.
+install/Caddyfile text eol=lf

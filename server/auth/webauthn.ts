@@ -18,13 +18,12 @@ import {
 } from '@simplewebauthn/server';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from './guard.ts';
-import { createSession, setSessionCookie } from './session.ts';
+import { cookieSecure, createSession, setSessionCookie } from './session.ts';
 import { recordAudit } from '../lib/audit.ts';
 import { appUrl } from '../lib/email.ts';
 
 const WEBAUTHN_COOKIE = 'do_webauthn';
 const rateLimit = { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } };
-const isProd = () => process.env.NODE_ENV === 'production';
 
 // RP identity is derived from APP_URL so every self-hosted instance binds passkeys to its
 // own domain (rpID = host, origin = full origin).
@@ -33,8 +32,8 @@ function rp(): { rpID: string; origin: string; rpName: string } {
   return { rpID: url.hostname, origin: url.origin, rpName: process.env.ORG_NAME ?? 'do' };
 }
 
-function setChallenge(reply: FastifyReply, challenge: string): void {
-  reply.setCookie(WEBAUTHN_COOKIE, challenge, { path: '/', httpOnly: true, sameSite: 'lax', secure: isProd(), signed: true, maxAge: 300 });
+function setChallenge(req: FastifyRequest, reply: FastifyReply, challenge: string): void {
+  reply.setCookie(WEBAUTHN_COOKIE, challenge, { path: '/', httpOnly: true, sameSite: 'lax', secure: cookieSecure(req), signed: true, maxAge: 300 });
 }
 function readChallenge(req: FastifyRequest): string | null {
   const raw = req.cookies[WEBAUTHN_COOKIE];
@@ -68,7 +67,7 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
       excludeCredentials: existing.map((c) => ({ id: c.credentialId, transports: (c.transports as AuthenticatorTransportFuture[] | null) ?? undefined })),
       authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
     });
-    setChallenge(reply, options.challenge);
+    setChallenge(req, reply, options.challenge);
     return options;
   });
 
@@ -116,7 +115,7 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
     const { rpID } = rp();
     // Empty allowCredentials → the browser offers any discoverable passkey for this RP.
     const options = await generateAuthenticationOptions({ rpID, userVerification: 'preferred' });
-    setChallenge(reply, options.challenge);
+    setChallenge(req, reply, options.challenge);
     return options;
   });
 
@@ -172,7 +171,7 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(schema.webauthnCredentials.id, cred.id));
 
     const sessionId = await createSession(user.id);
-    setSessionCookie(reply, sessionId);
+    setSessionCookie(req, reply, sessionId);
     recordAudit({ actorId: user.id, action: 'passkey_login', targetType: 'user', targetId: user.id, status: 200 });
     return reply.send({ user: { id: user.id, email: user.email, role: user.role === 'admin' ? 'admin' : 'member', totpEnabled: user.totpEnabled } });
   });
