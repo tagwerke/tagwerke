@@ -9,7 +9,59 @@ stays on your server — see [data-residency.md](data-residency.md).
   Compose** plugin. Nothing else — no Node, no Postgres install needed on the host.
 - ~1 GB RAM and ~2 GB disk to start.
 
-## Quick start (under 10 minutes)
+## One-command install (~5 minutes)
+
+On a clean Ubuntu/Debian server, as root:
+
+```bash
+curl -fsSL https://get.tagwerke.com | sudo sh
+```
+
+That's the whole install. The script checks/installs Docker (from Docker's official
+repo, every command echoed), creates `/opt/tagwerke`, pulls the pinned release image,
+generates `SESSION_SECRET` + `POSTGRES_PASSWORD` into a `chmod 600` `.env`, starts the
+stack, waits for `/health`, and prints your first signup invite code with the URL.
+Nothing is ever sent anywhere — see the trust notes below.
+
+Common variants (all configuration is env vars):
+
+```bash
+# Production with automatic HTTPS (DNS for the domain must point at this server):
+TAGWERKE_DOMAIN=tw.example.com curl -fsSL https://get.tagwerke.com | sudo sh
+
+# No domain yet, but want real TLS on a public IP (opt-in, uses sslip.io DNS):
+TAGWERKE_SSLIP=1 curl -fsSL https://get.tagwerke.com | sudo sh
+
+# Also generate an age backup-encryption key (recommended reading first: below):
+TAGWERKE_BACKUP_KEY=1 curl -fsSL https://get.tagwerke.com | sudo sh
+
+# See exactly what it would do, without doing anything:
+curl -fsSL https://get.tagwerke.com | sh -s -- --dry-run
+```
+
+Without a domain the app runs over plain **http** — login works (the session cookie is
+only marked `Secure` on https), but traffic is unencrypted: fine for evaluation, not
+for production. Re-run the installer with `TAGWERKE_DOMAIN=...` at any time to move an
+existing install onto HTTPS — re-runs never touch your secrets or data.
+
+**Trust notes, before you pipe anything to sh:** the script is
+[`install/get.sh`](../install/get.sh) in this repository — `get.tagwerke.com` is a
+redirect to the copy at the release tag, so the URL resolves to auditable repo bytes.
+Prefer reading first? `curl -fsSL https://get.tagwerke.com -o install.sh && less
+install.sh && sudo sh install.sh`. The app itself makes **no outbound calls**; the only
+network the installer touches is pulling images, fetching the compose files, installing
+Docker if absent, and — only if you chose TLS — Caddy talking to Let's Encrypt.
+
+After install, everything lives in `/opt/tagwerke` and plain `docker compose` commands
+work there (`ps`, `logs`, `down`). To upgrade: edit `TAGWERKE_VERSION` in
+`/opt/tagwerke/.env`, then `docker compose pull && docker compose up -d` — take a
+backup first. Prove your setup once with `scripts/installer-smoke.sh` (from a repo
+checkout) or the backup drill below.
+
+Prefer to see every moving part yourself? The manual path below is the same stack,
+assembled by hand — and it is the recipe for **air-gapped** installs.
+
+## Quick start — manual, from source (under 10 minutes)
 
 ```bash
 # 1. Get the code
@@ -189,6 +241,14 @@ Point-in-time recovery (WAL archiving) is beyond this guide; the database is sta
 Postgres 17, so standard tooling (`pgBackRest`, `wal-g`) applies if you need it.
 
 ## Upgrades
+
+Installer deployment (`/opt/tagwerke`): edit `TAGWERKE_VERSION` in `.env`, then
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Manual clone-and-compose deployment:
 
 ```bash
 git pull
