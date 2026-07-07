@@ -36,6 +36,27 @@ uploaded anywhere.
 
 ## Quick start
 
+One command on any Linux server with Docker — it installs Docker if it's missing,
+pulls the pinned image, starts the stack, and prints your URL and first invite:
+
+```bash
+curl -fsSL https://get.tagwerke.com | sh
+```
+
+Piping to `sh` not your style? Read it first — swap `| sh` for `| less`, or download
+[`install/get.sh`](install/get.sh) and run it yourself.
+
+The image is **signed and multi-arch (amd64 + arm64)**. Verify its build provenance
+before you trust it — this proves the exact image was built by CI from this source, and
+needs no login:
+
+```bash
+gh attestation verify oci://ghcr.io/tagwerke/tagwerke:0.1.0 --owner tagwerke
+```
+
+<details>
+<summary><strong>Prefer to build from source?</strong></summary>
+
 ```bash
 git clone https://github.com/tagwerke/tagwerke.git && cd tagwerke
 cp .env.example .env        # set SESSION_SECRET + POSTGRES_PASSWORD
@@ -43,6 +64,7 @@ docker compose up -d --build
 docker compose exec app npm run invite   # mint your first signup invite
 # open http://localhost:5174 and sign up with the invite code
 ```
+</details>
 
 Full guide (backup/restore, upgrades, SSO, running without Docker):
 [docs/self-hosting.md](docs/self-hosting.md).
