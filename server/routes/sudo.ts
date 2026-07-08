@@ -48,21 +48,31 @@ export async function sudoRoutes(app: FastifyInstance): Promise<void> {
     const u = rows[0];
     if (!u) return reply.code(404).send({ error: 'not found' });
 
-    let ok = false;
-    if (b.data.password && u.passwordHash) {
-      ok = await verifyPassword(u.passwordHash, b.data.password);
-    }
-    if (!ok && b.data.totp && u.totpEnabled && u.totpSecret) {
+    // Step-up must re-prove EVERY factor the user has configured — mirroring login
+    // (routes.ts). Password alone must NOT elevate a 2FA-enrolled admin, or the sudo gate
+    // (which fronts role changes, 2FA resets, deactivations) would be weaker than login.
+    const hasPassword = !!u.passwordHash;
+    const passwordOk = hasPassword && !!b.data.password && (await verifyPassword(u.passwordHash!, b.data.password));
+
+    let totpOk = false;
+    if (u.totpEnabled && u.totpSecret && b.data.totp) {
       const code = b.data.totp.trim();
-      ok = verifyTotp(u.totpSecret, code);
-      if (!ok) {
+      totpOk = verifyTotp(u.totpSecret, code);
+      if (!totpOk) {
         const remaining = await consumeBackupCode(u.backupCodes as string[] | null, code);
         if (remaining) {
           await db.update(schema.users).set({ backupCodes: remaining }).where(eq(schema.users.id, userId));
-          ok = true;
+          totpOk = true;
         }
       }
     }
+
+    // Each configured factor must be satisfied, and at least one real credential must have
+    // been verified (so a no-password/no-TOTP SSO account can't elevate here with nothing —
+    // it must use the passkey path below).
+    const passwordSatisfied = !hasPassword || passwordOk;
+    const totpSatisfied = !u.totpEnabled || totpOk;
+    const ok = passwordSatisfied && totpSatisfied && (passwordOk || totpOk);
 
     req.auditHandled = true;
     if (!ok) {
