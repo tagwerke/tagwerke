@@ -108,10 +108,16 @@ export const tabs = pgTable(
     // 'normal' | 'today'
     type: text('type').notNull().default('normal'),
     dateKey: text('date_key'),
+    // Derived render snapshot of the document (ProseMirror JSON). Under CRDT the Yjs state
+    // (ydocState) is authoritative; docJSON is a denormalized copy the editing client posts
+    // for non-editing reads: board previews, offline snapshot, exports. See CRDT_SEAMS.md.
     docJSON: jsonb('doc_json'),
-    // Optimistic-concurrency counter for the shared document. Bumped on every docJSON
-    // write; a PATCH carrying a stale baseVersion is rejected 409 (live-updates conflict
-    // guard). Interim: replaced by CRDT merge later — see internal/planning/CRDT_SEAMS.md.
+    // Authoritative CRDT state: base64 of Y.encodeStateAsUpdate(doc). Held opaquely — the
+    // server never needs the ProseMirror schema, it just persists/loads Yjs bytes. Null until
+    // a board's document is first opened under CRDT (then seeded from docJSON, once).
+    ydocState: text('ydoc_state'),
+    // Optimistic-concurrency counter for the pre-CRDT document model. Retained (harmless) so
+    // existing reads don't break; no longer written now that the doc merges via Yjs.
     docVersion: integer('doc_version').notNull().default(0),
     // Board facets / attribution.
     location: text('location'),

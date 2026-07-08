@@ -14,7 +14,6 @@
 
 import { useStore } from '../store';
 import { flush, suspendPersistence, resumePersistence, setBaseline } from '../api/persist';
-import { onDocInvalidation } from './docSync';
 import type { ID, Task } from '../types';
 
 const RECONNECT_MIN_MS = 1000;
@@ -34,6 +33,30 @@ let reconnectDelay = RECONNECT_MIN_MS;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let subscribedBoard: ID | null = null;
 let unsubStore: (() => void) | null = null;
+
+// CRDT co-editing rooms multiplexed over this same socket (see yProvider.ts). The transport
+// lives here; the Yjs protocol lives in the provider. A room registers a client to receive its
+// frames; on every (re)connect we re-drive onReady() so it re-joins and resyncs.
+export interface YdocRoomClient {
+  onFrame(dataB64: string): void; // an inbound { type:'ydoc' } payload for this board
+  onSeed(docJSON: unknown): void; // server granted a one-time legacy seed
+  onReady(): void; // socket is (re)connected & ready → (re)join + resync
+}
+const ydocRooms = new Map<ID, YdocRoomClient>();
+
+export function registerYdocRoom(tabId: ID, client: YdocRoomClient): void {
+  ydocRooms.set(tabId, client);
+  if (ready) client.onReady(); // socket already up → join right away
+}
+export function unregisterYdocRoom(tabId: ID): void {
+  if (ydocRooms.delete(tabId)) sendJSON({ type: 'ydoc-leave', boardId: tabId });
+}
+export function joinYdocRoom(tabId: ID): void {
+  sendJSON({ type: 'ydoc-join', boardId: tabId });
+}
+export function sendYdoc(tabId: ID, dataB64: string): void {
+  sendJSON({ type: 'ydoc', boardId: tabId, data: dataB64 });
+}
 
 function wsUrl(): string {
   const u = new URL('/api/ws', window.location.href);
@@ -138,17 +161,24 @@ function handleMessage(raw: string): void {
       ready = true;
       subscribedBoard = null; // force a fresh subscribe for the current board
       syncSubscription();
+      // Re-drive every open doc room so it re-joins (authz) and resyncs after a reconnect.
+      for (const room of ydocRooms.values()) room.onReady();
       return;
+    case 'ydoc': {
+      const m = msg as { boardId?: string; data?: string };
+      if (m.boardId && typeof m.data === 'string') ydocRooms.get(m.boardId)?.onFrame(m.data);
+      return;
+    }
+    case 'ydoc-seed': {
+      const m = msg as { boardId?: string; docJSON?: unknown };
+      if (m.boardId) ydocRooms.get(m.boardId)?.onSeed(m.docJSON ?? null);
+      return;
+    }
     case 'entity':
       applyEntity(msg as { entity?: string; id?: string; action?: string; patch?: unknown });
       return;
-    case 'doc': {
-      // A peer changed the board document. Pull + apply when the user isn't mid-edit;
-      // defer otherwise (docSync). Version-gated, so our own echo is a no-op.
-      const m = msg as { boardId?: string; docVersion?: number };
-      if (m.boardId && typeof m.docVersion === 'number') void onDocInvalidation(m.boardId, m.docVersion);
-      return;
-    }
+    // The board document now syncs as a Yjs CRDT (type 'ydoc'/'ydoc-seed', handled above via
+    // the ydocRooms registry). There is no 'doc' version-invalidation anymore.
     default:
       return; // unknown type — ignore (forward-compatible)
   }

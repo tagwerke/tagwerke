@@ -366,6 +366,34 @@ input, select, textarea { font: inherit; color: inherit; }
   margin-left: 28px;
 }
 
+/* Collaborative cursors (CollaborationCaret). The caret color is set inline per-user from the
+   awareness `user.color`; these rules give it shape and the floating name label. */
+.ProseMirror .collaboration-caret__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid #0d0d0d;
+  border-right: 1px solid #0d0d0d;
+  border-color: inherit;
+  word-break: normal;
+  pointer-events: none;
+}
+.ProseMirror .collaboration-caret__label {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+  padding: 2px 5px;
+  border-radius: 4px 4px 4px 0;
+  user-select: none;
+  pointer-events: none;
+}
+
 /* Task item (rendered via React node view). Title on row 1; the metadata caption
    line sits on row 2, indented under the text (the empty cell under the indicator). */
 .task-item {

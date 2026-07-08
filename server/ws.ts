@@ -26,6 +26,7 @@ import {
   publish,
   type Subscriber,
 } from './lib/bus.ts';
+import { ydocJoin, ydocMessage, ydocLeave, ydocDropConnection } from './realtime/ydoc.ts';
 
 const PROTOCOL_VERSION = 1;
 const HEARTBEAT_MS = 30_000;
@@ -84,6 +85,9 @@ export async function registerWebsocket(app: FastifyInstance): Promise<void> {
     }
 
     const sub: Subscriber = { ws: socket, userId: user.id, channels: new Set() };
+    // Board doc rooms this connection has authenticated into (ydoc-join). A 'ydoc' frame is
+    // only processed for a board already in this set, so authz is checked once at join.
+    const joinedDocRooms = new Set<string>();
     // Personal feed: board-list / membership changes for boards not currently open.
     subscribe(sub, userChannel(user.id));
     send(socket, { v: PROTOCOL_VERSION, type: 'ready', userId: user.id });
@@ -108,11 +112,17 @@ export async function registerWebsocket(app: FastifyInstance): Promise<void> {
       }
     }, HEARTBEAT_MS);
 
-    socket.on('message', async (raw: unknown, isBinary: boolean) => {
+    // Frames are handled one-at-a-time in arrival order. This matters for CRDT: `ydoc-join`
+    // does an async room load, and the client's `syncStep1` arrives right behind it — if the
+    // two async handlers interleaved, the join might not have registered the connection yet and
+    // the sync frame would be dropped (no syncStep2 reply → client never reaches 'synced' →
+    // legacy seeding never fires). Serializing per connection removes that race entirely.
+    let queue: Promise<void> = Promise.resolve();
+    const handleFrame = async (raw: unknown, isBinary: boolean): Promise<void> => {
       // Rule 2: binary is reserved for future opaque (CRDT) payloads — accept, ignore now.
       if (isBinary) return;
 
-      let msg: { type?: string; boardId?: string };
+      let msg: { type?: string; boardId?: string; data?: string };
       try {
         msg = JSON.parse(String(raw));
       } catch {
@@ -140,17 +150,52 @@ export async function registerWebsocket(app: FastifyInstance): Promise<void> {
           send(socket, { v: PROTOCOL_VERSION, type: 'unsubscribed', boardId });
           return;
         }
+        // CRDT co-editing (see server/realtime/ydoc.ts + CRDT_SEAMS.md). Joining a doc room is
+        // gated by the SAME board membership check as `subscribe`; the Yjs sync/awareness frames
+        // themselves ride `ydoc` and are opaque to this layer (conflict logic stays out — Rule 3).
+        case 'ydoc-join': {
+          const boardId = msg.boardId;
+          if (!boardId) return;
+          const role = await boardRole(user.id, boardId);
+          if (!role) {
+            send(socket, { v: PROTOCOL_VERSION, type: 'error', code: 'forbidden', boardId });
+            return;
+          }
+          joinedDocRooms.add(boardId);
+          await ydocJoin(boardId, socket);
+          return;
+        }
+        case 'ydoc': {
+          const boardId = msg.boardId;
+          if (!boardId || typeof msg.data !== 'string') return;
+          if (!joinedDocRooms.has(boardId)) return; // must ydoc-join (authz) first
+          await ydocMessage(boardId, socket, msg.data);
+          return;
+        }
+        case 'ydoc-leave': {
+          const boardId = msg.boardId;
+          if (!boardId) return;
+          joinedDocRooms.delete(boardId);
+          await ydocLeave(boardId, socket);
+          return;
+        }
         case 'ping':
           send(socket, { v: PROTOCOL_VERSION, type: 'pong' });
           return;
         default:
           return; // Rule 1: unknown type — ignore (forward-compatible)
       }
+    };
+    socket.on('message', (raw: unknown, isBinary: boolean) => {
+      queue = queue.then(() => handleFrame(raw, isBinary)).catch(() => {
+        /* one bad frame must not break the chain for the rest of the connection */
+      });
     });
 
     const cleanup = (): void => {
       clearInterval(heartbeat);
       dropSubscriber(sub);
+      void ydocDropConnection(socket); // leave every Yjs room, drop this peer's cursors
     };
     socket.on('close', cleanup);
     socket.on('error', cleanup);

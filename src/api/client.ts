@@ -9,7 +9,7 @@
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import type { ID, TaskStatus, TimeBlock } from '../types';
-import { submitMutation, outboxIdle, setConflictHandler, type Mutation, type Handlers } from '../offline/outbox';
+import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
 
 async function req<T = unknown>(path: string, init?: RequestInit): Promise<T> {
@@ -159,17 +159,13 @@ export const api = {
   tabs: {
     create: (b: { id: ID; projectId: ID; name: string; position: number; starred?: boolean; type?: string }) =>
       submitMutation(M('POST', '/api/tabs', b)),
+    // The board document is no longer PATCH-saved — it syncs as a Yjs CRDT over the socket
+    // (yProvider.ts) and is persisted server-side (server/realtime/ydoc.ts). This `update` is
+    // for board metadata (name/category/star/date/settings) only.
     update: (
       id: ID,
-      patch: { name?: string; projectId?: ID; starred?: boolean; starredPosition?: number | null; dateKey?: string | null; docJSON?: unknown; location?: string | null; settings?: { requireReview?: boolean; restrictDelete?: 'admin' | null } },
+      patch: { name?: string; projectId?: ID; starred?: boolean; starredPosition?: number | null; dateKey?: string | null; location?: string | null; settings?: { requireReview?: boolean; restrictDelete?: 'admin' | null } },
     ) => submitMutation(M('PATCH', `/api/tabs/${id}`, patch)),
-    // Document save with optimistic-concurrency. `baseVersion` is the version this edit was
-    // made from; the server 409s if it's stale. `handlers` (in-memory) capture the new
-    // version on success and reconcile on 409 — see src/realtime/docSync.ts.
-    saveDoc: (id: ID, docJSON: unknown, baseVersion: number, handlers?: Handlers) =>
-      submitMutation(M('PATCH', `/api/tabs/${id}`, { docJSON, baseVersion }), handlers),
-    /** Fetch one board's current document + version (for a live 'doc' invalidation pull). */
-    fetchDoc: (id: ID) => req<{ docJSON: unknown; docVersion: number }>(`/api/tabs/${id}/doc`),
     remove: (id: ID) => submitMutation(M('DELETE', `/api/tabs/${id}`)),
     reorder: (order: ID[]) => submitMutation(M('POST', '/api/tabs/reorder', { order })),
     reorderStarred: (order: ID[]) => submitMutation(M('POST', '/api/tabs/reorder-starred', { order })),

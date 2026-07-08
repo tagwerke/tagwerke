@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { TabEditor } from '../editor/Editor';
-import { DocConflictBanner } from '../realtime/DocConflictBanner';
 import { hexToRgba } from '../util/color';
 import { SharePanel } from './SharePanel';
 import { EventsPanel } from './EventsPanel';
@@ -70,7 +69,6 @@ export function TabView({ tabId }: { tabId: string }) {
       </header>
       {tab.type !== 'today' && <BoardActivity tabId={tab.id} />}
       <div className="tab-view-body">
-        <DocConflictBanner tabId={tab.id} />
         <TabEditor tabId={tab.id} autoFocus />
       </div>
       {sharing && <SharePanel tabId={tab.id} tabName={tab.name} onClose={() => setSharing(false)} />}

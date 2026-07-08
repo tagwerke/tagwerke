@@ -2,6 +2,7 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import type { Transaction, EditorState } from '@tiptap/pm/state';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import { isChangeOrigin } from '@tiptap/extension-collaboration';
 import { nanoid } from 'nanoid';
 import { useStore } from '../../store';
 import { extractTokens } from '../../util/parse';
@@ -66,7 +67,13 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
         key,
         appendTransaction: (transactions, _oldState, newState) => {
           if (!tabId) return null;
-          const externalEdit = transactions.some((t) => t.getMeta('externalEdit'));
+          // Yjs-applied (remote) edits: the ORIGIN client already assigned task ids, stripped
+          // tokens, and mirrored the task rows — which reach us over the entity channel, not the
+          // doc. Re-running any of that here would fight the CRDT (double id churn) and the entity
+          // sync. So a remote transaction is a full no-op. (Legacy `externalEdit` too.)
+          if (transactions.some((t) => isChangeOrigin(t) || t.getMeta('externalEdit'))) {
+            return null;
+          }
           const { items, needsId } = scanDoc(newState);
 
           let tr: Transaction | null = null;
@@ -84,7 +91,7 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
 
           // Strip tokens from lines where cursor is NOT inside (commit).
           // Walk back-to-front so positions stay valid.
-          if (!externalEdit) {
+          {
             const stripOps: StripOp[] = [];
             for (const it of items) {
               if (it.cursorInside) continue;

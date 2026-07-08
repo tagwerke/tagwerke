@@ -8,14 +8,12 @@
 import { useStore } from '../store';
 import { api, enqueue } from './client';
 import { saveSnapshot } from '../offline/snapshot';
-import { baseVersionFor, setDocVersion, reconcileDocConflict } from '../realtime/docSync';
 import type { ID, RootState, Task } from '../types';
 
 const DEBOUNCE_MS = 400;
 
 interface Snap {
   tasks: Record<ID, Task>;
-  docs: Record<ID, unknown>;
 }
 
 let last: Snap | null = null;
@@ -24,9 +22,10 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let unsub: (() => void) | null = null;
 
 function snapshot(s: RootState): Snap {
-  const docs: Record<ID, unknown> = {};
-  for (const id in s.tabs) docs[id] = s.tabs[id].docJSON;
-  return { tasks: s.tasks, docs };
+  // The document no longer persists here — it's a Yjs CRDT synced + saved server-side (see
+  // yProvider.ts / server/realtime/ydoc.ts). Only `tasks` are diffed. Doc edits still tick the
+  // store subscription, which keeps the offline snapshot fresh at the end of diff().
+  return { tasks: s.tasks };
 }
 
 // Field-granular diff (SPEC §8): only changed fields are sent, so a text edit can't
@@ -91,28 +90,6 @@ function diff(): void {
   }
   for (const id in prev.tasks) {
     if (!next.tasks[id]) enqueue(() => api.tasks.remove(id));
-  }
-
-  for (const id in next.docs) {
-    // Brand-new tabs are created via the createTab action; their first doc edit is
-    // caught on the following diff once the tab exists in `prev`.
-    if (!(id in prev.docs)) continue;
-    const doc = next.docs[id];
-    if (doc !== prev.docs[id] && doc != null) {
-      // Optimistic-concurrency doc save: declare the base version, capture the advanced
-      // version on success, and reconcile a 409 doc-locally (adopt server + stash local)
-      // instead of the blunt full repull. See src/realtime/docSync.ts.
-      const baseVersion = baseVersionFor(id);
-      enqueue(() =>
-        api.tabs.saveDoc(id, doc, baseVersion, {
-          onOk: (res) => {
-            const v = (res as { docVersion?: number } | undefined)?.docVersion;
-            if (typeof v === 'number') setDocVersion(id, v);
-          },
-          onConflict: (res) => reconcileDocConflict(id, res),
-        }),
-      );
-    }
   }
 
   last = next;
