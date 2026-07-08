@@ -11,8 +11,16 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 import { recordAudit } from '../lib/audit.ts';
+import { publish, userChannel } from '../lib/bus.ts';
 
 const roleEnum = z.enum(['viewer', 'editor', 'admin']);
+
+// Tell an affected user their board access changed, over their personal feed (the channel each
+// client subscribes to on connect). They aren't on the board's channel when added/removed, so
+// this is the only way to reach them. The client re-pulls state → the sidebar updates live.
+function notifyBoardList(targetUserId: string, tabId: string, action: 'added' | 'removed' | 'role'): void {
+  publish(userChannel(targetUserId), { v: 1, type: 'board-list', action, tabId });
+}
 const addBody = z.object({ email: z.string().email().max(320), role: roleEnum.default('viewer') });
 const patchBody = z.object({ role: roleEnum });
 
@@ -81,6 +89,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
         position,
         starred: false,
       });
+      notifyBoardList(targetId, id, 'added'); // the new member's sidebar picks it up live
       return reply.code(201).send({ ok: true, userId: targetId });
     },
   );
@@ -111,6 +120,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
         .set({ role: b.data.role })
         .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId)));
 
+      notifyBoardList(userId, id, 'role'); // their permissions changed → re-pull to reflect it
       req.auditHandled = true;
       recordAudit({
         actorId: req.user!.id,
@@ -151,6 +161,8 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
     await db
       .delete(schema.boardMembers)
       .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId)));
+
+    notifyBoardList(userId, id, 'removed'); // the removed user's board disappears live
 
     // Explicit audit (was a blind spot): access revocation must be visible. Distinguishes
     // self-leave from an admin removing someone.

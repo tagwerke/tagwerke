@@ -177,6 +177,12 @@ function handleMessage(raw: string): void {
     case 'entity':
       applyEntity(msg as { entity?: string; id?: string; action?: string; patch?: unknown });
       return;
+    case 'board-list':
+      // Our board access changed (added to / removed from / role changed on a board) — arrives
+      // on our personal channel from the members routes. Re-pull authoritative state so the
+      // sidebar reflects it without a manual refresh. Same mechanism as a reconnect resync.
+      opts?.onResync();
+      return;
     // The board document now syncs as a Yjs CRDT (type 'ydoc'/'ydoc-seed', handled above via
     // the ydocRooms registry). There is no 'doc' version-invalidation anymore.
     default:
