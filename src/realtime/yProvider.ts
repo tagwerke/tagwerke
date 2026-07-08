@@ -66,8 +66,15 @@ export class YSocketProvider implements YdocRoomClient {
     this.awareness.on('update', this.onAwarenessUpdate);
     // Remove our awareness state (peers stop seeing our cursor) if the tab/window goes away.
     if (typeof window !== 'undefined') window.addEventListener('beforeunload', this.onUnload);
-    // registerYdocRoom drives onReady() immediately if the socket is already connected.
-    registerYdocRoom(tabId, this);
+  }
+
+  /** Register with the socket (idempotent). Kept OUT of the constructor so the room cache
+   *  controls lifetime — otherwise React StrictMode's mount→unmount→remount would register in
+   *  the constructor but the effect-cleanup destroy would tear it down and never re-register,
+   *  leaving the editor bound to a dead provider that never syncs. */
+  connect(): void {
+    if (this.destroyed) return;
+    registerYdocRoom(this.tabId, this); // drives onReady() immediately if the socket is up
   }
 
   // --- YdocRoomClient (called by socket.ts) --------------------------------------------
@@ -173,5 +180,68 @@ export class YSocketProvider implements YdocRoomClient {
     awarenessProtocol.removeAwarenessStates(this.awareness, [this.doc.clientID], 'destroy');
     this.awareness.destroy();
     unregisterYdocRoom(this.tabId);
+  }
+}
+
+// ── Per-board room cache ────────────────────────────────────────────────────────────────────
+// The Y.Doc + provider for a board must outlive React StrictMode's mount→unmount→remount churn
+// and any transient editor re-creation. So they live in a module cache, created lazily on first
+// use and destroyed only after the last user leaves — with a short defer so an immediate remount
+// (StrictMode) or fast tab re-open reuses the SAME live, already-synced room.
+
+interface CachedRoom {
+  doc: Y.Doc;
+  provider: YSocketProvider;
+  refs: number;
+  destroyTimer: ReturnType<typeof setTimeout> | null;
+}
+
+const roomCache = new Map<ID, CachedRoom>();
+const DESTROY_DELAY_MS = 2000;
+
+/** Get (creating + connecting on first use) the shared room for a board. Cancels any pending
+ *  teardown. Does NOT change the refcount — call retainYRoom in an effect for that. */
+export function acquireYRoom(tabId: ID): { doc: Y.Doc; provider: YSocketProvider } {
+  let r = roomCache.get(tabId);
+  if (!r) {
+    const doc = new Y.Doc();
+    const provider = new YSocketProvider(tabId, doc);
+    r = { doc, provider, refs: 0, destroyTimer: null };
+    roomCache.set(tabId, r);
+    provider.connect();
+  }
+  if (r.destroyTimer) {
+    clearTimeout(r.destroyTimer);
+    r.destroyTimer = null;
+  }
+  return { doc: r.doc, provider: r.provider };
+}
+
+/** Mark one live user of the board's room (call in an effect that pairs with releaseYRoom). */
+export function retainYRoom(tabId: ID): void {
+  const r = roomCache.get(tabId);
+  if (!r) return;
+  r.refs++;
+  if (r.destroyTimer) {
+    clearTimeout(r.destroyTimer);
+    r.destroyTimer = null;
+  }
+}
+
+/** Drop one user; when the last leaves, tear the room down after a short grace period so a
+ *  StrictMode remount or quick re-open reuses the still-synced room instead of resyncing. */
+export function releaseYRoom(tabId: ID): void {
+  const r = roomCache.get(tabId);
+  if (!r) return;
+  r.refs = Math.max(0, r.refs - 1);
+  if (r.refs === 0 && !r.destroyTimer) {
+    r.destroyTimer = setTimeout(() => {
+      const cur = roomCache.get(tabId);
+      if (cur && cur.refs === 0) {
+        cur.provider.destroy();
+        cur.doc.destroy();
+        roomCache.delete(tabId);
+      }
+    }, DESTROY_DELAY_MS);
   }
 }

@@ -163,6 +163,11 @@ async function persist(room: Room): Promise<void> {
     schedulePersist(room); // a write landed mid-flush; capture it on the next tick
     return;
   }
+  // Never overwrite a not-yet-migrated legacy doc with an empty snapshot. If the Y.Doc is still
+  // empty and no real content has ever flowed through this room, there is nothing worth saving —
+  // and persisting would clobber the legacy `docJSON` that seeding still needs to read.
+  if (!room.hasContent && room.doc.getXmlFragment(FRAGMENT).length === 0) return;
+
   room.persisting = true;
   try {
     const ydocState = Buffer.from(Y.encodeStateAsUpdate(room.doc)).toString('base64');

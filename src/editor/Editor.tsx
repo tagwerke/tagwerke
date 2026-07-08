@@ -3,7 +3,6 @@ import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { useCallback, useEffect, useMemo } from 'react';
-import * as Y from 'yjs';
 import { TaskItem } from './extensions/TaskItem';
 import { TaskList } from './extensions/TaskList';
 import { SyncPlugin } from './extensions/SyncPlugin';
@@ -11,7 +10,7 @@ import { TaskItemView } from './TaskItemView';
 import { SuggestionOverlay, type ResolveHomeTab } from './SuggestionOverlay';
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
-import { YSocketProvider } from '../realtime/yProvider';
+import { acquireYRoom, retainYRoom, releaseYRoom } from '../realtime/yProvider';
 import type { ID } from '../types';
 import { registerEditor, unregisterEditor } from './registry';
 
@@ -31,21 +30,17 @@ export function TabEditor({ tabId, autoFocus }: Props) {
   const setTabDoc = useStore((s) => s.setTabDoc);
   const user = useSession((s) => s.user);
 
-  // One Y.Doc + socket-multiplexed provider per open board. Recreated when the board changes;
-  // the effect below destroys the previous pair. The document's content now lives in the
-  // Y.Doc (authoritative, persisted server-side) — NOT in a `content` prop.
-  const { doc, provider } = useMemo(() => {
-    const d = new Y.Doc();
-    return { doc: d, provider: new YSocketProvider(tabId, d) };
-  }, [tabId]);
+  // One shared Y.Doc + socket-multiplexed provider per board, from a module cache that survives
+  // React StrictMode's mount→unmount→remount and transient editor re-creation. acquire (render)
+  // gets-or-creates the live room; retain/release (effect) refcount it so it's torn down only
+  // after the last user leaves. The document lives in the Y.Doc (authoritative, persisted
+  // server-side) — NOT in a `content` prop.
+  const { doc, provider } = useMemo(() => acquireYRoom(tabId), [tabId]);
 
-  useEffect(
-    () => () => {
-      provider.destroy();
-      doc.destroy();
-    },
-    [doc, provider],
-  );
+  useEffect(() => {
+    retainYRoom(tabId);
+    return () => releaseYRoom(tabId);
+  }, [tabId]);
 
   const editor = useEditor(
     {
