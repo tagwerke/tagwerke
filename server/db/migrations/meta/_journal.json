@@ -134,6 +134,13 @@
       "when": 1782970677351,
       "tag": "0018_brief_johnny_blaze",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783522018652,
+      "tag": "0019_hot_randall_flagg",
+      "breakpoints": true
     }
   ]
 }

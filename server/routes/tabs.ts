@@ -5,6 +5,7 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
+import { publish, boardChannel } from '../lib/bus.ts';
 
 // Opt-in per-board guardrails (AUDIT_IMPLEMENTATION_PLAN §F4). Admin-only to change.
 const settingsBody = z.object({
@@ -38,6 +39,10 @@ const patchBody = z.object({
   name: z.string().min(1).max(200).optional(),
   dateKey: z.string().nullable().optional(),
   docJSON: z.any().optional(),
+  // Optimistic-concurrency base for a docJSON write: the version the client edited from.
+  // Mismatch → 409 (someone saved in between). Optional during rollout: absent = no guard,
+  // just bump (old clients / non-doc writers). See internal/planning/CRDT_SEAMS.md.
+  baseVersion: z.number().int().nonnegative().optional(),
   location: z.string().nullable().optional(),
   // Board guardrails (admin-only; lives on the shared tab):
   settings: settingsBody.optional(),
@@ -51,6 +56,25 @@ const reorderBody = z.object({ order: z.array(z.string().min(1)) });
 
 export async function tabRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
+
+  // Fetch just one board's document + its version. Used by live updates (C2/C3): a peer's
+  // 'doc' broadcast carries the version only, so the client pulls the fresh blob from here.
+  app.get(
+    '/api/tabs/:id/doc',
+    { preHandler: requireBoardRole('viewer', paramTabId) },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const row = (
+        await db
+          .select({ docJSON: schema.tabs.docJSON, docVersion: schema.tabs.docVersion })
+          .from(schema.tabs)
+          .where(eq(schema.tabs.id, id))
+          .limit(1)
+      )[0];
+      if (!row) return reply.code(404).send({ error: 'not found' });
+      return reply.send({ docJSON: row.docJSON ?? null, docVersion: row.docVersion });
+    },
+  );
 
   app.post('/api/tabs', async (req, reply) => {
     const b = createBody.safeParse(req.body);
@@ -87,7 +111,7 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
 
     // Split three ways: shared content (name/doc/…), admin guardrails (settings), and this
     // caller's personal view state (category/starred).
-    const { projectId, starred, starredPosition, settings, docJSON, ...contentRest } = b.data;
+    const { projectId, starred, starredPosition, settings, docJSON, baseVersion, ...contentRest } = b.data;
     const editingContent = Object.keys(contentRest).length > 0 || docJSON !== undefined;
 
     // Authorize: must be a member; content requires editor+; settings require admin.
@@ -102,8 +126,23 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     const before = (await db.select().from(schema.tabs).where(eq(schema.tabs.id, id)).limit(1))[0];
     if (!before) return reply.code(404).send({ error: 'not found' });
 
+    // Optimistic-concurrency guard: reject a docJSON write based on a version someone else
+    // has already superseded. The client recovers by pulling `currentVersion`/`docJSON`,
+    // re-applying its edit, and retrying (see C3 / CRDT_SEAMS.md). Absent baseVersion skips
+    // the check (rollout back-compat) but the write still bumps the version below.
+    if (docJSON !== undefined && baseVersion !== undefined && before.docVersion !== baseVersion) {
+      return reply.code(409).send({
+        error: 'stale document',
+        currentVersion: before.docVersion,
+        docJSON: before.docJSON ?? null,
+      });
+    }
+
     const contentToWrite: Record<string, unknown> = { ...contentRest };
-    if (docJSON !== undefined) contentToWrite.docJSON = docJSON;
+    if (docJSON !== undefined) {
+      contentToWrite.docJSON = docJSON;
+      contentToWrite.docVersion = before.docVersion + 1;
+    }
     const mergedSettings =
       settings !== undefined ? mergeSettings((before.settings as BoardSettings) ?? {}, settings) : undefined;
 
@@ -138,7 +177,22 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
         scopeId: id, method: 'PATCH', status: 200, payload: { settings: mergedSettings },
       });
     }
-    return reply.send({ ok: true });
+    // Live updates (S2): broadcast a document invalidation — the NEW version only, never
+    // the blob. Peers on the board pull the fresh doc when idle (C2/C3). Broadcast after
+    // commit so a puller always sees the just-written version.
+    if (docJSON !== undefined) {
+      publish(boardChannel(id), {
+        v: 1,
+        type: 'doc',
+        boardId: id,
+        docVersion: before.docVersion + 1,
+        actorId: userId,
+      });
+    }
+
+    // Return the advanced version so the client can update its base for the next save
+    // without a full re-pull (C3). Only meaningful when docJSON was written.
+    return reply.send({ ok: true, ...(docJSON !== undefined ? { docVersion: before.docVersion + 1 } : {}) });
   });
 
   app.post('/api/tabs/reorder', async (req, reply) => {

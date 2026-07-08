@@ -24,6 +24,7 @@ import { sudoRoutes } from './routes/sudo.ts';
 import { orgRoutes, ORG_ID } from './routes/org.ts';
 import { activityRoutes } from './routes/activity.ts';
 import { registerAuditHook } from './lib/audit.ts';
+import { registerWebsocket } from './ws.ts';
 import { startBackupScheduler } from './jobs/backup.ts';
 
 const PORT = Number(process.env.PORT ?? 5174);
@@ -95,6 +96,10 @@ await app.register(auditRoutes);
 await app.register(historyRoutes);
 await app.register(orgRoutes);
 await app.register(activityRoutes);
+
+// Realtime socket (live updates). Authenticates off the session cookie registered above;
+// must come after @fastify/cookie. Same process/port — no extra container.
+await registerWebsocket(app);
 
 // In production the same process serves the built SPA. In dev, Vite serves it.
 if (isProd) {

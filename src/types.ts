@@ -26,6 +26,10 @@ export interface Tab {
   starred: boolean;
   type: TabType;
   docJSON?: unknown;
+  // Optimistic-concurrency counter for the shared document (live updates). Set from
+  // /api/state and advanced by each doc save's response; sent back as baseVersion so a
+  // stale save is rejected 409. See src/realtime/docSync.ts.
+  docVersion?: number;
   location?: string; // board's place facet (v2)
   settings?: BoardSettings;
 }

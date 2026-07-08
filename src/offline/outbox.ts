@@ -23,8 +23,20 @@ export interface Mutation {
   body?: unknown;
 }
 
+/**
+ * Optional in-memory response handlers for a mutation. NOT persisted to IndexedDB (they're
+ * live closures) — an op replayed from a prior offline session loses them, which is fine:
+ * app re-init re-pulls authoritative state. Used by the doc save to capture the new version
+ * (onOk) and run a doc-specific conflict reconcile (onConflict) instead of the blunt repull.
+ */
+export interface Handlers {
+  onOk?: (body: unknown) => void;
+  onConflict?: (body: unknown) => void;
+}
+
 interface Pending {
   op: Mutation;
+  handlers?: Handlers;
   resolve?: () => void;
   /** Resolves to the IDB row key once persisted, so we can delete exactly that row. */
   persisted: Promise<number | undefined>;
@@ -57,20 +69,39 @@ export function outboxIdle(): Promise<void> {
   return new Promise((resolve) => idleWaiters.push(resolve));
 }
 
-async function send(op: Mutation): Promise<'ok' | 'conflict' | 'transient'> {
+type SendResult = 'ok' | 'conflict' | 'transient' | 'handled';
+
+async function send(op: Mutation, handlers?: Handlers): Promise<SendResult> {
+  let r: Response;
   try {
-    const r = await fetch(op.path, {
+    r = await fetch(op.path, {
       method: op.method,
       credentials: 'include',
       headers: op.body !== undefined ? { 'content-type': 'application/json' } : undefined,
       body: op.body !== undefined ? JSON.stringify(op.body) : undefined,
     });
-    if (r.ok) return 'ok';
-    if (r.status >= 500) return 'transient'; // server down/restarting → retry
-    return 'conflict'; // 4xx → poison; drop + re-pull
   } catch {
     return 'transient'; // network unreachable
   }
+  let body: unknown;
+  try {
+    const text = await r.text();
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    /* non-JSON body — leave undefined */
+  }
+  if (r.ok) {
+    handlers?.onOk?.(body);
+    return 'ok';
+  }
+  if (r.status >= 500) return 'transient'; // server down/restarting → retry
+  // 4xx: if this op brought its own conflict handler (doc save), let it reconcile and treat
+  // the op as handled — do NOT trigger the generic drop-everything repull.
+  if (handlers?.onConflict) {
+    handlers.onConflict(body);
+    return 'handled';
+  }
+  return 'conflict'; // 4xx → poison; drop + re-pull
 }
 
 function scheduleRetry(): void {
@@ -93,7 +124,7 @@ async function pump(): Promise<void> {
         break;
       }
       const head = queue[0];
-      const result = await send(head.op);
+      const result = await send(head.op, head.handlers);
 
       if (result === 'transient') {
         offline.setOnline(false);
@@ -101,7 +132,7 @@ async function pump(): Promise<void> {
         break;
       }
 
-      // ok or conflict → the op leaves the queue.
+      // ok, conflict, or handled → the op leaves the queue.
       queue.shift();
       const seq = await head.persisted;
       if (seq != null) await outboxDelete(seq);
@@ -109,6 +140,8 @@ async function pump(): Promise<void> {
       retryDelay = 0;
       offline.setOnline(true);
       syncPending();
+      // Only the GENERIC 4xx (no per-op handler) triggers the blunt state repull; a
+      // 'handled' conflict was reconciled by the op's own onConflict.
       if (result === 'conflict') conflict?.();
     }
   } finally {
@@ -118,11 +151,12 @@ async function pump(): Promise<void> {
   }
 }
 
-/** Enqueue a mutation durably and kick the flush. Resolves once the op has been sent. */
-export function submitMutation(op: Mutation): Promise<void> {
+/** Enqueue a mutation durably and kick the flush. Resolves once the op has been sent.
+ *  `handlers` (in-memory only) let a caller observe the response — see {@link Handlers}. */
+export function submitMutation(op: Mutation, handlers?: Handlers): Promise<void> {
   return new Promise<void>((resolve) => {
     // Push synchronously so in-memory order is authoritative; persist in parallel.
-    queue.push({ op, resolve, persisted: outboxAdd(op) });
+    queue.push({ op, handlers, resolve, persisted: outboxAdd(op) });
     syncPending();
     void pump();
   });

@@ -109,6 +109,10 @@ export const tabs = pgTable(
     type: text('type').notNull().default('normal'),
     dateKey: text('date_key'),
     docJSON: jsonb('doc_json'),
+    // Optimistic-concurrency counter for the shared document. Bumped on every docJSON
+    // write; a PATCH carrying a stale baseVersion is rejected 409 (live-updates conflict
+    // guard). Interim: replaced by CRDT merge later — see internal/planning/CRDT_SEAMS.md.
+    docVersion: integer('doc_version').notNull().default(0),
     // Board facets / attribution.
     location: text('location'),
     createdBy: text('created_by'), // attribution; access derives from board_members

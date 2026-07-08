@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { auth, getState, setWriteErrorHandler, type SessionUser } from '../api/client';
 import { startPersistence, setBaseline, suspendPersistence, resumePersistence } from '../api/persist';
+import { startRealtime, stopRealtime } from '../realtime/socket';
 import { startOutbox, clearOutbox } from '../offline/outbox';
 import { saveSnapshot, loadSnapshot, saveCachedUser, loadCachedUser, clearSnapshot } from '../offline/snapshot';
 import { offline } from '../offline/status';
@@ -30,6 +31,9 @@ function hydrateAndPersist(state: RootState): void {
     setBaseline(useStore.getState());
   }
   saveSnapshot(useStore.getState());
+  // Live updates: connect the realtime socket (idempotent). On a reconnect it re-pulls
+  // authoritative state to catch anything missed while disconnected.
+  startRealtime({ onResync: () => void repull() });
 }
 
 /** Pull authoritative state; if the network is down, boot from the last snapshot. */
@@ -141,6 +145,7 @@ export const useSession = create<SessionState>((set) => ({
     } catch {
       /* offline — clear local session anyway */
     }
+    stopRealtime();
     clearSnapshot();
     clearOutbox();
     set({ user: null, status: 'unauthenticated', error: null });

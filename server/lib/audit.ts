@@ -108,14 +108,14 @@ export function auditEdit(
 // full redacted body. Tab CONTENT is coarse; tab MEMBER management (.../members) is not.
 const CONTENT_PREFIXES = ['/api/tasks', '/api/events', '/api/time-blocks'];
 
-function isContentRoute(path: string): boolean {
+export function isContentRoute(path: string): boolean {
   if (CONTENT_PREFIXES.some((p) => path.startsWith(p))) return true;
   if (path.startsWith('/api/tabs') && !path.includes('/members')) return true;
   return false;
 }
 
 /** Coarse entity classification of a mutation route, for the audit `targetType`. */
-function targetTypeForPath(path: string): string | null {
+export function targetTypeForPath(path: string): string | null {
   if (path.startsWith('/api/tasks')) return 'task';
   if (path.startsWith('/api/time-blocks')) return 'time_block';
   if (path.startsWith('/api/events')) return 'event';

@@ -12,6 +12,8 @@ export default defineConfig({
       '/api': {
         target: BACKEND,
         changeOrigin: true,
+        // Proxy the WebSocket upgrade (/api/ws) to the backend too — live updates.
+        ws: true,
       },
     },
   },

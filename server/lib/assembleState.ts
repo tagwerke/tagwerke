@@ -21,6 +21,7 @@ export async function assembleState(userId: string) {
       name: schema.tabs.name,
       type: schema.tabs.type,
       docJSON: schema.tabs.docJSON,
+      docVersion: schema.tabs.docVersion,
       location: schema.tabs.location,
       settings: schema.tabs.settings,
       categoryId: schema.boardMembers.categoryId,
@@ -62,6 +63,7 @@ export async function assembleState(userId: string) {
       starred: t.starred,
       type: t.type,
       docJSON: t.docJSON ?? undefined,
+      docVersion: t.docVersion,
       settings: t.settings ?? {},
       ...(t.location != null ? { location: t.location } : {}),
     };
