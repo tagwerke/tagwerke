@@ -1061,6 +1061,9 @@ input, select, textarea { font: inherit; color: inherit; }
   padding: 20px;
   width: min(460px, calc(100vw - 32px));
   box-shadow: var(--shadow-pop);
+  /* Long rosters / history / trash must scroll inside the panel, not run off-screen. */
+  max-height: min(78vh, 720px);
+  overflow-y: auto;
 }
 .share-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .share-head strong { font-family: var(--serif); font-style: italic; font-size: 19px; font-weight: 500; }
@@ -1648,6 +1651,39 @@ input, select, textarea { font: inherit; color: inherit; }
   border-radius: 999px; padding: 1px 8px;
 }
 
+/* ── Avatar (identity circle) ─────────────────────────────────────────────── */
+.avatar {
+  display: inline-grid; place-items: center;
+  border-radius: 50%;
+  color: #fff; font-weight: 700;
+  font-family: var(--sans);
+  line-height: 1; flex: none;
+  user-select: none;
+}
+.avatar-ring { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring, var(--pop)); }
+.avatar-stack { display: inline-flex; }
+.avatar-stack .avatar { margin-left: -6px; box-shadow: 0 0 0 2px var(--bg-paper); }
+.avatar-stack .avatar:first-child { margin-left: 0; }
+
+/* ── Drawer / Sheet primitive (right drawer desktop, bottom sheet mobile) ──── */
+.drawer-backdrop { align-items: stretch; justify-content: flex-end; padding: 0; }
+.drawer {
+  width: min(420px, 92vw);
+  height: 100%;
+  background: var(--bg-paper);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-pop);
+  display: flex; flex-direction: column;
+  animation: drawer-in 0.18s cubic-bezier(0.2, 0.7, 0.25, 1);
+}
+@keyframes drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px; border-bottom: 1px solid var(--line); flex: none;
+}
+.drawer-head strong { font-family: var(--serif); font-style: italic; font-size: 19px; font-weight: 500; }
+.drawer-body { overflow-y: auto; padding: 16px 18px; flex: 1; }
+
 /* ── Touch devices: reveal hover-only affordances ─────────────────────────
    Cards/chips hide their actions until hover; touch has no hover, so surface
    them (a touch more visible) when the device is coarse-pointer. */
@@ -1690,6 +1726,16 @@ input, select, textarea { font: inherit; color: inherit; }
     animation: sheet-up 0.18s cubic-bezier(0.2, 0.7, 0.25, 1);
   }
   .search-palette { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+
+  /* The drawer becomes a bottom sheet on phones. */
+  .drawer-backdrop { align-items: flex-end; justify-content: center; }
+  .drawer {
+    width: 100%; height: auto; max-height: 88vh;
+    border-left: 0; border-bottom: 0;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up 0.18s cubic-bezier(0.2, 0.7, 0.25, 1);
+  }
 
   /* The filter popover becomes a bottom sheet (no topbar anchor on phones). */
   .popover {
@@ -1901,3 +1947,73 @@ input, select, textarea { font: inherit; color: inherit; }
 .board-settings strong { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-mute); }
 .board-setting { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
 .board-setting input { accent-color: var(--pop); }
+
+/* ── App shell: persistent sidebar + main canvas (Shell D) ───────────────── */
+.app-shell { display: grid; grid-template-columns: 256px 1fr; min-height: 100vh; }
+.main {
+  position: relative; /* anchors the filter popover until the scope strip lands */
+  min-width: 0;
+  display: flex; flex-direction: column;
+  padding: 20px clamp(16px, 3vw, 32px) 64px;
+}
+.main-topbar { justify-content: flex-end; }
+
+/* Sidebar */
+.sidebar {
+  border-right: 1px solid var(--line);
+  background: var(--bg-paper);
+  padding: 16px 12px;
+  display: flex; flex-direction: column; gap: 22px;
+  position: sticky; top: 0; height: 100vh; overflow: auto;
+}
+.sidebar-brand { background: none; border: 0; padding: 2px 6px; cursor: pointer; }
+.sidebar-sec-head { display: flex; align-items: center; gap: 6px; margin: 0 4px 8px 9px; }
+.sidebar-sec-label { font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; font-weight: 700; color: var(--ink-mute); }
+.sidebar-add { margin-left: auto; width: 20px; height: 20px; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--ink-mute); font-size: 15px; border: 0; background: none; cursor: pointer; }
+.sidebar-add:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+.sidebar-spacer { flex: 1; }
+.sidebar-account { display: flex; align-items: center; gap: 9px; padding: 8px; border-top: 1px solid var(--line); }
+.sidebar-account-email { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
+
+/* Spaces list */
+.space-list { display: flex; flex-direction: column; gap: 1px; }
+.space { display: flex; align-items: center; gap: 4px; border-radius: var(--r-sm); position: relative; }
+.space:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.space.on { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.space-main { flex: 1; display: flex; align-items: center; gap: 9px; padding: 6px 8px 6px 9px; background: none; border: 0; text-align: left; font-size: 13px; color: var(--ink-soft); min-width: 0; cursor: pointer; }
+.space.on .space-main { color: var(--ink); font-weight: 600; }
+.space-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.space-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.space-count { font-family: var(--mono); font-size: 10px; color: var(--ink-mute); padding-right: 6px; }
+.space-gear { width: 22px; height: 22px; border-radius: var(--r-sm); display: none; place-items: center; color: var(--ink-mute); font-size: 12px; border: 0; background: none; flex: none; cursor: pointer; margin-right: 4px; }
+.space:hover .space-gear { display: grid; }
+.space:hover .space-count { display: none; }
+.space-menu { position: absolute; top: 100%; right: 6px; z-index: 30; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-pop); padding: 6px; display: flex; flex-direction: column; gap: 4px; min-width: 156px; }
+.space-menu button { text-align: left; padding: 6px 8px; border-radius: var(--r-sm); font-size: 13px; background: none; border: 0; color: var(--ink); cursor: pointer; }
+.space-menu button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.space-menu button.danger { color: var(--pop); }
+.space-colors { display: flex; gap: 4px; padding: 2px 4px; }
+.space-colors button { width: 18px; height: 18px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; }
+
+/* Agenda rail */
+.agenda-head { display: flex; align-items: baseline; gap: 8px; margin: 0 4px 8px 9px; }
+.agenda-title { font-family: var(--serif); font-style: italic; font-size: 17px; font-weight: 600; }
+.agenda-date { font-size: 10px; color: var(--ink-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+.agenda-list { display: flex; flex-direction: column; gap: 2px; }
+.agenda-item { display: flex; gap: 9px; align-items: flex-start; padding: 7px 8px; border-radius: var(--r-sm); border: 0; background: none; text-align: left; border-left: 2px solid var(--accent, var(--line-strong)); margin-left: 2px; cursor: pointer; }
+.agenda-item:hover { background: var(--bg-elev); }
+.agenda-time { font-family: var(--mono); font-size: 10.5px; color: var(--ink-mute); padding-top: 1px; flex: none; }
+.agenda-body { display: flex; flex-direction: column; min-width: 0; }
+.agenda-name { font-size: 12.5px; color: var(--ink); }
+.agenda-board { font-size: 11px; color: var(--ink-mute); font-family: var(--serif); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-empty { font-size: 12px; padding: 4px 9px; }
+.agenda-add { margin-top: 6px; font-size: 12px; color: var(--ink-mute); background: none; border: 1px dashed var(--line); border-radius: var(--r-sm); padding: 6px; text-align: center; cursor: pointer; }
+.agenda-add:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); }
+.agenda-add:disabled { opacity: 0.5; cursor: default; }
+
+/* Phones: the sidebar folds away; the bottom nav takes over (Phase 8 refines). */
+@media (max-width: 720px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .main { padding: 16px 16px calc(72px + env(safe-area-inset-bottom)); }
+}

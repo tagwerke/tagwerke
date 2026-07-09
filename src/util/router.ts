@@ -10,6 +10,17 @@ export function navigate(to: string): void {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+/** The URL path for a given open board (or the grid when null). */
+export function boardPath(tabId: string | null): string {
+  return tabId ? `/b/${encodeURIComponent(tabId)}` : '/';
+}
+
+/** Parse the open-board id out of a path, or null for the grid. */
+export function parseBoardId(path: string): string | null {
+  const m = path.match(/^\/b\/([^/]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 /** Current pathname, updated on back/forward and navigate(). */
 export function usePath(): string {
   const [path, setPath] = useState(() => window.location.pathname);

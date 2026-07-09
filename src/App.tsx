@@ -4,17 +4,16 @@ import { useSession } from './session/useSession';
 import { AuthScreen } from './components/AuthScreen';
 import { TopBar } from './components/TopBar';
 import { MobileNav } from './components/MobileNav';
-import { StarredRow } from './components/StarredRow';
+import { Sidebar } from './components/shell/Sidebar';
 import { Board } from './components/Board';
 import { TabView } from './components/TabView';
-import { PlannerView } from './components/planner/PlannerView';
 import { NewTabDialog } from './components/NewTabDialog';
 import { FilterPanel } from './components/FilterPanel';
 import { SearchPalette } from './components/SearchPalette';
 import { AdminPage } from './components/AdminPage';
 import { SecurityPanel } from './components/SecurityPanel';
 import { MoreSheet } from './components/MoreSheet';
-import { usePath } from './util/router';
+import { usePath, boardPath, parseBoardId } from './util/router';
 
 export type Panel = 'new' | 'filter' | 'search' | 'security' | 'more';
 
@@ -42,7 +41,6 @@ export default function App() {
 
 function Workspace() {
   const activeTabId = useStore((s) => s.activeTabId);
-  const plannerOpen = useStore((s) => s.plannerOpen);
   const tabs = useStore((s) => s.tabs);
   const cleanupEmptyTasks = useStore((s) => s.cleanupEmptyTasks);
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -63,21 +61,33 @@ function Workspace() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Navigation lives in the URL so a refresh (or a shared link) restores the open board.
+  // URL → store: whenever the path changes (initial load, back/forward), reflect it.
+  const path = usePath();
+  useEffect(() => {
+    const id = parseBoardId(path);
+    if (useStore.getState().activeTabId !== id) useStore.getState().setActiveTab(id);
+  }, [path]);
+  // store → URL: when the open board changes from within the app, update the address bar.
+  // subscribe() reads live state and only fires on an actual change, so it never clobbers the
+  // deeper URL present on first paint.
+  useEffect(() => {
+    return useStore.subscribe((s, prev) => {
+      if (s.activeTabId === prev.activeTabId) return;
+      const want = boardPath(s.activeTabId);
+      if (window.location.pathname !== want) window.history.pushState(null, '', want);
+    });
+  }, []);
+
   const active = activeTabId ? tabs[activeTabId] : null;
 
   return (
-    <div className="app">
-      <TopBar onOpen={setPanel} />
-      {plannerOpen ? (
-        <PlannerView />
-      ) : active ? (
-        <TabView tabId={active.id} />
-      ) : (
-        <>
-          <StarredRow />
-          <Board />
-        </>
-      )}
+    <div className="app-shell">
+      <Sidebar />
+      <div className="main">
+        <TopBar onOpen={setPanel} />
+        {active ? <TabView tabId={active.id} /> : <Board />}
+      </div>
       <MobileNav onOpen={setPanel} />
 
       {panel === 'new' && <NewTabDialog onClose={closePanel} />}

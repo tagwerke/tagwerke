@@ -29,8 +29,8 @@ First public, versioned release.
 
 - Invite-only registration; Argon2id password hashing; signed HttpOnly session cookies;
   rate-limited auth with lockout.
-- **OIDC SSO** (Authorization Code + PKCE), configured in-app: domain-gated JIT
-  provisioning, enforced-SSO mode with lockout-proof fallback.
+- **OIDC SSO** (Authorization Code + PKCE), configured in-app: invite-gated account creation
+  with an optional allowed-domain filter, enforced-SSO mode with lockout-proof fallback.
 - **TOTP 2FA** and **WebAuthn passkeys**; password reset via branded email (SMTP).
 - **Append-only audit log** with field-level diffs for content edits; admin view +
   export; per-object task/board history; retention prune command.

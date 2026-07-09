@@ -6,8 +6,6 @@ import type { Panel } from '../App';
 export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
   const needs2fa = useSession((s) => !!s.user && !s.user.totpEnabled);
   const activeTabId = useStore((s) => s.activeTabId);
-  const setActiveTab = useStore((s) => s.setActiveTab);
-  const setPlannerOpen = useStore((s) => s.setPlannerOpen);
   const filterCount = useStore((s) => {
     const f = s.filter;
     return (
@@ -18,22 +16,11 @@ export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
   const resetFilter = useStore((s) => s.resetFilter);
   const logout = useSession((s) => s.logout);
 
-  const onHome = () => { setPlannerOpen(false); setActiveTab(null); };
-
   return (
-    <header className="topbar">
-      <button className="brand" onClick={onHome} aria-label="Home">
-        <span className="brand-mark" />
-        <span className="brand-name">Tagwerke</span>
-      </button>
-
+    <header className="topbar main-topbar">
       <OfflinePill />
 
       <div className="topbar-actions">
-        <button className="btn ghost" onClick={() => setPlannerOpen(true)} title="Open the Planner">
-          <svg viewBox="0 0 16 16" width="14" height="14"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M2 6h12M5 2v2M11 2v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          <span>planner</span>
-        </button>
         <button className="btn ghost" onClick={() => onOpen('search')} title="Search (Ctrl+K)">
           <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           <span>search</span>

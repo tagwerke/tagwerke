@@ -50,10 +50,11 @@ jurisdiction, under your legal control.
 
 ## Accounts & access
 
-- **Registration is closed by default.** New accounts require an invite code minted by an
-  operator (`docker compose exec app npm run invite`), or — if you enable OIDC SSO —
-  domain-gated just-in-time provisioning from your own identity provider. There is no
-  open sign-up.
+- **Registration is closed by default.** Every new account requires an invite code minted by
+  an operator (`docker compose exec app npm run invite`) — whether the user signs up with a
+  password or via OIDC SSO. SSO signs existing users in without a code; creating a *new*
+  account through SSO consumes an invite just like password sign-up. An optional allowed-domain
+  filter can further restrict SSO. There is no open sign-up.
 - **Authentication:** local email/password (Argon2id) with optional TOTP 2FA and WebAuthn
   passkeys, and/or OIDC SSO (Authorization Code + PKCE) against your IdP, including an
   enforced-SSO mode that disables password login.

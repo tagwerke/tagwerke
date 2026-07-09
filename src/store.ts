@@ -416,14 +416,20 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       },
 
       hydrate(state) {
-        // The server's /api/state doesn't carry Planner state (blocks are lazy-fetched
-        // per date window; the rest is local UI), so default it rather than clobber.
+        // The server's /api/state doesn't own local UI/navigation — it returns defaults for
+        // these. Preserve the current values so a reconnect/repull (which re-hydrates) doesn't
+        // close the open board, drop the active filter, or reset the Planner. The open board
+        // lives in the URL (src/App.tsx), so on a fresh load `activeTabId` starts null here and
+        // is restored from the path right after.
+        const cur = get();
         set({
           ...state,
           timeBlocks: state.timeBlocks ?? {},
           plannerOpen: false,
           plannerDate: state.plannerDate ?? todayISO(),
           plannerMode: state.plannerMode ?? 'day',
+          activeTabId: cur.activeTabId,
+          filter: cur.filter,
         });
       },
 

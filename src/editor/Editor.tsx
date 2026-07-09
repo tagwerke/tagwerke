@@ -11,19 +11,13 @@ import { SuggestionOverlay, type ResolveHomeTab } from './SuggestionOverlay';
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
 import { acquireYRoom, retainYRoom, releaseYRoom } from '../realtime/yProvider';
+import { colorForKey } from '../util/avatar';
 import type { ID } from '../types';
 import { registerEditor, unregisterEditor } from './registry';
 
 interface Props {
   tabId: ID;
   autoFocus?: boolean;
-}
-
-/** Stable per-identity cursor color from a string key. */
-function colorFor(key: string): string {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return `hsl(${h % 360} 70% 45%)`;
 }
 
 export function TabEditor({ tabId, autoFocus }: Props) {
@@ -65,7 +59,7 @@ export function TabEditor({ tabId, autoFocus }: Props) {
           provider,
           user: {
             name: user?.email ?? 'Someone',
-            color: colorFor(user?.id ?? user?.email ?? 'anon'),
+            color: colorForKey(user?.id ?? user?.email ?? 'anon'),
           },
         }),
       ],

@@ -7,7 +7,7 @@
 // (domain-gated), establishes a session, and 302s back to the app. See AUTH_IMPLEMENTATION_PLAN.md.
 
 import type { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import * as oidc from 'openid-client';
 import { db, schema } from '../db/client.ts';
@@ -77,6 +77,8 @@ export async function oidcRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Begin the login: stash state/nonce/PKCE in a signed cookie, redirect to the IdP.
+  // An optional `invite` is carried through the flow (in the signed cookie, never validated
+  // here) and consumed at /callback ONLY if the login turns out to provision a new account.
   app.get('/api/auth/oidc/start', async (req, reply) => {
     const { oidc: o } = await getOidc();
     if (!o) return reply.redirect(`${base()}/?sso_error=disabled`);
@@ -86,6 +88,9 @@ export async function oidcRoutes(app: FastifyInstance): Promise<void> {
     const challenge = await oidc.calculatePKCECodeChallenge(verifier);
     const state = oidc.randomState();
     const nonce = oidc.randomNonce();
+    const invite = typeof (req.query as Record<string, unknown>)?.invite === 'string'
+      ? String((req.query as Record<string, string>).invite).slice(0, 200)
+      : undefined;
 
     const url = oidc.buildAuthorizationUrl(config, {
       redirect_uri: redirectUri(),
@@ -96,7 +101,7 @@ export async function oidcRoutes(app: FastifyInstance): Promise<void> {
       nonce,
     });
 
-    reply.setCookie(OIDC_COOKIE, JSON.stringify({ state, nonce, verifier }), {
+    reply.setCookie(OIDC_COOKIE, JSON.stringify({ state, nonce, verifier, invite }), {
       path: '/', httpOnly: true, sameSite: 'lax', secure: cookieSecure(req), signed: true, maxAge: 600,
     });
     return reply.redirect(url.href);
@@ -111,7 +116,7 @@ export async function oidcRoutes(app: FastifyInstance): Promise<void> {
     const unsigned = raw ? req.unsignCookie(raw) : { valid: false as const, value: null };
     reply.clearCookie(OIDC_COOKIE, { path: '/' });
     if (!unsigned.valid || !unsigned.value) return reply.redirect(`${base()}/?sso_error=state`);
-    let saved: { state: string; nonce: string; verifier: string };
+    let saved: { state: string; nonce: string; verifier: string; invite?: string };
     try {
       saved = JSON.parse(unsigned.value);
     } catch {
@@ -163,10 +168,38 @@ export async function oidcRoutes(app: FastifyInstance): Promise<void> {
       }
     }
     if (!user) {
+      // Provisioning a brand-new account via SSO requires an invite — the SAME gate as
+      // password signup (routes.ts). SSO is a sign-in method, not an open door: existing/
+      // linked users resolved above never need a code; only first-time creation does.
+      // The optional allowedDomain check above still applies as an extra filter.
+      const code = saved.invite?.trim();
+      if (!code) {
+        recordAudit({ actorId: null, action: 'sso_denied_no_invite', targetType: 'user', payload: { email }, status: 403 });
+        return reply.redirect(`${base()}/?sso_error=invite_required`);
+      }
+      // Atomically consume the invite: only succeeds if it exists, has uses left, and is not
+      // expired. The conditional UPDATE makes concurrent reuse safe (mirrors signup).
+      const now = new Date();
+      const consumed = await db
+        .update(schema.invites)
+        .set({ usedCount: sql`${schema.invites.usedCount} + 1` })
+        .where(
+          and(
+            eq(schema.invites.code, code),
+            lt(schema.invites.usedCount, schema.invites.maxUses),
+            or(isNull(schema.invites.expiresAt), gt(schema.invites.expiresAt, now)),
+          ),
+        )
+        .returning({ code: schema.invites.code });
+      if (!consumed.length) {
+        recordAudit({ actorId: null, action: 'sso_denied_invite', targetType: 'user', payload: { email, reason: 'invalid_or_exhausted' }, status: 403 });
+        return reply.redirect(`${base()}/?sso_error=invite_invalid`);
+      }
+
       const id = nanoid();
       await db.insert(schema.users).values({ id, email, oidcSubject: sub, passwordHash: null });
       await seedUser(id);
-      recordAudit({ actorId: id, action: 'sso_provisioned', targetType: 'user', targetId: id, payload: { email }, status: 201 });
+      recordAudit({ actorId: id, action: 'sso_provisioned', targetType: 'user', targetId: id, payload: { email, via: 'invite' }, status: 201 });
       user = (await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1))[0];
     }
 

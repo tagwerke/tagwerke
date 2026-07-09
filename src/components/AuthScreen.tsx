@@ -20,6 +20,8 @@ function initialResetToken(): string | null {
 function ssoErrorMessage(code: string): string {
   switch (code) {
     case 'domain': return 'Your email domain isn’t allowed to sign in here.';
+    case 'invite_required': return 'No account yet — enter an invite code to join with SSO.';
+    case 'invite_invalid': return 'That invite code is invalid or has been used up.';
     case 'deactivated': return 'This account has been deactivated.';
     case 'disabled': return 'SSO is not enabled.';
     case 'no_email': return 'Your identity provider didn’t share a verified email.';
@@ -90,6 +92,13 @@ export function AuthScreen() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [passkeyConditional]);
+
+  // Kick off SSO. Any invite code the user typed rides along in the query string; the server
+  // only consumes it if this sign-in provisions a NEW account (existing users ignore it).
+  const startSso = () => {
+    const code = inviteCode.trim();
+    window.location.href = `/api/auth/oidc/start${code ? `?invite=${encodeURIComponent(code)}` : ''}`;
+  };
 
   const doPasskey = async () => {
     setPkBusy(true);
@@ -262,14 +271,34 @@ export function AuthScreen() {
               </button>
             )}
             {sso?.enabled && (
-              <button
-                type="button"
-                className="btn auth-sso"
-                onClick={() => { window.location.href = '/api/auth/oidc/start'; }}
-              >
-                Sign in with {sso.buttonLabel}
-              </button>
+              <>
+                {/* Enforced-SSO mode hides the password signup form, so a first-time user has
+                    nowhere else to present an invite — offer an optional code beside the button. */}
+                {pwDisabledLogin && (
+                  <label className="auth-field">
+                    <span>invite code</span>
+                    <input
+                      type="text"
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value)}
+                      placeholder="only if you’re joining for the first time"
+                    />
+                  </label>
+                )}
+                <button type="button" className="btn auth-sso" onClick={startSso}>
+                  Sign in with {sso.buttonLabel}
+                </button>
+              </>
             )}
+          </>
+        )}
+
+        {mode === 'signup' && sso?.enabled && (
+          <>
+            <div className="auth-divider"><span>or</span></div>
+            <button type="button" className="btn auth-sso" onClick={startSso}>
+              Sign up with {sso.buttonLabel}
+            </button>
           </>
         )}
 

@@ -272,9 +272,10 @@ npm run start        # migrates, then serves dist/ + /api on PORT (default 5174)
 ## Security & compliance features
 
 - **SSO via OIDC** (Authorization Code + PKCE): configured in-app from the admin console —
-  works with Keycloak, Authentik, Entra ID, Okta, or any standards-compliant IdP. Supports
-  domain-gated just-in-time provisioning and an enforced-SSO mode (password login disabled,
-  with a lockout-proof fallback). Local email/password auth always remains available as a
+  works with Keycloak, Authentik, Entra ID, Okta, or any standards-compliant IdP. New accounts
+  are invite-gated (SSO signs existing users in; first-time creation consumes an invite), with
+  an optional allowed-domain filter and an enforced-SSO mode (password login disabled, with a
+  lockout-proof fallback). Local email/password auth always remains available as a
   deployment option — you are never forced into an external IdP.
 - **Two-factor auth:** TOTP (authenticator apps) and **WebAuthn passkeys**.
 - **Audit log:** append-only, covers every mutating API call, with field-level diffs for
