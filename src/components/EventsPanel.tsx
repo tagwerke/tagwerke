@@ -28,7 +28,7 @@ function fmtDate(d: string): string {
   return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-export function EventsPanel({ tabId, tabName, onClose }: { tabId: string; tabName: string; onClose: () => void }) {
+export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: string; tabName: string; onClose: () => void; embedded?: boolean }) {
   const me = useSession((s) => s.user);
   const tab = useStore((s) => s.tabs[tabId]);
   const setTabLocation = useStore((s) => s.setTabLocation);
@@ -77,17 +77,11 @@ export function EventsPanel({ tabId, tabName, onClose }: { tabId: string; tabNam
     return occ.attendance.filter((a) => a.status === 'accepted').map((a) => roster[a.userId] ?? a.userId);
   }
 
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="share-panel events-panel" onClick={(e) => e.stopPropagation()}>
-        <header className="share-head">
-          <strong>Schedule · {tabName}</strong>
-          <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
-        </header>
+  const body = (
+    <>
+      {error && <div className="share-error">{error}</div>}
 
-        {error && <div className="share-error">{error}</div>}
-
-        <label className="events-location">
+      <label className="events-location">
           <span>Location</span>
           <input
             type="text"
@@ -153,6 +147,19 @@ export function EventsPanel({ tabId, tabName, onClose }: { tabId: string; tabNam
           </select>
           <button type="submit" disabled={busy || !start}>Add event</button>
         </form>
+    </>
+  );
+
+  if (embedded) return <div className="panel-embed">{body}</div>;
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="share-panel events-panel" onClick={(e) => e.stopPropagation()}>
+        <header className="share-head">
+          <strong>Schedule · {tabName}</strong>
+          <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
+        </header>
+        {body}
       </div>
     </div>
   );

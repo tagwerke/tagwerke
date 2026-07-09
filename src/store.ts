@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
-import type { BoardSettings, Filter, ID, PlannerMode, Project, RootState, Tab, Task, TaskStatus, TimeBlock } from './types';
+import type { BoardSettings, BoardView, Filter, ID, PlannerMode, Project, RootState, Tab, Task, TaskStatus, TimeBlock } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { api, enqueue } from './api/client';
@@ -24,6 +24,7 @@ interface Actions {
   setTabDoc(id: ID, doc: unknown): void;
   deleteTab(id: ID): void;
   setActiveTab(id: ID | null): void;
+  setBoardView(view: BoardView): void;
 
   upsertTask(t: Partial<Task> & { id: ID; homeTabId: ID; text: string }): Task;
   setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'reviewerId' | 'position'>>): void;
@@ -107,6 +108,7 @@ function makeInitial(): RootState {
     tabOrder: [sampleTabId, personalTabId],
     starredRowOrder: [sampleTabId],
     activeTabId: null,
+    boardView: 'doc',
     plannerOpen: false,
     plannerDate: todayISO(),
     plannerMode: 'day',
@@ -246,7 +248,11 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         enqueue(() => api.tabs.remove(id));
       },
       setActiveTab(id) {
-        set({ activeTabId: id });
+        // Opening a board lands on the doc view; leaving resets too (harmless).
+        set({ activeTabId: id, boardView: 'doc' });
+      },
+      setBoardView(view) {
+        set({ boardView: view });
       },
 
       upsertTask({ id, homeTabId, text, ...meta }) {
@@ -429,6 +435,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           plannerDate: state.plannerDate ?? todayISO(),
           plannerMode: state.plannerMode ?? 'day',
           activeTabId: cur.activeTabId,
+          boardView: cur.boardView,
           filter: cur.filter,
         });
       },

@@ -14,7 +14,7 @@ import { TrashPanel } from './TrashPanel';
 
 const ROLES: BoardRole[] = ['viewer', 'editor', 'admin'];
 
-export function SharePanel({ tabId, tabName, onClose }: { tabId: string; tabName: string; onClose: () => void }) {
+export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: string; tabName: string; onClose: () => void; embedded?: boolean }) {
   const me = useSession((s) => s.user);
   const settings = useStore((s) => s.tabs[tabId]?.settings);
   const setTabSettings = useStore((s) => s.setTabSettings);
@@ -57,17 +57,11 @@ export function SharePanel({ tabId, tabName, onClose }: { tabId: string; tabName
     }
   }
 
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="share-panel" onClick={(e) => e.stopPropagation()}>
-        <header className="share-head">
-          <strong>Share “{tabName}”</strong>
-          <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
-        </header>
+  const body = (
+    <>
+      {error && <div className="share-error">{error}</div>}
 
-        {error && <div className="share-error">{error}</div>}
-
-        <ul className="share-members">
+      <ul className="share-members">
           {members?.map((m) => {
             const self = m.userId === me?.id;
             return (
@@ -132,7 +126,7 @@ export function SharePanel({ tabId, tabName, onClose }: { tabId: string; tabName
           </form>
         )}
 
-        {(myRole === 'editor' || myRole === 'admin') && (
+        {!embedded && (myRole === 'editor' || myRole === 'admin') && (
           <div className="share-footer">
             <button className="btn ghost" onClick={() => setHistoryOpen(true)}>Board history</button>
             <button className="btn ghost" onClick={() => setTrashOpen(true)}>Trash</button>
@@ -163,6 +157,19 @@ export function SharePanel({ tabId, tabName, onClose }: { tabId: string; tabName
 
         {historyOpen && <HistoryDrawer kind="tab" id={tabId} boardId={tabId} title={tabName} onClose={() => setHistoryOpen(false)} />}
         {trashOpen && <TrashPanel tabId={tabId} tabName={tabName} onClose={() => setTrashOpen(false)} />}
+    </>
+  );
+
+  if (embedded) return <div className="panel-embed">{body}</div>;
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="share-panel" onClick={(e) => e.stopPropagation()}>
+        <header className="share-head">
+          <strong>Share “{tabName}”</strong>
+          <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
+        </header>
+        {body}
       </div>
     </div>
   );

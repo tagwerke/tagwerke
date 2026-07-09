@@ -5,6 +5,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { TopBar } from './components/TopBar';
 import { MobileNav } from './components/MobileNav';
 import { Sidebar } from './components/shell/Sidebar';
+import { ScopeStrip } from './components/shell/ScopeStrip';
 import { Board } from './components/Board';
 import { TabView } from './components/TabView';
 import { NewTabDialog } from './components/NewTabDialog';
@@ -86,7 +87,14 @@ function Workspace() {
       <Sidebar />
       <div className="main">
         <TopBar onOpen={setPanel} />
-        {active ? <TabView tabId={active.id} /> : <Board />}
+        {active ? (
+          <TabView tabId={active.id} />
+        ) : (
+          <>
+            <ScopeStrip />
+            <Board />
+          </>
+        )}
       </div>
       <MobileNav onOpen={setPanel} />
 

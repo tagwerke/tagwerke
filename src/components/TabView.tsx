@@ -2,9 +2,31 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { TabEditor } from '../editor/Editor';
 import { hexToRgba } from '../util/color';
-import { SharePanel } from './SharePanel';
-import { EventsPanel } from './EventsPanel';
-import { BoardActivity } from './BoardActivity';
+import { usePresence } from '../realtime/usePresence';
+import { Avatar } from './common/Avatar';
+import { BoardPanel } from './BoardPanel';
+import { BoardList } from './BoardList';
+import { BoardKanban } from './BoardKanban';
+import { BoardCalendar } from './BoardCalendar';
+import type { BoardView } from '../types';
+
+const VIEW_LABEL: Record<BoardView, string> = { doc: 'Doc', list: 'List', kanban: 'Kanban', calendar: 'Calendar' };
+const VIEWS: BoardView[] = ['doc', 'list', 'kanban', 'calendar'];
+
+/** Live cursors present in this board, as ringed avatars (self excluded, deduped by name). */
+function PresenceAvatars({ tabId }: { tabId: string }) {
+  const peers = usePresence(tabId).filter((p) => !p.self);
+  const seen = new Set<string>();
+  const uniq = peers.filter((p) => (seen.has(p.name) ? false : (seen.add(p.name), true)));
+  if (!uniq.length) return null;
+  return (
+    <div className="presence avatar-stack" title={`${uniq.length} editing now`}>
+      {uniq.slice(0, 4).map((p) => (
+        <Avatar key={p.clientId} name={p.name} color={p.color} size={26} ring title={`${p.name} — here now`} />
+      ))}
+    </div>
+  );
+}
 
 export function TabView({ tabId }: { tabId: string }) {
   const tab = useStore((s) => s.tabs[tabId]);
@@ -12,8 +34,9 @@ export function TabView({ tabId }: { tabId: string }) {
   const setActiveTab = useStore((s) => s.setActiveTab);
   const renameTab = useStore((s) => s.renameTab);
   const setTabStarred = useStore((s) => s.setTabStarred);
-  const [sharing, setSharing] = useState(false);
-  const [scheduling, setScheduling] = useState(false);
+  const boardView = useStore((s) => s.boardView);
+  const setBoardView = useStore((s) => s.setBoardView);
+  const [panelOpen, setPanelOpen] = useState(true);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -32,22 +55,22 @@ export function TabView({ tabId }: { tabId: string }) {
   const accent = project?.color ?? '#888';
   const style = {
     '--page-accent': accent,
-    '--page-accent-soft': hexToRgba(accent, 0.10),
+    '--page-accent-soft': hexToRgba(accent, 0.1),
   } as React.CSSProperties;
+  const isBoard = tab.type !== 'today';
+  const view = isBoard ? boardView : 'doc';
 
   return (
-    <main className="tab-view" style={style}>
-      <header className="tab-view-head">
-        <button className="back-btn" onClick={() => setActiveTab(null)} aria-label="back">
+    <main className="tab-view tab-open" style={style}>
+      <header className="board-head">
+        <button className="back-btn" onClick={() => setActiveTab(null)} aria-label="back to boards">
           <svg viewBox="0 0 16 16" width="14" height="14"><path d="M10 3L4 8l6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-          <span>board</span>
+          <span>Boards</span>
         </button>
-        <span className="tab-view-project">{project?.name}</span>
-        <input
-          className="tab-view-title"
-          value={tab.name}
-          onChange={(e) => renameTab(tab.id, e.target.value)}
-        />
+        <div className="board-head-title">
+          {project && <span className="board-eyebrow">{project.name}</span>}
+          <input className="board-title" value={tab.name} onChange={(e) => renameTab(tab.id, e.target.value)} aria-label="board title" />
+        </div>
         <button
           className={`icon-btn star ${tab.starred ? 'on' : ''}`}
           onClick={() => setTabStarred(tab.id, !tab.starred)}
@@ -56,23 +79,40 @@ export function TabView({ tabId }: { tabId: string }) {
         >
           <svg viewBox="0 0 16 16" width="16" height="16"><path d="M8 1.7l1.9 4 4.4.5-3.3 3 .9 4.3L8 11.6l-3.9 1.9.9-4.3-3.3-3 4.4-.5z" fill={tab.starred ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.2"/></svg>
         </button>
-        {tab.type !== 'today' && (
-          <>
-            <button className="icon-btn" onClick={() => setScheduling(true)} aria-label="schedule" title="schedule & location">
-              <svg viewBox="0 0 16 16" width="16" height="16"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M2 6h12M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+        <div className="board-head-right">
+          {isBoard && <PresenceAvatars tabId={tab.id} />}
+          {isBoard && (
+            <button className={`icon-btn panel-toggle ${panelOpen ? 'on' : ''}`} onClick={() => setPanelOpen((v) => !v)} aria-label="board panel" title="Board panel">
+              <svg viewBox="0 0 16 16" width="15" height="15"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M10 3v10" stroke="currentColor" strokeWidth="1.3"/></svg>
             </button>
-            <button className="icon-btn" onClick={() => setSharing(true)} aria-label="share" title="share">
-              <svg viewBox="0 0 16 16" width="16" height="16"><circle cx="11.5" cy="3.5" r="1.7" fill="none" stroke="currentColor" strokeWidth="1.2"/><circle cx="4.5" cy="7" r="1.7" fill="none" stroke="currentColor" strokeWidth="1.2"/><circle cx="11.5" cy="10.5" r="1.7" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M9.9 4.4L6.1 6.2M6.1 7.8l3.8 1.8" stroke="currentColor" strokeWidth="1.2"/></svg>
-            </button>
-          </>
-        )}
+          )}
+        </div>
       </header>
-      {tab.type !== 'today' && <BoardActivity tabId={tab.id} />}
-      <div className="tab-view-body">
-        <TabEditor tabId={tab.id} autoFocus />
+
+      {isBoard && (
+        <div className="board-toolbar">
+          <div className="seg board-views">
+            {VIEWS.map((v) => (
+              <button key={v} className={view === v ? 'on' : ''} onClick={() => setBoardView(v)}>{VIEW_LABEL[v]}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className={`board-canvas ${isBoard && panelOpen ? '' : 'no-panel'}`}>
+        <div className="board-content">
+          {view === 'doc' ? (
+            <div className="tab-view-body"><TabEditor tabId={tab.id} autoFocus /></div>
+          ) : view === 'list' ? (
+            <BoardList tabId={tab.id} />
+          ) : view === 'kanban' ? (
+            <BoardKanban tabId={tab.id} />
+          ) : (
+            <BoardCalendar tabId={tab.id} />
+          )}
+        </div>
+        {isBoard && panelOpen && <BoardPanel tabId={tab.id} tabName={tab.name} />}
       </div>
-      {sharing && <SharePanel tabId={tab.id} tabName={tab.name} onClose={() => setSharing(false)} />}
-      {scheduling && <EventsPanel tabId={tab.id} tabName={tab.name} onClose={() => setScheduling(false)} />}
     </main>
   );
 }

@@ -6,14 +6,6 @@ import type { Panel } from '../App';
 export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
   const needs2fa = useSession((s) => !!s.user && !s.user.totpEnabled);
   const activeTabId = useStore((s) => s.activeTabId);
-  const filterCount = useStore((s) => {
-    const f = s.filter;
-    return (
-      f.projectIds.length + f.owners.length + f.priorities.length +
-      (f.hasDate ? 1 : 0) + (f.dueSoon ? 1 : 0) + (f.query ? 1 : 0)
-    );
-  });
-  const resetFilter = useStore((s) => s.resetFilter);
   const logout = useSession((s) => s.logout);
 
   return (
@@ -25,13 +17,6 @@ export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
           <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           <span>search</span>
         </button>
-        <button className={`btn ghost ${filterCount ? 'has-filter' : ''}`} onClick={() => onOpen('filter')}>
-          <svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 3h12M4 8h8M6 13h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          <span>filter{filterCount ? ` · ${filterCount}` : ''}</span>
-        </button>
-        {filterCount > 0 && (
-          <button className="btn ghost tiny" onClick={resetFilter} title="Clear filters">×</button>
-        )}
         <button className="btn ghost" onClick={() => onOpen('security')} title={needs2fa ? 'Security — two-factor not set up' : 'Security & two-factor'}>
           security
           {needs2fa && <span className="nav-dot" aria-label="two-factor not set up" />}

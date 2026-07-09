@@ -100,6 +100,9 @@ export interface TimeBlock {
 
 export type PlannerMode = 'day' | 'week';
 
+/** Which view an open board renders. All read the same task entities. */
+export type BoardView = 'doc' | 'list' | 'kanban' | 'calendar';
+
 export interface RootState {
   projects: Record<ID, Project>;
   tabs: Record<ID, Tab>;
@@ -112,6 +115,8 @@ export interface RootState {
   tabOrder: ID[];
   starredRowOrder: ID[];
   activeTabId: ID | null;
+  /** Which view the open board renders (doc/list/kanban/calendar). */
+  boardView: BoardView;
   /** Planner UI state. */
   plannerOpen: boolean;
   plannerDate: string; // 'YYYY-MM-DD' cursor
