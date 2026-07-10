@@ -69,6 +69,21 @@ export function outboxIdle(): Promise<void> {
   return new Promise((resolve) => idleWaiters.push(resolve));
 }
 
+/**
+ * Task ids that still have an un-acked mutation in the queue. Callers use this to protect an
+ * optimistic local edit from being clobbered by a resync/hydrate (or a self-echo) that hasn't
+ * seen the write yet — the local value wins until the server confirms it and the op leaves the
+ * queue. Matches the per-task routes (`PUT|PATCH|DELETE /api/tasks/:id`) only.
+ */
+export function pendingTaskIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const p of queue) {
+    const m = /^\/api\/tasks\/([^/]+)$/.exec(p.op.path);
+    if (m && m[1] !== 'delete-orphans') ids.add(m[1]);
+  }
+  return ids;
+}
+
 type SendResult = 'ok' | 'conflict' | 'transient' | 'handled';
 
 async function send(op: Mutation, handlers?: Handlers): Promise<SendResult> {

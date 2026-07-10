@@ -14,6 +14,7 @@
 
 import { useStore } from '../store';
 import { flush, suspendPersistence, resumePersistence, setBaseline } from '../api/persist';
+import { pendingTaskIds } from '../offline/outbox';
 import type { ID, Task } from '../types';
 
 const RECONNECT_MIN_MS = 1000;
@@ -120,6 +121,10 @@ function normalizeTaskPatch(raw: unknown): Partial<Task> | null {
 function applyEntity(msg: { entity?: string; id?: string; action?: string; patch?: unknown }): void {
   if (msg.entity !== 'task' || !msg.id) return; // step 2: tasks only; others ignored
   const id = msg.id;
+  // A task with an un-acked local write wins until the server confirms it — ignore any remote or
+  // echoed patch for it (the DB is already converging via the outbox). This is our self-echo
+  // suppression, done client-side and idempotently, matching the resync's pending-preserve rule.
+  if (pendingTaskIds().has(id)) return;
   const tasks = useStore.getState().tasks;
 
   if (msg.action === 'DELETE') {

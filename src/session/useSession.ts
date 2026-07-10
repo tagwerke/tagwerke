@@ -7,9 +7,9 @@
 
 import { create } from 'zustand';
 import { auth, getState, setWriteErrorHandler, type SessionUser } from '../api/client';
-import { startPersistence, setBaseline, suspendPersistence, resumePersistence } from '../api/persist';
+import { startPersistence, setBaseline, suspendPersistence, resumePersistence, flush } from '../api/persist';
 import { startRealtime, stopRealtime } from '../realtime/socket';
-import { startOutbox, clearOutbox } from '../offline/outbox';
+import { startOutbox, clearOutbox, pendingTaskIds } from '../offline/outbox';
 import { saveSnapshot, loadSnapshot, saveCachedUser, loadCachedUser, clearSnapshot } from '../offline/snapshot';
 import { offline } from '../offline/status';
 import { useStore } from '../store';
@@ -50,16 +50,26 @@ async function loadState(): Promise<void> {
   hydrateAndPersist(state);
 }
 
-/** Recover from a failed write by discarding local optimistic state and re-pulling. */
+/** Re-pull authoritative state on a resync (reconnect / board-list / failed write), WITHOUT
+ *  losing optimistic local edits. The fetch happens outside any suspend window so a change made
+ *  during the round-trip still schedules normally; then flush + hydrate + baseline run as one
+ *  synchronous block (no `await`) so nothing can interleave, and tasks with an un-acked write are
+ *  preserved rather than reverted. This is the same safety `applyRemote` (socket.ts) already has. */
 async function repull(): Promise<void> {
+  let state: RootState;
+  try {
+    state = (await getState()) as RootState;
+  } catch {
+    return; // offline / transient — keep local state; the outbox will reconcile later
+  }
+  // --- synchronous region: no `await` below, so no local edit can slip in unprotected ---
+  flush(); // debounced local edits (incl. any made during the fetch) → durable outbox
+  const pending = pendingTaskIds(); // ids to protect from the rehydrate (they win until acked)
   suspendPersistence();
   try {
-    const state = (await getState()) as RootState;
-    useStore.getState().hydrate(state);
+    useStore.getState().hydrate(state, pending);
     setBaseline(useStore.getState());
     saveSnapshot(useStore.getState());
-  } catch {
-    /* offline / transient — keep local state; the outbox will reconcile later */
   } finally {
     resumePersistence();
   }

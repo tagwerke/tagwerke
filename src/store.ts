@@ -51,7 +51,9 @@ interface Actions {
 
   cleanupEmptyTasks(): number;
 
-  hydrate(state: RootState): void;
+  // `keepTaskIds` = tasks with an un-acked local write; their local value is preserved so a
+  // resync/repull can't revert an optimistic edit the server hasn't seen yet.
+  hydrate(state: RootState, keepTaskIds?: Set<ID>): void;
 
   reset(): void;
 }
@@ -421,15 +423,28 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         return emptyIds.size;
       },
 
-      hydrate(state) {
+      hydrate(state, keepTaskIds) {
         // The server's /api/state doesn't own local UI/navigation — it returns defaults for
         // these. Preserve the current values so a reconnect/repull (which re-hydrates) doesn't
         // close the open board, drop the active filter, or reset the Planner. The open board
         // lives in the URL (src/App.tsx), so on a fresh load `activeTabId` starts null here and
         // is restored from the path right after.
         const cur = get();
+        // Same "preserve local truth" contract for task entities that still have an un-acked
+        // write in flight: keep the local row (or keep it deleted, for a pending delete) so the
+        // rehydrate never clobbers an optimistic edit the server hasn't caught up to yet.
+        let tasks = state.tasks;
+        if (keepTaskIds && keepTaskIds.size) {
+          tasks = { ...state.tasks };
+          for (const id of keepTaskIds) {
+            const local = cur.tasks[id];
+            if (local) tasks[id] = local;
+            else delete tasks[id];
+          }
+        }
         set({
           ...state,
+          tasks,
           timeBlocks: state.timeBlocks ?? {},
           plannerOpen: false,
           plannerDate: state.plannerDate ?? todayISO(),
