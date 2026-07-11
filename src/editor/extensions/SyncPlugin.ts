@@ -62,6 +62,13 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
   },
   addProseMirrorPlugins() {
     const tabId = this.options.tabId;
+    // Task ids this editor has actually observed in the doc. GC (delete-from-store) is scoped to
+    // this set so a task loaded from `/api/state` that has NOT yet appeared in the doc is never
+    // deleted. This is what makes a fresh, still-empty Y.Doc on mount (before its Yjs sync/seed
+    // arrives) safe: the empty scan sees nothing, `everSeen` is empty, so no task is GC'd — instead
+    // of soft-deleting every task on the board (the "refresh wipes the board" bug). A task is only
+    // GC'd once we've seen it in the doc AND it later disappears (a genuine user deletion).
+    const everSeen = new Set<ID>();
     return [
       new Plugin({
         key,
@@ -152,10 +159,14 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
                 updates[it.id] = merged;
               }
               seen.add(it.id);
+              everSeen.add(it.id);
             }
-            // GC: drop tasks homed on this tab but no longer present in the doc.
+            // GC: drop tasks homed on this tab that we've SEEN in the doc before but that are now
+            // gone (a genuine user deletion). Scoping to `everSeen` is what prevents a not-yet-synced
+            // empty doc from soft-deleting every task on the board — a task we've never observed in
+            // the doc (still loading from the server) is left untouched, not deleted.
             for (const t of Object.values(store.tasks)) {
-              if (t.homeTabId === tabId && !seen.has(t.id)) delete updates[t.id];
+              if (t.homeTabId === tabId && everSeen.has(t.id) && !seen.has(t.id)) delete updates[t.id];
             }
             useStore.setState(() => ({ tasks: { ...updates } }));
           });
