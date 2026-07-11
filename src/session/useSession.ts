@@ -9,20 +9,22 @@ import { create } from 'zustand';
 import { auth, getState, setWriteErrorHandler, type SessionUser } from '../api/client';
 import { startPersistence, setBaseline, suspendPersistence, resumePersistence, flush } from '../api/persist';
 import { startRealtime, stopRealtime } from '../realtime/socket';
-import { startOutbox, clearOutbox, pendingTaskIds } from '../offline/outbox';
+import { startOutbox, clearOutbox, pendingTaskIds, outboxIdle } from '../offline/outbox';
 import { saveSnapshot, loadSnapshot, saveCachedUser, loadCachedUser, clearSnapshot } from '../offline/snapshot';
 import { offline } from '../offline/status';
 import { useStore } from '../store';
-import type { RootState } from '../types';
+import type { ID, RootState } from '../types';
 
 type Status = 'loading' | 'unauthenticated' | 'ready';
 
 let persistenceStarted = false;
 
-/** Hydrate the store from a state object and (re)set the persistence baseline + snapshot. */
-function hydrateAndPersist(state: RootState): void {
+/** Hydrate the store from a state object and (re)set the persistence baseline + snapshot.
+ *  `keepTaskIds` protects tasks with an un-acked write from being reverted by the hydrate (used on
+ *  the online boot path, where a prior offline session's writes may still be replaying). */
+function hydrateAndPersist(state: RootState, keepTaskIds?: Set<ID>): void {
   suspendPersistence();
-  useStore.getState().hydrate(state);
+  useStore.getState().hydrate(state, keepTaskIds);
   resumePersistence();
   if (!persistenceStarted) {
     startPersistence();
@@ -38,6 +40,11 @@ function hydrateAndPersist(state: RootState): void {
 
 /** Pull authoritative state; if the network is down, boot from the last snapshot. */
 async function loadState(): Promise<void> {
+  // Read-your-writes on boot too: a prior offline session's queued writes (replayed by
+  // startOutbox) must commit before we read, or getState returns state that predates them and
+  // the hydrate reverts them. Drain first (bounded), then read; belt-and-suspenders preserve any
+  // still-queued task via `pendingTaskIds()`.
+  await drainForRead();
   let state: RootState;
   try {
     state = (await getState()) as RootState;
@@ -45,17 +52,43 @@ async function loadState(): Promise<void> {
     const snap = await loadSnapshot();
     if (!snap) throw e; // nothing cached → genuinely can't proceed
     offline.setOnline(false);
-    state = snap;
+    hydrateAndPersist(snap); // snapshot IS local truth — no pending-preserve needed
+    return;
   }
-  hydrateAndPersist(state);
+  hydrateAndPersist(state, pendingTaskIds());
+}
+
+/** Longest we'll wait for the outbox to drain before an authoritative read. If writes are still
+ *  stuck after this (server flaky), we read anyway — whatever is still queued stays protected by
+ *  `pendingTaskIds()`, so nothing is lost; we just accept a possibly-stale field for those tasks. */
+const READ_DRAIN_CAP_MS = 4000;
+
+/** Wait for the outbox to fully drain, but never hang a resync on a stuck/offline queue. */
+function drainForRead(): Promise<void> {
+  return Promise.race([
+    outboxIdle(),
+    new Promise<void>((resolve) => setTimeout(resolve, READ_DRAIN_CAP_MS)),
+  ]);
 }
 
 /** Re-pull authoritative state on a resync (reconnect / board-list / failed write), WITHOUT
- *  losing optimistic local edits. The fetch happens outside any suspend window so a change made
- *  during the round-trip still schedules normally; then flush + hydrate + baseline run as one
- *  synchronous block (no `await`) so nothing can interleave, and tasks with an un-acked write are
- *  preserved rather than reverted. This is the same safety `applyRemote` (socket.ts) already has. */
+ *  losing optimistic local edits.
+ *
+ *  Read-your-writes: an authoritative full-state read must not be applied if it could predate a
+ *  local write, or it hydrates stale data OVER a change we already made. So we (1) flush any
+ *  debounced edit into the durable outbox and (2) wait for the outbox to drain, so the server has
+ *  COMMITTED our writes before it computes the state we read. Only then do we (3) getState().
+ *  `pendingTaskIds()` alone is not enough — it protects a write only while it's still queued; once
+ *  acked, a resync `GET /api/state` that raced ahead of it would silently revert the change (the
+ *  exact "server check ran after the change → change never persisted" bug).
+ *
+ *  A late edit made DURING the read is still covered: the post-fetch flush + hydrate + baseline run
+ *  as one synchronous block (no `await`) so nothing interleaves, and any task with an un-acked write
+ *  is preserved rather than reverted — the same belt-and-suspenders `applyRemote` (socket.ts) has. */
 async function repull(): Promise<void> {
+  flush(); // debounced edits → durable outbox, so the drain below actually waits for them
+  await drainForRead(); // read-your-writes: let our own writes commit before we read
+
   let state: RootState;
   try {
     state = (await getState()) as RootState;
@@ -63,7 +96,7 @@ async function repull(): Promise<void> {
     return; // offline / transient — keep local state; the outbox will reconcile later
   }
   // --- synchronous region: no `await` below, so no local edit can slip in unprotected ---
-  flush(); // debounced local edits (incl. any made during the fetch) → durable outbox
+  flush(); // any edit made DURING the read → durable outbox
   const pending = pendingTaskIds(); // ids to protect from the rehydrate (they win until acked)
   suspendPersistence();
   try {
