@@ -1093,11 +1093,42 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .share-add { display: flex; gap: 6px; margin-top: 4px; }
 .share-add input { flex: 1; }
-.share-add button, .share-member .icon-btn {
+/* Direct child only: the Add button. A bare `.share-add button` also styled the nested lookup
+   result rows (they're buttons inside this form) and fought their own styling. */
+.share-add > button, .share-member .icon-btn {
   border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
   padding: 6px 10px; font-size: 13px; cursor: pointer;
 }
-.share-add button:disabled { opacity: 0.5; cursor: default; }
+.share-add > button:disabled { opacity: 0.5; cursor: default; }
+
+/* User lookup combobox (EmailLookup) — the styled "add member" search field + results dropdown. */
+.lookup { position: relative; flex: 1; min-width: 0; }
+.lookup-field { position: relative; display: flex; align-items: center; }
+.lookup .lookup-input {
+  width: 100%;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
+  padding: 6px 28px 6px 8px; font-size: 13px; outline: none; color: var(--ink);
+}
+.lookup .lookup-input:focus { border-color: var(--line-strong); }
+.lookup-icon { position: absolute; right: 8px; color: var(--ink-mute); pointer-events: none; }
+.lookup-results {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+  list-style: none; margin: 0; padding: 4px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop); max-height: 220px; overflow-y: auto;
+}
+.lookup-empty { padding: 8px; font-size: 13px; color: var(--ink-mute); }
+/* Resting rows = background colour (transparent over the panel). The highlighted row inverts to
+   the opposite of the system theme — cream-on-dark in dark mode, dark-on-cream in light — the same
+   inversion the date-picker's selected cell uses. */
+.lookup .lookup-row {
+  display: block; width: 100%; text-align: left;
+  padding: 7px 8px; border: 0; border-radius: var(--r-sm); background: transparent;
+  font-size: 13px; color: var(--ink); cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lookup .lookup-row.active, .lookup .lookup-row:hover { background: var(--ink); color: var(--bg); }
+.board-panel-body .lookup-input { height: 32px; }
 
 /* Events / schedule panel */
 .events-panel, .admin-panel { width: min(520px, calc(100vw - 32px)); max-height: 80vh; overflow-y: auto; }
@@ -1858,16 +1889,65 @@ input, select, textarea { font: inherit; color: inherit; }
 .audit-filters input:focus, .audit-filters select:focus { border-color: var(--pop); }
 .audit-filters > input { min-width: 170px; }
 .audit-filters .audit-date { display: flex; align-items: center; gap: 5px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-mute); }
-.audit-table { overflow: auto; border: 1px solid var(--line); border-radius: var(--r-sm); }
-.audit-row { display: grid; grid-template-columns: 92px 180px 1fr 1fr 48px; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 12px; align-items: center; cursor: pointer; }
+/* overflow visible so the per-value filter menus can escape the table; the outer .admin-page-body
+   provides scrolling. Time column widened for the absolute timestamp. */
+.audit-table { overflow: visible; border: 1px solid var(--line); border-radius: var(--r-sm); }
+.audit-row { display: grid; grid-template-columns: 150px 180px 1fr 1fr 48px; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 12px; align-items: start; cursor: pointer; }
 .audit-row:last-child { border-bottom: none; }
 .audit-head { position: sticky; top: 0; background: var(--bg-paper); font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .5px; font-size: 10px; cursor: default; }
 .audit-row:not(.audit-head):hover { background: var(--bg-paper); }
 .audit-action { font-family: ui-monospace, Menlo, monospace; color: var(--ink); }
-.audit-target { color: var(--ink-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audit-target { color: var(--ink-mute); min-width: 0; word-break: break-word; }
 .audit-payload { grid-column: 1 / -1; margin: 6px 0 0; padding: 8px; background: var(--bg); border-radius: var(--r-sm); font-size: 11px; overflow: auto; max-height: 240px; }
 .audit-foot { padding-top: 10px; text-align: center; }
 .audit-end { font-size: 11px; color: var(--ink-mute); }
+
+/* Condition chips (the is / is-not filter set) */
+.audit-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.audit-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-paper); font-size: 11.5px; color: var(--ink); }
+.audit-chip.is-not { border-color: color-mix(in srgb, var(--pop) 35%, var(--line)); }
+.audit-chip-field { color: var(--ink-mute); text-transform: uppercase; letter-spacing: .5px; font-size: 9.5px; font-weight: 700; }
+.audit-chip-op { color: var(--ink-soft); font-style: italic; }
+.audit-chip.is-not .audit-chip-op { color: var(--pop); }
+.audit-chip-value { font-weight: 500; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audit-chip-x { border: 0; background: none; color: var(--ink-mute); font-size: 14px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.audit-chip-x:hover { color: var(--ink); }
+.audit-chip-add { cursor: pointer; color: var(--ink-soft); }
+.audit-chip-add:hover { border-color: var(--line-strong); color: var(--ink); }
+.audit-addfilter { position: relative; display: inline-flex; }
+.audit-addfilter-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 60; display: flex; gap: 6px; align-items: center; padding: 8px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-pop); }
+.audit-addfilter-menu select, .audit-addfilter-menu input { border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-paper); color: var(--ink); padding: 5px 7px; font-size: 12px; }
+.audit-addfilter-menu input { width: 150px; }
+.audit-presets { display: inline-flex; gap: 4px; }
+
+/* Per-value "show matching / exclude" affordance in cells */
+.audit-val { position: relative; display: inline-flex; max-width: 100%; }
+.audit-val-btn { border: 0; background: none; color: inherit; font: inherit; padding: 0; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audit-val-btn:hover { text-decoration: underline dotted; text-underline-offset: 2px; }
+.audit-val-menu { position: absolute; top: calc(100% + 2px); left: 0; z-index: 60; display: flex; flex-direction: column; min-width: 132px; padding: 4px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-pop); }
+.audit-val-menu button { text-align: left; border: 0; background: none; color: var(--ink); font-size: 12px; padding: 6px 8px; border-radius: var(--r-sm); cursor: pointer; }
+.audit-val-menu button:hover { background: var(--line); }
+
+/* Record preview drawer (right side) */
+.record-drawer-backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.25); }
+.record-drawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(380px, 92vw); z-index: 201; background: var(--bg-elev); border-left: 1px solid var(--line); box-shadow: var(--shadow-pop); display: flex; flex-direction: column; padding: 14px 16px 24px; overflow-y: auto; }
+.record-drawer-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.record-type { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; color: var(--ink-mute); }
+.record-drawer-head .icon-btn { margin-left: auto; }
+.record-title { margin: 0 0 12px; font-size: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.record-deleted { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--pop); border: 1px solid color-mix(in srgb, var(--pop) 40%, transparent); border-radius: 999px; padding: 1px 6px; font-weight: 700; }
+.record-fields { margin: 0 0 16px; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; }
+.record-field { display: contents; }
+.record-field dt { color: var(--ink-mute); font-size: 12px; }
+.record-field dd { margin: 0; font-size: 12.5px; color: var(--ink); word-break: break-word; }
+.record-tombstone { padding: 8px 0 16px; }
+.record-tombstone p { color: var(--ink-mute); font-size: 12.5px; }
+.record-history-head { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; color: var(--ink-mute); border-top: 1px solid var(--line); padding-top: 12px; margin-bottom: 8px; }
+.record-history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.record-history-entry { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+.record-history-actor { font-weight: 600; color: var(--ink); }
+.record-history-action { color: var(--ink-soft); font-family: var(--mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.record-history-time { color: var(--ink-mute); font-size: 11px; white-space: nowrap; }
 
 /* ── /admin page (dedicated, step-up gated) ───────────────────────────── */
 .admin-page { min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; }
@@ -1977,9 +2057,11 @@ input, select, textarea { font: inherit; color: inherit; }
   position: sticky; top: 0; height: 100vh; overflow: auto;
 }
 .sidebar-brand { background: none; border: 0; padding: 2px 6px; cursor: pointer; }
-.sidebar-sec-head { display: flex; align-items: center; gap: 6px; margin: 0 4px 8px 9px; }
+.sidebar-sec-head { position: relative; display: flex; align-items: center; gap: 6px; margin: 0 4px 8px 9px; }
 .sidebar-sec-label { font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; font-weight: 700; color: var(--ink-mute); }
-.sidebar-add { margin-left: auto; width: 20px; height: 20px; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--ink-mute); font-size: 15px; border: 0; background: none; cursor: pointer; }
+/* Match the space rows' gear button (22×22, same right inset) so the + sits in that same column,
+   and center the glyph with inline-flex + line-height:1 instead of relying on the font's metrics. */
+.sidebar-add { margin-left: auto; width: 22px; height: 22px; border-radius: var(--r-sm); display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 0; color: var(--ink-mute); font-size: 17px; border: 0; background: none; cursor: pointer; }
 .sidebar-add:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
 .sidebar-spacer { flex: 1; }
 .sidebar-account { display: flex; align-items: center; gap: 9px; padding: 8px; border-top: 1px solid var(--line); }
@@ -1998,12 +2080,19 @@ input, select, textarea { font: inherit; color: inherit; }
 .space-gear { width: 22px; height: 22px; border-radius: var(--r-sm); display: none; place-items: center; color: var(--ink-mute); font-size: 12px; border: 0; background: none; flex: none; cursor: pointer; margin-right: 4px; }
 .space:hover .space-gear { display: grid; }
 .space:hover .space-count { display: none; }
-.space-menu { position: absolute; top: 100%; right: 6px; z-index: 30; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-pop); padding: 6px; display: flex; flex-direction: column; gap: 4px; min-width: 156px; }
-.space-menu button { text-align: left; padding: 6px 8px; border-radius: var(--r-sm); font-size: 13px; background: none; border: 0; color: var(--ink); cursor: pointer; }
-.space-menu button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-.space-menu button.danger { color: var(--pop); }
-.space-colors { display: flex; gap: 4px; padding: 2px 4px; }
-.space-colors button { width: 18px; height: 18px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; }
+/* Shared space create/edit popover (SpaceForm). Anchored under its trigger (the + in the section
+   head, or a space row's gear) and spanning that container's width. */
+.space-form { position: absolute; top: calc(100% + 4px); left: 9px; right: 6px; z-index: 40; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-pop); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.space-form-name { width: 100%; padding: 6px 8px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg-paper); color: var(--ink); font-size: 13px; }
+.space-form-name:focus { outline: none; border-color: var(--line-strong); }
+.space-form-colors { display: flex; gap: 6px; }
+.space-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; }
+.space-swatch.on { border-color: var(--ink); }
+.space-form-action { padding: 6px 8px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg-paper); color: var(--ink); font-size: 13px; font-weight: 600; cursor: pointer; }
+.space-form-action:hover:not(:disabled) { border-color: var(--line-strong); }
+.space-form-action:disabled { opacity: 0.5; cursor: default; }
+.space-form-action.danger { color: var(--pop); border-color: color-mix(in srgb, var(--pop) 30%, transparent); }
+.space-form-action.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--pop) 8%, transparent); }
 
 /* Agenda rail */
 .agenda-head { display: flex; align-items: baseline; gap: 8px; margin: 0 4px 8px 9px; }
@@ -2160,7 +2249,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .board-panel-body .share-member .icon-btn { font-size: 11px; color: var(--ink-mute); }
 .board-panel-body .share-add { margin-top: 14px; gap: 6px; }
 .board-panel-body .share-add input { flex: 1; height: 32px; border-radius: var(--r-sm); }
-.board-panel-body .share-add button { border-radius: var(--r-sm); background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 600; }
+.board-panel-body .share-add > button { border-radius: var(--r-sm); background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 600; }
 .board-panel-body .board-settings { margin-top: 20px; padding-top: 14px; }
 .board-panel-body .board-settings strong { font-size: 9.5px; letter-spacing: 1.6px; }
 

@@ -6,7 +6,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, ilike, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
@@ -32,8 +32,44 @@ async function adminCount(tabId: string): Promise<number> {
   return Number(rows[0]?.c ?? 0);
 }
 
+/** True when the caller is an admin on at least one board — i.e. can manage members somewhere,
+ *  which is what authorizes the user lookup. Board-level, NOT the platform admin role. */
+async function canManageAnyBoard(userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ tabId: schema.boardMembers.tabId })
+    .from(schema.boardMembers)
+    .where(and(eq(schema.boardMembers.userId, userId), eq(schema.boardMembers.role, 'admin')))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Escape a user string so it matches LITERALLY inside a LIKE/ILIKE pattern. */
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 export async function memberRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
+
+  // Workspace user lookup for the "add member" picker. A SEARCH, not a directory dump: needs a
+  // ≥2-char query and returns at most a handful of minimal rows (id + email only — no roles, no
+  // platform-admin data). Authorized for anyone who can manage members on some board, so board
+  // admins can add any teammate without already sharing a board with them. Enumeration is bounded
+  // by the query requirement; org-wide privacy, if ever needed, belongs behind an org setting.
+  app.get('/api/users/lookup', async (req, reply) => {
+    const q = ((req.query as { q?: string }).q ?? '').trim();
+    if (q.length < 2) return { users: [] }; // below the search threshold → nothing (no bulk list)
+    if (!(await canManageAnyBoard(req.user!.id)))
+      return reply.code(403).send({ error: 'insufficient permission' });
+    const pattern = `%${escapeLike(q.toLowerCase())}%`;
+    const rows = await db
+      .select({ id: schema.users.id, email: schema.users.email })
+      .from(schema.users)
+      .where(and(ilike(schema.users.email, pattern), isNull(schema.users.deactivatedAt)))
+      .orderBy(asc(schema.users.email))
+      .limit(10);
+    return { users: rows };
+  });
 
   // List the access list. Any member may see who else is on the board.
   app.get(

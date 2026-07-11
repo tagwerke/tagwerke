@@ -191,6 +191,10 @@ export const api = {
     remove: (id: ID) => submitMutation(M('DELETE', `/api/time-blocks/${id}`)),
     reorder: (order: ID[]) => submitMutation(M('POST', '/api/time-blocks/reorder', { order })),
   },
+  // Workspace user search for the add-member picker (server-side, ≥2 chars, board-admin gated).
+  users: {
+    lookup: (q: string) => req<{ users: UserLookupResult[] }>(`/api/users/lookup?q=${encodeURIComponent(q)}`),
+  },
   members: {
     list: (tabId: ID) => req<{ members: BoardMember[] }>(`/api/tabs/${tabId}/members`),
     add: (tabId: ID, email: string, role: BoardRole) =>
@@ -240,6 +244,11 @@ export const api = {
     setOrgConfig: (patch: OrgConfig) => req('/api/org/config', { method: 'PATCH', body: JSON.stringify(patch) }),
     audit: (p: AuditParams = {}) =>
       req<{ entries: AuditEntry[]; nextCursor: string | null }>(`/api/admin/audit?${auditQuery(p)}`),
+    // Read-only preview of a record behind an audit id (target/actor/scope) + its change list.
+    record: (type: string, id: ID, scope?: string) =>
+      req<{ record: PreviewRecord | null; history: HistoryEntry[] }>(
+        `/api/admin/record/${encodeURIComponent(type)}/${encodeURIComponent(id)}${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`,
+      ),
     // Step-up ("sudo"): status doubles as the admin probe (404 ⇒ not an admin).
     sudoStatus: () => req<{ active: boolean }>('/api/admin/sudo'),
     sudo: (creds: { password?: string; totp?: string }) =>
@@ -256,13 +265,23 @@ export const api = {
   },
 };
 
+/** A filterable audit field (the row's own columns; `actor`=actorId, `scope`=board/tab id). */
+export type AuditField = 'actor' | 'action' | 'targetType' | 'targetId' | 'scope' | 'status' | 'method';
+
+/** One is / is-not filter condition. Conditions are AND-combined server-side. */
+export interface AuditCondition {
+  field: AuditField;
+  op: 'is' | 'isnot';
+  value: string;
+}
+
 export interface AuditParams {
   limit?: number;
   cursor?: string;
-  action?: string;
-  actor?: string;
-  from?: string;
-  to?: string;
+  /** is / is-not conditions over the row's fields (the "show matching / exclude" board filters). */
+  conditions?: AuditCondition[];
+  from?: string; // ISO datetime (inclusive lower bound)
+  to?: string; // ISO datetime (inclusive upper bound)
   category?: 'all' | 'security';
 }
 export interface AuditEntry {
@@ -273,10 +292,25 @@ export interface AuditEntry {
   targetType: string | null;
   targetId: string | null;
   scopeId: string | null;
+  scopeName: string | null; // board/tab name for the scope, resolved server-side
   method: string | null;
   status: number | null;
   createdAt: string;
   payload: unknown;
+}
+
+/** One label/value pair in a record preview. */
+export interface RecordField {
+  label: string;
+  value: string;
+}
+/** Read-only preview of a record behind an audit id (task/board/user/member). */
+export interface PreviewRecord {
+  type: string;
+  id: ID;
+  title: string;
+  deleted: boolean;
+  fields: RecordField[];
 }
 
 /** One row of a per-object history timeline (Layer A). Actor-scoped projection of the audit log. */
@@ -303,15 +337,16 @@ export interface TrashedTask {
 
 function auditQuery(p: AuditParams): string {
   const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(p)) if (v != null && v !== '') qs.set(k, String(v));
+  const { conditions, ...rest } = p;
+  for (const [k, v] of Object.entries(rest)) if (v != null && v !== '') qs.set(k, String(v));
+  if (conditions?.length) qs.set('conditions', JSON.stringify(conditions)); // JSON: values may hold spaces/colons
   return qs.toString();
 }
 
 /** URL for a filtered audit export download (browser GETs it directly with the session cookie). */
 export function auditExportUrl(format: 'csv' | 'ndjson', p: AuditParams = {}): string {
-  const qs = new URLSearchParams({ format });
-  for (const [k, v] of Object.entries(p)) if (v != null && v !== '') qs.set(k, String(v));
-  return `/api/admin/audit/export?${qs.toString()}`;
+  const qs = auditQuery(p);
+  return `/api/admin/audit/export?format=${format}${qs ? `&${qs}` : ''}`;
 }
 
 export interface BoardActivityRow {
@@ -326,6 +361,12 @@ export interface BoardMember {
   userId: ID;
   email: string;
   role: BoardRole;
+}
+
+/** A minimal user row from the add-member lookup (id + email only). */
+export interface UserLookupResult {
+  id: ID;
+  email: string;
 }
 
 /** A time block as returned by the day/week read (nullable facets straight from the row). */

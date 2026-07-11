@@ -20,6 +20,7 @@
     "typecheck:server": "tsc -p tsconfig.server.json --noEmit",
     "import:state": "tsx server/scripts/import-state.ts",
     "invite": "tsx server/scripts/create-invite.ts",
+    "seed-users": "tsx server/scripts/seed-users.ts",
     "reset-pw": "tsx server/scripts/reset-password.ts",
     "prune-audit": "tsx server/scripts/prune-audit.ts",
     "erase-user": "tsx server/scripts/erase-user.ts",

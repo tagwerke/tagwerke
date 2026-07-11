@@ -64,6 +64,13 @@ export function timeAgo(iso: string, now = new Date()): string {
   return formatDateChip(toISO(new Date(then)), now);
 }
 
+/** Absolute local timestamp for audit rows: "2026-07-11 14:32:05". */
+export function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 export function isDueSoon(iso: string, now = new Date()): boolean {
   const today = new Date(toISO(now) + 'T00:00:00');
   const target = new Date(iso + 'T00:00:00');

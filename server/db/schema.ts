@@ -363,5 +363,9 @@ export const auditLog = pgTable(
     index('audit_log_created_idx').on(t.createdAt),
     index('audit_log_target_idx').on(t.targetType, t.targetId),
     index('audit_log_scope_idx').on(t.scopeId, t.createdAt),
+    // Support the admin audit board's is/is-not filtering on actor + action (composite with
+    // createdAt so a filtered query still walks the keyset order cheaply).
+    index('audit_log_actor_idx').on(t.actorId, t.createdAt),
+    index('audit_log_action_idx').on(t.action, t.createdAt),
   ],
 );

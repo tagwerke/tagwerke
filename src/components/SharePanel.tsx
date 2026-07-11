@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError, type BoardMember, type BoardRole } from '../api/client';
 import { useSession } from '../session/useSession';
 import { useStore } from '../store';
+import { EmailLookup } from './EmailLookup';
 import { HistoryDrawer } from './HistoryDrawer';
 import { TrashPanel } from './TrashPanel';
 
@@ -42,6 +43,9 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
 
   const myRole = members?.find((m) => m.userId === me?.id)?.role;
   const isAdmin = myRole === 'admin';
+
+  // People already on this board — hidden from the lookup (adding them would 409 anyway).
+  const currentEmails = new Set((members ?? []).map((m) => m.email.toLowerCase()));
 
   async function run(fn: () => Promise<unknown>, after?: () => void) {
     setBusy(true);
@@ -112,12 +116,12 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
               });
             }}
           >
-            <input
-              type="email"
-              placeholder="add by email…"
+            <EmailLookup
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={setEmail}
+              exclude={currentEmails}
               disabled={busy}
+              placeholder="add by email…"
             />
             <select value={role} onChange={(e) => setRole(e.target.value as BoardRole)} disabled={busy}>
               {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
