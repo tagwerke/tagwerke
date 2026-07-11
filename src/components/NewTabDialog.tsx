@@ -8,9 +8,14 @@ export function NewTabDialog({ onClose }: { onClose: () => void }) {
   const createTab = useStore((s) => s.createTab);
   const createProject = useStore((s) => s.createProject);
   const setActiveTab = useStore((s) => s.setActiveTab);
+  const filter = useStore((s) => s.filter);
+
+  // If the grid is scoped to a single space, preselect it — a new board created from inside a
+  // space almost always belongs to that space. Otherwise fall back to the first project.
+  const activeSpace = filter.projectIds.length === 1 ? filter.projectIds[0] : null;
 
   const [name, setName] = useState('');
-  const [projectId, setProjectId] = useState(projectOrder[0] ?? '');
+  const [projectId, setProjectId] = useState(activeSpace ?? projectOrder[0] ?? '');
   const [newProjectMode, setNewProjectMode] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
 

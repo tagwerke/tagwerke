@@ -36,7 +36,10 @@ export function Board() {
     };
   }, [tabs, tasks, filter]);
 
-  const groupByProject = filter.projectIds.length > 0;
+  // Group (with per-space headers) only when MORE THAN ONE space is in view. When scoped to a
+  // single space, its name is already shown once in the ScopeStrip pill, so a group header would
+  // just repeat it as a second strip — render the boards flat instead.
+  const groupByProject = filter.projectIds.length > 1;
 
   const grouped = useMemo(() => {
     const out: Array<{ projectId: string; tabIds: string[] }> = [];

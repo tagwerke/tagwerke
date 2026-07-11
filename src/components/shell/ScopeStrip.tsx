@@ -27,19 +27,21 @@ export function ScopeStrip() {
 
   return (
     <div className="scope-strip">
-      <div className="scope-left">
-        {scoped ? (
-          <span className="scope-current">
+      <div className="scope-facets">
+        {/* The space scope is a pill inline with the filter pills — it's the single place the name
+            is shown on the grid (the board group header is suppressed when scoped to one space).
+            Clicking it un-scopes. */}
+        {scoped && (
+          <button
+            className="chip chip-space"
+            title={`Clear ${scoped.name} scope`}
+            onClick={() => setFilter({ projectIds: [] })}
+          >
             <span className="scope-dot" style={{ background: scoped.color }} />
             {scoped.name}
-            <button className="scope-clear-x" title="Clear space scope" onClick={() => setFilter({ projectIds: [] })}>×</button>
-          </span>
-        ) : (
-          <span className="scope-current all">All boards</span>
+            <span className="chip-x" aria-hidden>×</span>
+          </button>
         )}
-      </div>
-
-      <div className="scope-facets">
         {([1, 2, 3] as const).map((p) => (
           <button
             key={p}

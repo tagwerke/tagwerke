@@ -2036,6 +2036,9 @@ input, select, textarea { font: inherit; color: inherit; }
 .scope-clear-x { border: 0; background: none; color: var(--ink-mute); font-size: 15px; cursor: pointer; padding: 0 2px; line-height: 1; }
 .scope-clear-x:hover { color: var(--ink); }
 .scope-facets { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Space scope rendered as a filter pill (dot + clear-✕), sitting among the other facet chips. */
+.chip-space .chip-x { color: var(--ink-mute); font-size: 13px; line-height: 1; margin-left: 1px; }
+.chip-space:hover .chip-x { color: var(--ink); }
 .scope-strip .chip { cursor: pointer; }
 .scope-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .scope-count { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
