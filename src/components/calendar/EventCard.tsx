@@ -24,7 +24,22 @@ interface Drag {
   origEnd: number;
 }
 
-export function EventCard({ event, box, onClick }: { event: CalendarEvent; box: LaidOut; onClick: () => void }) {
+function weekdayOf(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short' });
+}
+
+export function EventCard({
+  event,
+  box,
+  onClick,
+  dayAtClientX,
+}: {
+  event: CalendarEvent;
+  box: LaidOut;
+  onClick: () => void;
+  /** week view only: map a pointer x to its day column, enabling cross-day drag */
+  dayAtClientX?: (x: number) => string | null;
+}) {
   const tabs = useStore((s) => s.tabs);
   const projects = useStore((s) => s.projects);
   const updateEvent = useStore((s) => s.updateEvent);
@@ -33,7 +48,7 @@ export function EventCard({ event, box, onClick }: { event: CalendarEvent; box: 
   const dragRef = useRef<Drag | null>(null);
   const movedRef = useRef(false);
   const suppressClickRef = useRef(false);
-  const [preview, setPreview] = useState<{ s: number; e: number } | null>(null);
+  const [preview, setPreview] = useState<{ s: number; e: number; day: string } | null>(null);
 
   const tab = event.tabId ? tabs[event.tabId] : undefined;
   const project = tab ? projects[tab.projectId] : undefined;
@@ -73,7 +88,9 @@ export function EventCard({ event, box, onClick }: { event: CalendarEvent; box: 
     if (!d) return;
     const deltaMin = (e.clientY - d.startClientY) / PX_PER_MIN;
     if (Math.abs(e.clientY - d.startClientY) > 3) movedRef.current = true;
-    setPreview(resolve(d.mode, deltaMin));
+    // Only a body-move can change day (resizing an edge stays on its day).
+    const targetDay = d.mode === 'move' && dayAtClientX ? dayAtClientX(e.clientX) ?? day : day;
+    setPreview({ ...resolve(d.mode, deltaMin), day: targetDay });
   };
 
   const onPointerUp = () => {
@@ -81,7 +98,7 @@ export function EventCard({ event, box, onClick }: { event: CalendarEvent; box: 
     dragRef.current = null;
     if (d && movedRef.current && preview) {
       suppressClickRef.current = true; // swallow the click that follows a drag
-      updateEvent(event.id, { start: `${day}T${hm(preview.s)}`, end: `${day}T${hm(preview.e)}` });
+      updateEvent(event.id, { start: `${preview.day}T${hm(preview.s)}`, end: `${preview.day}T${hm(preview.e)}` });
     }
     setPreview(null);
   };
@@ -136,7 +153,11 @@ export function EventCard({ event, box, onClick }: { event: CalendarEvent; box: 
       title={event.title ?? tab?.name ?? '1:1'}
     >
       <span className="cal-event-resize top" data-handle="resize-top" aria-hidden />
-      {preview && <span className="cal-event-tip">{fmtMin(preview.s)}–{fmtMin(preview.e)}</span>}
+      {preview && (
+        <span className="cal-event-tip">
+          {preview.day !== day && `${weekdayOf(preview.day)} `}{fmtMin(preview.s)}–{fmtMin(preview.e)}
+        </span>
+      )}
       <span className="cal-event-time">{timeLabel}</span>
       <span className="cal-event-title">{event.title || tab?.name || '1:1'}</span>
       {tab && <span className="cal-event-board">{project ? `${project.name} · ${tab.name}` : tab.name}</span>}

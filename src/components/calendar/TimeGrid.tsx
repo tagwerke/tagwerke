@@ -43,8 +43,18 @@ export function TimeGrid({
   onEditEvent: (event: CalendarEvent) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const colRefs = useRef(new Map<string, HTMLElement>());
   const isWeek = days.length > 1;
   const template = { '--cal-days': days.length } as React.CSSProperties;
+
+  // Which day column sits under an x coordinate — for cross-day drag (week view only).
+  const dayAtClientX = (x: number): string | null => {
+    for (const [day, el] of colRefs.current) {
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x < r.right) return day;
+    }
+    return null;
+  };
 
   // Auto-scroll to the earliest timed event, or 07:00 — whichever is higher up.
   const firstMin = useMemo(() => {
@@ -105,6 +115,7 @@ export function TimeGrid({
               <div
                 className={`cal-col ${day === today ? 'is-today' : ''}`}
                 key={day}
+                ref={(el) => { if (el) colRefs.current.set(day, el); else colRefs.current.delete(day); }}
                 onClick={(e) => {
                   // Click on empty grid → create at the snapped minute. Clicks on event
                   // cards stopPropagation, so this only fires on the column background.
@@ -117,7 +128,9 @@ export function TimeGrid({
                 ))}
                 {timed.map((e) => {
                   const box = boxById.get(e.id);
-                  return box ? <EventCard key={e.id} event={e} box={box} onClick={() => onEditEvent(e)} /> : null;
+                  return box ? (
+                    <EventCard key={e.id} event={e} box={box} onClick={() => onEditEvent(e)} dayAtClientX={isWeek ? dayAtClientX : undefined} />
+                  ) : null;
                 })}
                 {day === today && (
                   <div className="cal-now" style={{ top: `${now * PX_PER_MIN}px` }}>
