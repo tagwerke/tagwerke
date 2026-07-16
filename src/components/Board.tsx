@@ -41,18 +41,35 @@ export function Board() {
   // just repeat it as a second strip — render the boards flat instead.
   const groupByProject = filter.projectIds.length > 1;
 
+  // Order boards by most-recently-updated first: a board's freshness is the newest updatedAt
+  // among its tasks (tabs carry no timestamp). Boards with no task activity fall back to
+  // creation order (newest created first), via the tabOrder index.
+  const byRecency = useMemo(() => {
+    const lastUpdated: Record<string, number> = {};
+    for (const t of Object.values(tasks)) {
+      const ts = t.updatedAt ?? t.createdAt ?? 0;
+      if (ts > (lastUpdated[t.homeTabId] ?? 0)) lastUpdated[t.homeTabId] = ts;
+    }
+    const orderIndex = new Map(tabOrder.map((id, i) => [id, i]));
+    return (a: string, b: string): number => {
+      const diff = (lastUpdated[b] ?? 0) - (lastUpdated[a] ?? 0);
+      if (diff) return diff; // latest updated first
+      return (orderIndex.get(b) ?? 0) - (orderIndex.get(a) ?? 0); // tie: latest created first
+    };
+  }, [tasks, tabOrder]);
+
   const grouped = useMemo(() => {
     const out: Array<{ projectId: string; tabIds: string[] }> = [];
     for (const pid of projectOrder) {
-      const tabIds = tabOrder.filter((tid) => tabs[tid]?.projectId === pid && passes(tid));
+      const tabIds = tabOrder.filter((tid) => tabs[tid]?.projectId === pid && passes(tid)).sort(byRecency);
       if (tabIds.length) out.push({ projectId: pid, tabIds });
     }
     return out;
-  }, [projectOrder, tabOrder, tabs, passes]);
+  }, [projectOrder, tabOrder, tabs, passes, byRecency]);
 
   const allTabIds = useMemo(
-    () => tabOrder.filter((tid) => passes(tid)),
-    [tabOrder, passes]
+    () => tabOrder.filter((tid) => passes(tid)).sort(byRecency),
+    [tabOrder, passes, byRecency]
   );
 
   if (allTabIds.length === 0) {
