@@ -207,11 +207,14 @@ export const events = pgTable(
   'events',
   {
     id: text('id').primaryKey(),
-    tabId: text('tab_id')
-      .notNull()
-      .references(() => tabs.id, { onDelete: 'cascade' }),
-    start: text('start'), // ISO datetime
+    // Nullable: null = a 1:1 / no-board meeting (owner-only, see CALENDAR_UI_PLAN.md);
+    // set = a project meeting scoped to that board.
+    tabId: text('tab_id').references(() => tabs.id, { onDelete: 'cascade' }),
+    title: text('title'), // meeting title/summary
+    start: text('start'), // ISO datetime (single instance tz — see CALENDAR_UI_PLAN.md)
     end: text('end'),
+    allDay: boolean('all_day').notNull().default(false),
+    filter: jsonb('filter'), // optional BlockFilter narrowing the board-agenda projection
     rrule: text('rrule'),
     uid: text('uid'),
     externalEventId: text('external_event_id'),
