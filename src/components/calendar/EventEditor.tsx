@@ -4,6 +4,7 @@
 // (single-timezone instance). Reuses the app's .modal pattern.
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useStore } from '../../store';
 import { useSession } from '../../session/useSession';
 import { rankTabs } from '../../util/header';
@@ -109,7 +110,7 @@ export function EventEditor({
     onClose();
   };
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="modal cal-editor" onMouseDown={(e) => e.stopPropagation()}>
         <h2>{editing ? 'edit event' : 'new event'}</h2>
@@ -197,6 +198,7 @@ export function EventEditor({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
