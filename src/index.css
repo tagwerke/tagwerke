@@ -2309,13 +2309,21 @@ input, select, textarea { font: inherit; color: inherit; }
 .cal-col.is-today { background: color-mix(in srgb, var(--pop) 3.5%, transparent); }
 .cal-hour-line { position: absolute; left: 0; right: 0; height: 1px; background: var(--line); pointer-events: none; }
 
-.cal-event { position: absolute; overflow: hidden; display: flex; flex-direction: column; gap: 1px; padding: 3px 6px; border-radius: var(--r-sm); text-align: left; box-shadow: var(--shadow-card, 0 1px 2px rgba(0,0,0,0.08)); cursor: pointer; min-height: 14px; }
+.cal-event { position: absolute; overflow: hidden; display: flex; flex-direction: column; gap: 1px; padding: 3px 6px; border-radius: var(--r-sm); text-align: left; box-shadow: var(--shadow-card, 0 1px 2px rgba(0,0,0,0.08)); cursor: grab; min-height: 14px; touch-action: none; }
 .cal-event.is-meeting { background: color-mix(in srgb, var(--accent, var(--pop)) 14%, var(--bg-paper)); border: 1px solid color-mix(in srgb, var(--accent, var(--pop)) 40%, transparent); border-left: 3px solid var(--accent, var(--pop)); }
 .cal-event.is-personal { background: var(--bg-elev); border: 1px dashed var(--line-strong); }
 .cal-event:hover { filter: brightness(1.03); box-shadow: var(--shadow-pop, 0 4px 12px rgba(0,0,0,0.14)); }
+.cal-event.is-dragging { cursor: grabbing; z-index: 5; box-shadow: var(--shadow-pop, 0 8px 20px rgba(0,0,0,0.22)); opacity: 0.96; }
+.cal-event > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-event-time { font-family: var(--mono); font-size: 9px; color: var(--ink-mute); }
-.cal-event-title { font-size: 12px; font-weight: 600; color: var(--ink); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal-event-board { font-size: 10px; color: var(--ink-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-event-title { font-size: 12px; font-weight: 600; color: var(--ink); line-height: 1.15; }
+.cal-event-board { font-size: 10px; color: var(--ink-mute); }
+/* Edge resize handles — invisible strips, cursor hints the affordance. */
+.cal-event-resize { position: absolute; left: 0; right: 0; height: 7px; cursor: ns-resize; z-index: 2; }
+.cal-event-resize.top { top: 0; }
+.cal-event-resize.bottom { bottom: 0; }
+/* Live time badge while dragging/resizing (inside, top-right). */
+.cal-event-tip { position: absolute; top: 2px; right: 2px; font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--bg); background: var(--ink); padding: 1px 6px; border-radius: 4px; white-space: nowrap; z-index: 6; }
 
 .cal-now { position: absolute; left: 0; right: 0; height: 1px; background: var(--pop); z-index: 3; pointer-events: none; }
 .cal-now-dot { position: absolute; left: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--pop); }
