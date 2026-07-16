@@ -8,6 +8,7 @@ import { Sidebar } from './components/shell/Sidebar';
 import { ScopeStrip } from './components/shell/ScopeStrip';
 import { Board } from './components/Board';
 import { TabView } from './components/TabView';
+import { CalendarView } from './components/calendar/CalendarView';
 import { NewTabDialog } from './components/NewTabDialog';
 import { FilterPanel } from './components/FilterPanel';
 import { SearchPalette } from './components/SearchPalette';
@@ -42,6 +43,7 @@ export default function App() {
 
 function Workspace() {
   const activeTabId = useStore((s) => s.activeTabId);
+  const plannerOpen = useStore((s) => s.plannerOpen);
   const tabs = useStore((s) => s.tabs);
   const cleanupEmptyTasks = useStore((s) => s.cleanupEmptyTasks);
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -87,7 +89,9 @@ function Workspace() {
       <Sidebar />
       <div className="main">
         <TopBar onOpen={setPanel} />
-        {active ? (
+        {plannerOpen ? (
+          <CalendarView />
+        ) : active ? (
           <TabView tabId={active.id} />
         ) : (
           <>

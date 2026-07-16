@@ -8,7 +8,7 @@
 // stay as direct fetches and simply fail while offline.
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import type { ID, TaskStatus, TimeBlock } from '../types';
+import type { CalendarEvent, ID, TaskStatus, TimeBlock } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
 
@@ -190,6 +190,15 @@ export const api = {
       submitMutation(M('PATCH', `/api/time-blocks/${id}`, patch)),
     remove: (id: ID) => submitMutation(M('DELETE', `/api/time-blocks/${id}`)),
     reorder: (order: ID[]) => submitMutation(M('POST', '/api/time-blocks/reorder', { order })),
+  },
+  // ── Calendar (events model) ────────────────────────────────────────────────
+  calendar: {
+    // Window read: events on boards you're a member of + your own board-less events,
+    // expanded into occurrences within [from, to]. (read → live)
+    list: (from: string, to: string) =>
+      req<{ events: CalendarEvent[]; roster: { userId: ID; email: string }[] }>(
+        `/api/calendar/events?from=${from}&to=${to}`,
+      ),
   },
   // Workspace user search for the add-member picker (server-side, ≥2 chars, board-admin gated).
   users: {

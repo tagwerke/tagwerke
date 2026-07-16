@@ -100,6 +100,39 @@ export interface TimeBlock {
 
 export type PlannerMode = 'day' | 'week';
 
+// ── Calendar (events model) ────────────────────────────────────────────────
+export type RsvpStatus = 'accepted' | 'declined' | 'tentative' | 'needs-action';
+
+export interface EventAttendance {
+  userId: ID;
+  status: RsvpStatus;
+}
+
+/** One instance of an event (a recurring event has one per occurrence date). */
+export interface EventOccurrence {
+  date: string; // 'YYYY-MM-DD'
+  attendance: EventAttendance[];
+}
+
+/**
+ * A calendar event / meeting. `tabId` null = a board-less 1:1 (owner-only). When set, the
+ * event is a project meeting and `filter` narrows the board's live-task agenda. Times are
+ * ISO datetime strings interpreted as the instance's local wall-clock (single-timezone).
+ * `occurrences` is a read decoration from the window read, not a stored column.
+ */
+export interface CalendarEvent {
+  id: ID;
+  tabId?: ID | null;
+  title?: string | null;
+  start: string | null;
+  end: string | null;
+  allDay?: boolean;
+  filter?: BlockFilter | null;
+  rrule?: string | null;
+  createdBy?: ID | null;
+  occurrences?: EventOccurrence[];
+}
+
 /** Which view an open board renders. All read the same task entities. */
 export type BoardView = 'doc' | 'list' | 'kanban' | 'calendar';
 
@@ -109,6 +142,8 @@ export interface RootState {
   tasks: Record<ID, Task>;
   /** The caller's OWN Planner blocks. Teammates' blocks live in PlannerView local state. */
   timeBlocks: Record<ID, TimeBlock>;
+  /** Calendar events visible in the current window (member boards + own board-less). */
+  events: Record<ID, CalendarEvent>;
   /** Per-board member rosters (the `@` picker's source). Keyed by tab/board id. */
   membersByBoard: Record<ID, Member[]>;
   projectOrder: ID[];

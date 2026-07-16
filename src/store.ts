@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
-import type { BoardSettings, BoardView, Filter, ID, PlannerMode, Project, RootState, Tab, Task, TaskStatus, TimeBlock } from './types';
+import type { BoardSettings, BoardView, CalendarEvent, Filter, ID, PlannerMode, Project, RootState, Tab, Task, TaskStatus, TimeBlock } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { api, enqueue } from './api/client';
@@ -45,6 +45,10 @@ interface Actions {
   setPlannerOpen(open: boolean): void;
   setPlannerDate(date: string): void;
   setPlannerMode(mode: PlannerMode): void;
+
+  // Calendar — events for the current window (own board-less + member boards). Writes
+  // arrive in a later slice; phase 2 only reads. See src/components/calendar.
+  setEvents(events: CalendarEvent[]): void;
 
   setFilter(patch: Partial<Filter>): void;
   resetFilter(): void;
@@ -105,6 +109,7 @@ function makeInitial(): RootState {
     tabs: { [sampleTabId]: sample, [personalTabId]: personal },
     tasks: {},
     timeBlocks: {},
+    events: {},
     membersByBoard: {},
     projectOrder: [defaultProjectId, personalProjectId],
     tabOrder: [sampleTabId, personalTabId],
@@ -250,8 +255,9 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         enqueue(() => api.tabs.remove(id));
       },
       setActiveTab(id) {
-        // Opening a board lands on the doc view; leaving resets too (harmless).
-        set({ activeTabId: id, boardView: 'doc' });
+        // Opening a board lands on the doc view; leaving resets too (harmless). Opening a
+        // board also leaves the calendar (they share the main content area).
+        set(id ? { activeTabId: id, boardView: 'doc', plannerOpen: false } : { activeTabId: id, boardView: 'doc' });
       },
       setBoardView(view) {
         set({ boardView: view });
@@ -372,6 +378,11 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       setPlannerMode(mode) {
         set({ plannerMode: mode });
       },
+      setEvents(events) {
+        const map: Record<ID, CalendarEvent> = {};
+        for (const e of events) map[e.id] = e;
+        set({ events: map });
+      },
 
       setFilter(patch) {
         set((s) => ({ filter: { ...s.filter, ...patch } }));
@@ -446,6 +457,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           ...state,
           tasks,
           timeBlocks: state.timeBlocks ?? {},
+          events: state.events ?? {},
           plannerOpen: false,
           plannerDate: state.plannerDate ?? todayISO(),
           plannerMode: state.plannerMode ?? 'day',

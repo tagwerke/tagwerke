@@ -27,6 +27,7 @@ export function AgendaRail() {
   const setOwnTimeBlocks = useStore((s) => s.setOwnTimeBlocks);
   const createTimeBlock = useStore((s) => s.createTimeBlock);
   const setActiveTab = useStore((s) => s.setActiveTab);
+  const setPlannerOpen = useStore((s) => s.setPlannerOpen);
   const tabs = useStore((s) => s.tabs);
   const projects = useStore((s) => s.projects);
   const tabOrder = useStore((s) => s.tabOrder);
@@ -54,10 +55,11 @@ export function AgendaRail() {
 
   return (
     <div className="agenda-rail">
-      <div className="agenda-head">
+      <button className="agenda-head" onClick={() => setPlannerOpen(true)} title="Open calendar">
         <span className="agenda-title">Today</span>
         <span className="agenda-date">{formatDateChip(today)}</span>
-      </div>
+        <span className="agenda-open" aria-hidden>→</span>
+      </button>
       <div className="agenda-list">
         {blocks.length === 0 && <p className="agenda-empty muted">Nothing scheduled.</p>}
         {blocks.map((b) => {
