@@ -1,8 +1,7 @@
-// The persistent day agenda in the sidebar — and the quick-manage surface for today's
-// events. Reads the store (so edits show instantly) and refetches today's events when the
-// calendar is closed. Click a row to edit/retime/delete, "+ event" to create with a time —
-// all inline via the same EventEditor, without leaving the board. The header opens the full
-// calendar grid.
+// The sidebar day agenda — a compact TIMELINE (matches internal/design/shell-d-hybrid.html):
+// hour labels in the left gutter, events positioned by clock time (overlaps split into
+// lanes), and a live "now" line. Also the quick-manage surface: click an event to
+// edit/retime/delete, "+ event" to create with a time — inline, without leaving the board.
 
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store';
@@ -10,26 +9,21 @@ import { useSession } from '../../session/useSession';
 import { api, drain } from '../../api/client';
 import { toISO, formatDateChip } from '../../util/dates';
 import { EventEditor } from '../calendar/EventEditor';
-import { dayOf } from '../calendar/geometry';
+import { minsOfClock, dayOf, layoutDay } from '../calendar/geometry';
 import type { CalendarEvent } from '../../types';
 
-/** Sort: timed events first (by start), untimed last. */
-function order(a: CalendarEvent, b: CalendarEvent): number {
-  const as = a.start ?? '99:99';
-  const bs = b.start ?? '99:99';
-  return as < bs ? -1 : as > bs ? 1 : 0;
-}
+const HOUR_PX = 50; // matches the mockup .hour height
+const PX_PER_MIN = HOUR_PX / 60;
 
-function hm(iso: string | null | undefined): string {
-  const m = iso ? /T(\d{2}):(\d{2})/.exec(iso) : null;
-  return m ? `${m[1]}:${m[2]}` : '—';
-}
-
-/** A sensible default start for a quick add: now, rounded up to the next 30 min. */
-function seedNow(): number {
+function nowMinutes(): number {
   const d = new Date();
-  const min = Math.ceil((d.getHours() * 60 + d.getMinutes()) / 30) * 30;
-  return Math.min(min, 22 * 60);
+  return d.getHours() * 60 + d.getMinutes();
+}
+function hhmm(min: number): string {
+  return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+}
+function order(a: CalendarEvent, b: CalendarEvent): number {
+  return (a.start ?? '') < (b.start ?? '') ? -1 : 1;
 }
 
 type Editor = { event?: CalendarEvent; seedStartMin?: number } | null;
@@ -38,7 +32,6 @@ export function AgendaRail() {
   const me = useSession((s) => s.user);
   const eventsMap = useStore((s) => s.events);
   const setEvents = useStore((s) => s.setEvents);
-  const deleteEvent = useStore((s) => s.deleteEvent);
   const setPlannerOpen = useStore((s) => s.setPlannerOpen);
   const plannerOpen = useStore((s) => s.plannerOpen);
   const tabs = useStore((s) => s.tabs);
@@ -46,10 +39,10 @@ export function AgendaRail() {
 
   const [editor, setEditor] = useState<Editor>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [now, setNow] = useState(nowMinutes());
   const today = toISO(new Date());
 
-  // Populate today's events from the server when the calendar isn't the one driving the
-  // store. Runs on mount, when the calendar closes, and after an inline edit closes.
+  // Populate today's events from the server when the calendar isn't driving the store.
   useEffect(() => {
     if (!me || plannerOpen) return;
     let cancelled = false;
@@ -59,7 +52,7 @@ export function AgendaRail() {
         const { events } = await api.calendar.list(today, today);
         if (!cancelled) setEvents(events);
       } catch {
-        // Offline / error: keep whatever is already in the store.
+        /* offline: keep the store */
       }
     })();
     return () => {
@@ -67,11 +60,36 @@ export function AgendaRail() {
     };
   }, [me, today, plannerOpen, reloadKey, setEvents]);
 
+  // Tick the now-line each minute.
+  useEffect(() => {
+    const id = setInterval(() => setNow(nowMinutes()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   const list = useMemo(
-    () => Object.values(eventsMap).filter((e) => (e.start ? dayOf(e.start) === today : false)).sort(order),
+    () => Object.values(eventsMap).filter((e) => e.start && dayOf(e.start) === today).sort(order),
     [eventsMap, today],
   );
 
+  // Hour window: bracket the events + now, at least a 5-hour span, clamped to the day.
+  const { startH, hours } = useMemo(() => {
+    const mins = list.flatMap((e) => [minsOfClock(e.start!), minsOfClock(e.end ?? e.start!)]);
+    let lo = Math.floor(Math.min(now, ...mins) / 60);
+    let hi = Math.ceil(Math.max(now + 60, ...mins) / 60);
+    if (hi - lo < 5) hi = lo + 5;
+    lo = Math.max(0, lo);
+    hi = Math.min(24, hi);
+    if (hi - lo < 5) lo = Math.max(0, hi - 5);
+    return { startH: lo, hours: Array.from({ length: hi - lo }, (_, i) => lo + i) };
+  }, [list, now]);
+
+  // Overlap lanes (reuse the grid's column layout; take only left/width).
+  const lanes = useMemo(() => {
+    const boxes = layoutDay(list.map((e) => ({ id: e.id, start: e.start!, end: e.end ?? e.start! })));
+    return new Map(boxes.map((b) => [b.id, b]));
+  }, [list]);
+
+  const top = (iso: string) => (minsOfClock(iso) - startH * 60) * PX_PER_MIN;
   const closeEditor = () => {
     setEditor(null);
     setReloadKey((k) => k + 1);
@@ -84,45 +102,50 @@ export function AgendaRail() {
         <span className="agenda-date">{formatDateChip(today)}</span>
         <span className="agenda-open" aria-hidden>→</span>
       </button>
-      <div className="agenda-list">
-        {list.length === 0 && <p className="agenda-empty muted">Nothing scheduled.</p>}
+      <div className="agenda-sub">{list.length ? `${list.length} scheduled` : 'Nothing scheduled'}</div>
+
+      <div className="agenda-timeline">
+        {hours.map((h) => (
+          <div className="agenda-hour" key={h} data-h={`${String(h).padStart(2, '0')}:00`} />
+        ))}
+
         {list.map((ev) => {
           const tab = ev.tabId ? tabs[ev.tabId] : undefined;
           const project = tab ? projects[tab.projectId] : undefined;
+          const lane = lanes.get(ev.id);
+          const endMin = minsOfClock(ev.end ?? ev.start!);
+          const height = Math.max(20, (endMin - minsOfClock(ev.start!)) * PX_PER_MIN);
           return (
-            <div
+            <button
               key={ev.id}
-              className="agenda-item"
-              role="button"
-              tabIndex={0}
+              className={`agenda-ev ${tab ? 'meet' : 'solo'}`}
+              style={{
+                top: `${top(ev.start!)}px`,
+                height: `${height}px`,
+                left: `calc(${lane?.leftPct ?? 0}% + 9px)`,
+                width: `calc(${lane?.widthPct ?? 100}% - 11px)`,
+                ...(project ? ({ '--accent': project.color } as React.CSSProperties) : {}),
+              }}
               onClick={() => setEditor({ event: ev })}
-              onKeyDown={(e) => e.key === 'Enter' && setEditor({ event: ev })}
-              style={project ? ({ '--accent': project.color } as React.CSSProperties) : undefined}
+              title={ev.title ?? tab?.name ?? '1:1'}
             >
-              <span className="agenda-time">{hm(ev.start)}</span>
-              <span className="agenda-body">
-                <span className="agenda-name">{ev.title || tab?.name || '1:1'}</span>
-                {tab && <span className="agenda-board">{project ? `${project.name} · ${tab.name}` : tab.name}</span>}
-              </span>
-              <button
-                className="icon-btn delete agenda-del"
-                title="delete event"
-                aria-label="delete event"
-                onClick={(e) => { e.stopPropagation(); deleteEvent(ev.id); }}
-              >
-                <svg viewBox="0 0 16 16" width="11" height="11"><path d="M4 4l8 8M12 4L4 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-              </button>
-            </div>
+              <span className="k">{hhmm(minsOfClock(ev.start!))}</span>
+              <span className="nm2">{ev.title || tab?.name || '1:1'}</span>
+              {tab && <span className="mt">{project ? `${project.name} · ${tab.name}` : tab.name}</span>}
+            </button>
           );
         })}
-        <button className="agenda-add" onClick={() => setEditor({ seedStartMin: seedNow() })}>
-          + event
-        </button>
+
+        <div className="agenda-nowline" style={{ top: `${(now - startH * 60) * PX_PER_MIN}px` }}>
+          <span className="lbl">now</span>
+        </div>
       </div>
 
-      {editor && (
-        <EventEditor day={today} event={editor.event} seedStartMin={editor.seedStartMin} onClose={closeEditor} />
-      )}
+      <button className="agenda-add" onClick={() => setEditor({ seedStartMin: Math.min(Math.ceil(now / 30) * 30, 22 * 60) })}>
+        + event
+      </button>
+
+      {editor && <EventEditor day={today} event={editor.event} seedStartMin={editor.seedStartMin} onClose={closeEditor} />}
     </div>
   );
 }

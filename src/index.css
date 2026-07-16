@@ -2094,21 +2094,33 @@ input, select, textarea { font: inherit; color: inherit; }
 .space-form-action.danger { color: var(--pop); border-color: color-mix(in srgb, var(--pop) 30%, transparent); }
 .space-form-action.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--pop) 8%, transparent); }
 
-/* Agenda rail */
-.agenda-head { display: flex; align-items: baseline; gap: 8px; margin: 0 4px 8px 9px; }
+/* Agenda rail — timeline (matches internal/design/shell-d-hybrid.html) */
+.agenda-head { display: flex; align-items: baseline; gap: 8px; margin: 0 4px 3px 9px; }
 .agenda-title { font-family: var(--serif); font-style: italic; font-size: 17px; font-weight: 600; }
-.agenda-date { font-size: 10px; color: var(--ink-mute); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
-.agenda-list { display: flex; flex-direction: column; gap: 2px; }
-.agenda-item { display: flex; gap: 9px; align-items: flex-start; padding: 7px 8px; border-radius: var(--r-sm); border: 0; background: none; text-align: left; border-left: 2px solid var(--accent, var(--line-strong)); margin-left: 2px; cursor: pointer; }
-.agenda-item:hover { background: var(--bg-elev); }
-.agenda-time { font-family: var(--mono); font-size: 10.5px; color: var(--ink-mute); padding-top: 1px; flex: none; }
-.agenda-body { display: flex; flex-direction: column; min-width: 0; }
-.agenda-name { font-size: 12.5px; color: var(--ink); }
-.agenda-board { font-size: 11px; color: var(--ink-mute); font-family: var(--serif); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agenda-empty { font-size: 12px; padding: 4px 9px; }
-.agenda-add { margin-top: 6px; font-size: 12px; color: var(--ink-mute); background: none; border: 1px dashed var(--line); border-radius: var(--r-sm); padding: 6px; text-align: center; cursor: pointer; }
-.agenda-add:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); }
-.agenda-add:disabled { opacity: 0.5; cursor: default; }
+.agenda-date { font-size: 10px; color: var(--ink-mute); text-transform: uppercase; letter-spacing: 1.1px; font-weight: 700; }
+.agenda-sub { font-size: 11px; color: var(--ink-mute); margin: 0 4px 12px 9px; }
+
+.agenda-timeline { position: relative; margin: 0 2px 8px 46px; border-left: 1px solid var(--line); }
+.agenda-hour { position: relative; height: 50px; }
+.agenda-hour::before { content: attr(data-h); position: absolute; left: -42px; top: -7px; font-family: var(--mono); font-size: 9.5px; color: var(--ink-mute); width: 34px; text-align: right; }
+.agenda-hour::after { content: ""; position: absolute; left: 0; top: 0; width: 5px; height: 1px; background: var(--line); }
+
+.agenda-ev { position: absolute; display: flex; flex-direction: column; gap: 1px; border-radius: var(--r-sm); padding: 4px 8px; cursor: pointer; box-shadow: var(--shadow-card); overflow: hidden; text-align: left; }
+.agenda-ev .k { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.3px; }
+.agenda-ev .nm2 { font-size: 12px; font-weight: 600; line-height: 1.12; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agenda-ev .mt { font-size: 10px; color: var(--ink-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agenda-ev.meet { background: color-mix(in srgb, var(--accent, var(--pop)) 13%, var(--bg-paper)); border: 1px solid color-mix(in srgb, var(--accent, var(--pop)) 35%, transparent); }
+.agenda-ev.meet .k { color: var(--accent, var(--pop)); }
+.agenda-ev.solo { background: var(--bg-paper); border: 1px dashed var(--line-strong); }
+.agenda-ev.solo .k { color: var(--ink-mute); }
+.agenda-ev:hover { box-shadow: var(--shadow-pop); filter: brightness(1.02); z-index: 3; }
+
+.agenda-nowline { position: absolute; left: -42px; right: 0; height: 1px; background: var(--pop); z-index: 4; pointer-events: none; }
+.agenda-nowline::before { content: ""; position: absolute; left: 34px; top: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--pop); }
+.agenda-nowline .lbl { position: absolute; left: -2px; top: -6px; font-family: var(--mono); font-size: 8.5px; color: var(--pop); font-weight: 700; }
+
+.agenda-add { margin: 2px 4px 0; font-size: 12px; color: var(--ink-mute); background: none; border: 1px dashed var(--line); border-radius: var(--r-sm); padding: 6px; text-align: center; cursor: pointer; }
+.agenda-add:hover { color: var(--ink); border-color: var(--line-strong); }
 
 /* Phones: the sidebar folds away; the bottom nav takes over (Phase 8 refines). */
 @media (max-width: 720px) {
@@ -2232,8 +2244,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .sidebar-account .avatar { flex: none; }
 
 /* Agenda rail item: tighter, mockup spacing. */
-.agenda-item { padding: 7px 8px; gap: 10px; }
-.agenda-name { font-weight: 500; }
 
 /* Companion rail: restyle the embedded SharePanel / EventsPanel bodies so the reused
    modal markup reads like the mockup's single-purpose panels. */
@@ -2341,8 +2351,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .cal-rsvp { flex-direction: row; align-items: center; justify-content: space-between; }
 
 /* Sidebar agenda rows are now inline-editable; reveal a quick-delete on hover/focus. */
-.agenda-del { margin-left: auto; flex: none; opacity: 0; transition: opacity 0.12s; }
-.agenda-item:hover .agenda-del, .agenda-item:focus-within .agenda-del { opacity: 1; }
 
 /* Meeting agenda: live board tasks, filtered. */
 .cal-agenda-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
