@@ -8,7 +8,7 @@
 // stay as direct fetches and simply fail while offline.
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import type { BlockFilter, CalendarEvent, ID, TaskStatus, TimeBlock } from '../types';
+import type { BlockFilter, CalendarEvent, ID, RsvpStatus, TaskStatus, TimeBlock } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
 
@@ -205,6 +205,8 @@ export const api = {
     update: (id: ID, patch: { tabId?: ID | null; title?: string | null; start?: string | null; end?: string | null; allDay?: boolean; filter?: BlockFilter | null; rrule?: string | null }) =>
       submitMutation(M('PATCH', `/api/events/${id}`, patch)),
     remove: (id: ID) => submitMutation(M('DELETE', `/api/events/${id}`)),
+    rsvp: (id: ID, occurrenceDate: string, status: RsvpStatus) =>
+      submitMutation(M('PUT', `/api/events/${id}/attendance`, { occurrenceDate, status })),
   },
   // Workspace user search for the add-member picker (server-side, ≥2 chars, board-admin gated).
   users: {

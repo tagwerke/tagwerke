@@ -8,10 +8,15 @@ import { useStore } from '../../store';
 import { useSession } from '../../session/useSession';
 import { rankTabs } from '../../util/header';
 import { Dropdown, type DropdownOption } from '../Dropdown';
+import { STATUS_ORDER, STATUS_LABEL } from '../StatusControl';
+import { AgendaList } from './AgendaList';
 import { dayOf } from './geometry';
-import type { CalendarEvent } from '../../types';
+import type { BlockFilter, CalendarEvent, RsvpStatus, TaskStatus } from '../../types';
 
 const NO_BOARD = '__none__';
+
+const RSVP_LABEL: Record<Exclude<RsvpStatus, 'needs-action'>, string> = { accepted: 'Going', tentative: 'Maybe', declined: "Can't" };
+const RSVP_ORDER: Exclude<RsvpStatus, 'needs-action'>[] = ['accepted', 'tentative', 'declined'];
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
@@ -42,6 +47,7 @@ export function EventEditor({
   const createEvent = useStore((s) => s.createEvent);
   const updateEvent = useStore((s) => s.updateEvent);
   const deleteEvent = useStore((s) => s.deleteEvent);
+  const rsvpEvent = useStore((s) => s.rsvpEvent);
   const setActiveTab = useStore((s) => s.setActiveTab);
 
   const editing = !!event;
@@ -51,6 +57,17 @@ export function EventEditor({
   const [start, setStart] = useState(() => hmOf(event?.start) || hmFromMin(seedStartMin ?? 9 * 60));
   const [end, setEnd] = useState(() => hmOf(event?.end) || hmFromMin((seedStartMin ?? 9 * 60) + 30));
   const [tabId, setTabId] = useState<string>(event?.tabId ?? NO_BOARD);
+  const [filter, setFilter] = useState<BlockFilter | null>(event?.filter ?? null);
+
+  const hasBoard = tabId !== NO_BOARD;
+  const myRsvp: RsvpStatus =
+    event?.occurrences?.find((o) => o.date === eventDay)?.attendance.find((a) => a.userId === me?.id)?.status ?? 'needs-action';
+
+  const toggleStatus = (s: TaskStatus) => {
+    const cur = filter?.statuses ?? [];
+    const next = cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s];
+    setFilter({ ...filter, statuses: next.length ? next : undefined });
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -78,10 +95,11 @@ export function EventEditor({
     const startISO = `${eventDay}T${s}`;
     const endISO = `${eventDay}T${e}`;
     const board = tabId === NO_BOARD ? null : tabId;
+    const agendaFilter = board ? filter : null; // filter only meaningful with a board
     if (editing) {
-      updateEvent(event.id, { tabId: board, title: title.trim() || null, start: startISO, end: endISO });
+      updateEvent(event.id, { tabId: board, title: title.trim() || null, start: startISO, end: endISO, filter: agendaFilter });
     } else {
-      createEvent({ tabId: board, title: title.trim() || null, start: startISO, end: endISO, createdBy: me?.id ?? null });
+      createEvent({ tabId: board, title: title.trim() || null, start: startISO, end: endISO, filter: agendaFilter, createdBy: me?.id ?? null });
     }
     onClose();
   };
@@ -122,6 +140,44 @@ export function EventEditor({
           <span>board</span>
           <Dropdown value={tabId} onChange={setTabId} options={boardOptions} placeholder="No board · 1:1" />
         </label>
+
+        {editing && (
+          <div className="field cal-rsvp">
+            <span>going?</span>
+            <div className="occ-rsvp">
+              {RSVP_ORDER.map((st) => (
+                <button
+                  key={st}
+                  className={`rsvp-btn ${myRsvp === st ? 'on' : ''}`}
+                  onClick={() => me && rsvpEvent(event.id, eventDay, me.id, st)}
+                >
+                  {RSVP_LABEL[st]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {hasBoard && (
+          <div className="field cal-agenda-field">
+            <div className="cal-agenda-head">
+              <span>agenda · live tasks</span>
+              <div className="cal-agenda-filter">
+                {STATUS_ORDER.map((s) => (
+                  <button
+                    key={s}
+                    className={`status-chip status-${s} ${(filter?.statuses ?? []).includes(s) ? 'on' : ''}`}
+                    onClick={() => toggleStatus(s)}
+                    title={`filter: ${STATUS_LABEL[s]}`}
+                  >
+                    {STATUS_LABEL[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <AgendaList tabId={tabId} filter={filter} />
+          </div>
+        )}
 
         {editing && event.tabId && (
           <button className="link-btn" onClick={() => { setActiveTab(event.tabId!); onClose(); }}>

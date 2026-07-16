@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
-import type { BlockFilter, BoardSettings, BoardView, CalendarEvent, Filter, ID, PlannerMode, Project, RootState, Tab, Task, TaskStatus, TimeBlock } from './types';
+import type { BlockFilter, BoardSettings, BoardView, CalendarEvent, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task, TaskStatus, TimeBlock } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { api, enqueue } from './api/client';
@@ -52,6 +52,7 @@ interface Actions {
   createEvent(input: { tabId?: ID | null; title?: string | null; start: string | null; end: string | null; allDay?: boolean; filter?: BlockFilter | null; createdBy?: ID | null }): CalendarEvent;
   updateEvent(id: ID, patch: Partial<Omit<CalendarEvent, 'id' | 'createdBy' | 'occurrences'>>): void;
   deleteEvent(id: ID): void;
+  rsvpEvent(id: ID, occurrenceDate: string, userId: ID, status: RsvpStatus): void;
 
   setFilter(patch: Partial<Filter>): void;
   resetFilter(): void;
@@ -417,6 +418,23 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           return { events };
         });
         enqueue(() => api.calendar.remove(id));
+      },
+      rsvpEvent(id, occurrenceDate, userId, status) {
+        set((s) => {
+          const ev = s.events[id];
+          if (!ev) return s;
+          const occ = ev.occurrences ?? [];
+          const found = occ.some((o) => o.date === occurrenceDate);
+          const occurrences = found
+            ? occ.map((o) =>
+                o.date === occurrenceDate
+                  ? { ...o, attendance: [...o.attendance.filter((a) => a.userId !== userId), { userId, status }] }
+                  : o,
+              )
+            : [...occ, { date: occurrenceDate, attendance: [{ userId, status }] }];
+          return { events: { ...s.events, [id]: { ...ev, occurrences } } };
+        });
+        enqueue(() => api.calendar.rsvp(id, occurrenceDate, status));
       },
 
       setFilter(patch) {
