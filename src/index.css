@@ -2340,6 +2340,10 @@ input, select, textarea { font: inherit; color: inherit; }
 /* RSVP row (reuses .rsvp-btn / .occ-rsvp). */
 .cal-rsvp { flex-direction: row; align-items: center; justify-content: space-between; }
 
+/* Sidebar agenda rows are now inline-editable; reveal a quick-delete on hover/focus. */
+.agenda-del { margin-left: auto; flex: none; opacity: 0; transition: opacity 0.12s; }
+.agenda-item:hover .agenda-del, .agenda-item:focus-within .agenda-del { opacity: 1; }
+
 /* Meeting agenda: live board tasks, filtered. */
 .cal-agenda-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .cal-agenda-filter { display: inline-flex; gap: 4px; flex-wrap: wrap; }
