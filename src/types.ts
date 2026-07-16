@@ -80,24 +80,6 @@ export interface BlockFilter {
   query?: string;
 }
 
-/**
- * A Planner time block. OWNED by `userId` (who scheduled it), REFERENCES a tab/board it
- * allocates time to — a live projection of that board's tasks, never a copy. Visible to
- * every member of `tabId`; only the owner edits it.
- */
-export interface TimeBlock {
-  id: ID;
-  userId: ID;
-  tabId: ID;
-  date: string; // 'YYYY-MM-DD'
-  start?: string | null; // 'HH:MM'
-  end?: string | null;
-  label?: string | null;
-  filter?: BlockFilter | null;
-  assigneeId?: ID | null;
-  position: number;
-}
-
 export type PlannerMode = 'day' | 'week';
 
 // ── Calendar (events model) ────────────────────────────────────────────────
@@ -140,8 +122,6 @@ export interface RootState {
   projects: Record<ID, Project>;
   tabs: Record<ID, Tab>;
   tasks: Record<ID, Task>;
-  /** The caller's OWN Planner blocks. Teammates' blocks live in PlannerView local state. */
-  timeBlocks: Record<ID, TimeBlock>;
   /** Calendar events visible in the current window (member boards + own board-less). */
   events: Record<ID, CalendarEvent>;
   /** Per-board member rosters (the `@` picker's source). Keyed by tab/board id. */

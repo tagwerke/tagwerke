@@ -8,7 +8,7 @@
 // stay as direct fetches and simply fail while offline.
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import type { BlockFilter, CalendarEvent, ID, RsvpStatus, TaskStatus, TimeBlock } from '../types';
+import type { BlockFilter, CalendarEvent, ID, RsvpStatus, TaskStatus } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
 
@@ -178,18 +178,6 @@ export const api = {
     remove: (id: ID) => submitMutation(M('DELETE', `/api/tasks/${id}`)),
     deleteOrphans: (homeTabId: ID, keepIds: ID[]) =>
       submitMutation(M('POST', '/api/tasks/delete-orphans', { homeTabId, keepIds })),
-  },
-  timeBlocks: {
-    // Day/week read: own + teammates' blocks on shared boards, within [from, to]. (read → live)
-    list: (from: string, to: string) =>
-      req<{ blocks: TimeBlockOut[]; roster: { userId: ID; email: string }[] }>(
-        `/api/time-blocks?from=${from}&to=${to}`,
-      ),
-    create: (b: TimeBlock) => submitMutation(M('POST', '/api/time-blocks', b)),
-    update: (id: ID, patch: Partial<Omit<TimeBlock, 'id' | 'userId'>>) =>
-      submitMutation(M('PATCH', `/api/time-blocks/${id}`, patch)),
-    remove: (id: ID) => submitMutation(M('DELETE', `/api/time-blocks/${id}`)),
-    reorder: (order: ID[]) => submitMutation(M('POST', '/api/time-blocks/reorder', { order })),
   },
   // ── Calendar (events model) ────────────────────────────────────────────────
   // Reads stay direct (live); writes funnel through the durable outbox so an offline
@@ -384,20 +372,6 @@ export interface BoardMember {
 export interface UserLookupResult {
   id: ID;
   email: string;
-}
-
-/** A time block as returned by the day/week read (nullable facets straight from the row). */
-export interface TimeBlockOut {
-  id: ID;
-  userId: ID;
-  tabId: ID;
-  date: string;
-  start: string | null;
-  end: string | null;
-  label: string | null;
-  filter: unknown | null;
-  assigneeId: ID | null;
-  position: number;
 }
 
 export type AttendanceStatus = 'accepted' | 'declined' | 'tentative' | 'needs-action';

@@ -1,5 +1,5 @@
 // Fuzzy ranking of tabs by a query (exact > prefix > project-prefix > includes). Used
-// by the Planner's tab picker (TimeBlockCard). Returns matches richest-first.
+// by board pickers (e.g. the calendar event editor). Returns matches richest-first.
 
 import type { ID, Project, Tab } from '../types';
 

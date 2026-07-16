@@ -245,12 +245,12 @@ export const eventAttendance = pgTable(
   (t) => [primaryKey({ columns: [t.eventId, t.occurrenceDate, t.userId] })],
 );
 
-// Personal time-blocking layer (the Planner). A block is OWNED by `user_id` (who
-// scheduled it) and REFERENCES a tab/board it allocates time to — a LIVE projection of
-// that board's tasks, never a frozen copy (hence no block↔task join). Visible to every
-// member of `tab_id` (team "who's-on-what-today"); writable only by the owner. `filter`
-// is an optional saved Filter (jsonb) narrowing the projected task list; `assignee_id`
-// optionally scopes it to one member.
+// DORMANT (retired): the Planner's personal time-blocking layer, superseded by the
+// calendar on `events` (see CALENDAR_UI_PLAN.md). The UI, routes, store slice, and client
+// are gone; this table is kept — NOT dropped — so existing rows stay exportable/erasable
+// (server/scripts/export-user.ts, erase-user.ts) and to avoid a destructive migration. No
+// live code writes it. A block is OWNED by `user_id` and REFERENCES a tab/board; `filter`
+// narrowed a live task projection; `assignee_id` optionally scoped it to one member.
 export const timeBlocks = pgTable(
   'time_blocks',
   {

@@ -1,7 +1,7 @@
 // Reassembles the client RootState shape from normalized rows for one user.
 // Mirrors src/types.ts. `filter` and `activeTabId` are client-side concerns and are
-// returned as defaults. Planner state (time blocks) is NOT here — it's windowed +
-// includes teammates' rows, so the client lazy-fetches it via GET /api/time-blocks.
+// returned as defaults. Calendar events are NOT here — they're windowed + span boards, so
+// the client lazy-fetches them via GET /api/calendar/events.
 //
 // v2: access derives from board_members, not from a user_id column. A tab is visible
 // because the user has a membership row; that same row supplies the per-user view

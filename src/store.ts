@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
-import type { BlockFilter, BoardSettings, BoardView, CalendarEvent, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task, TaskStatus, TimeBlock } from './types';
+import type { BlockFilter, BoardSettings, BoardView, CalendarEvent, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task, TaskStatus } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { api, enqueue } from './api/client';
@@ -35,13 +35,7 @@ interface Actions {
   deleteTask(id: ID): void;
   deleteOrphanTasks(homeTabId: ID, keepIds: Set<ID>): void;
 
-  // Planner — personal time blocks that reference a tab (own blocks only; teammates'
-  // blocks are view-local). See src/components/planner.
-  setOwnTimeBlocks(blocks: TimeBlock[]): void;
-  createTimeBlock(input: { userId: ID; tabId: ID; date: string; start?: string | null; end?: string | null }): TimeBlock;
-  updateTimeBlock(id: ID, patch: Partial<Omit<TimeBlock, 'id' | 'userId'>>): void;
-  deleteTimeBlock(id: ID): void;
-  reorderTimeBlocks(date: string, order: ID[]): void;
+  // Calendar UI state (day/week cursor + open flag; the planner* names are retained).
   setPlannerOpen(open: boolean): void;
   setPlannerDate(date: string): void;
   setPlannerMode(mode: PlannerMode): void;
@@ -112,7 +106,6 @@ function makeInitial(): RootState {
     projects,
     tabs: { [sampleTabId]: sample, [personalTabId]: personal },
     tasks: {},
-    timeBlocks: {},
     events: {},
     membersByBoard: {},
     projectOrder: [defaultProjectId, personalProjectId],
@@ -326,53 +319,6 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         });
       },
 
-      setOwnTimeBlocks(blocks) {
-        const map: Record<ID, TimeBlock> = {};
-        for (const b of blocks) map[b.id] = b;
-        set({ timeBlocks: map });
-      },
-      createTimeBlock(input) {
-        const id = nanoid();
-        const sameDay = Object.values(get().timeBlocks).filter((b) => b.date === input.date);
-        const position = nextPosition(sameDay.map((b) => b.position));
-        const block: TimeBlock = {
-          id,
-          userId: input.userId,
-          tabId: input.tabId,
-          date: input.date,
-          start: input.start ?? null,
-          end: input.end ?? null,
-          label: null,
-          filter: null,
-          assigneeId: null,
-          position,
-        };
-        set((s) => ({ timeBlocks: { ...s.timeBlocks, [id]: block } }));
-        enqueue(() => api.timeBlocks.create(block));
-        return block;
-      },
-      updateTimeBlock(id, patch) {
-        set((s) => (s.timeBlocks[id] ? { timeBlocks: { ...s.timeBlocks, [id]: { ...s.timeBlocks[id], ...patch } } } : s));
-        enqueue(() => api.timeBlocks.update(id, patch));
-      },
-      deleteTimeBlock(id) {
-        set((s) => {
-          const timeBlocks = { ...s.timeBlocks };
-          delete timeBlocks[id];
-          return { timeBlocks };
-        });
-        enqueue(() => api.timeBlocks.remove(id));
-      },
-      reorderTimeBlocks(date, order) {
-        set((s) => {
-          const timeBlocks = { ...s.timeBlocks };
-          order.forEach((id, i) => {
-            if (timeBlocks[id]?.date === date) timeBlocks[id] = { ...timeBlocks[id], position: i };
-          });
-          return { timeBlocks };
-        });
-        enqueue(() => api.timeBlocks.reorder(order));
-      },
       setPlannerOpen(open) {
         set(open ? { plannerOpen: true, activeTabId: null } : { plannerOpen: false });
       },
@@ -509,7 +455,6 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         set({
           ...state,
           tasks,
-          timeBlocks: state.timeBlocks ?? {},
           events: state.events ?? {},
           plannerOpen: false,
           plannerDate: state.plannerDate ?? todayISO(),
