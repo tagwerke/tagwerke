@@ -177,6 +177,58 @@ async function writeState(room: Room): Promise<void> {
   }
   await db.update(schema.tabs).set({ ydocState, docJSON }).where(eq(schema.tabs.id, room.tabId));
   room.persistedState = true;
+
+  // Additive existence backfill: guarantee a task ROW exists for every task NODE in the doc. Rows
+  // are otherwise created only by the client's store→REST diff, which can silently fail (offline,
+  // dropped request) — leaving a task visible in the board but missing from Kanban/My-Tasks. This
+  // is the mirror of the durability fix and closes the node→row gap from the single authority that
+  // already holds the doc. ON CONFLICT DO NOTHING makes it purely additive: it never touches an
+  // existing row (so it can't overwrite metadata or resurrect a soft-deleted task) and never
+  // deletes. Best-effort — a failure here must not fail the doc persist above.
+  if (docJSON) {
+    try {
+      await backfillRowsForDoc(room.tabId, docJSON);
+    } catch (err) {
+      console.error(`[ydoc] row backfill failed for ${room.tabId}:`, err);
+    }
+  }
+}
+
+/** Concatenated text of a taskItem's own first paragraph (its title line, excluding subtasks). */
+function taskItemText(taskItem: { content?: unknown[] }): string {
+  const para = (taskItem.content ?? []).find(
+    (c): c is { type: string; content?: unknown[] } =>
+      !!c && typeof c === 'object' && (c as { type?: string }).type === 'paragraph',
+  );
+  let text = '';
+  const walk = (nodes: unknown[]) => {
+    for (const n of nodes) {
+      const node = n as { type?: string; text?: string; content?: unknown[] };
+      if (node.type === 'text' && typeof node.text === 'string') text += node.text;
+      else if (Array.isArray(node.content)) walk(node.content);
+    }
+  };
+  if (para?.content) walk(para.content);
+  return text;
+}
+
+/** Walk ProseMirror JSON collecting every taskItem's {id, text}. */
+function collectTaskNodes(node: unknown, out: { id: string; text: string }[] = []): { id: string; text: string }[] {
+  if (!node || typeof node !== 'object') return out;
+  const n = node as { type?: string; attrs?: { id?: string }; content?: unknown[] };
+  if (n.type === 'taskItem' && n.attrs?.id) out.push({ id: n.attrs.id, text: taskItemText(n) });
+  if (Array.isArray(n.content)) for (const c of n.content) collectTaskNodes(c, out);
+  return out;
+}
+
+/** Insert a row for any doc task node that lacks one. Non-empty titles only (transient empty task
+ *  lines aren't real tasks yet); the client creates those once typed. Idempotent + additive. */
+async function backfillRowsForDoc(tabId: string, docJSON: unknown): Promise<void> {
+  const values = collectTaskNodes(docJSON)
+    .filter((t) => t.text.trim().length > 0)
+    .map((t) => ({ id: t.id, homeTabId: tabId, text: t.text }));
+  if (!values.length) return;
+  await db.insert(schema.tasks).values(values).onConflictDoNothing({ target: schema.tasks.id });
 }
 
 async function persist(room: Room): Promise<void> {
