@@ -29,7 +29,10 @@ const messageSync = 0;
 const messageAwareness = 1;
 // The Y.XmlFragment name TipTap's Collaboration extension binds to (its `field` default).
 const FRAGMENT = 'default';
-const PERSIST_DEBOUNCE_MS = 1500;
+// Kept short (robustness over write-frequency): the smaller this window, the fewer edits a hard
+// SIGKILL can lose. Graceful restarts (deploys) lose nothing — flushAllYdocRooms() flushes on
+// shutdown. See internal note on the task orphan bug (rows outliving their doc nodes).
+const PERSIST_DEBOUNCE_MS = 400;
 
 interface Room {
   tabId: string;
@@ -158,32 +161,70 @@ function schedulePersist(room: Room): void {
   }, PERSIST_DEBOUNCE_MS);
 }
 
-async function persist(room: Room): Promise<void> {
-  if (room.persisting) {
-    schedulePersist(room); // a write landed mid-flush; capture it on the next tick
-    return;
-  }
+// The actual DB write of a room's current state. No debounce/in-flight guard — callers own that.
+async function writeState(room: Room): Promise<void> {
   // Never overwrite a not-yet-migrated legacy doc with an empty snapshot. If the Y.Doc is still
   // empty and no real content has ever flowed through this room, there is nothing worth saving —
   // and persisting would clobber the legacy `docJSON` that seeding still needs to read.
   if (!room.hasContent && room.doc.getXmlFragment(FRAGMENT).length === 0) return;
 
+  const ydocState = Buffer.from(Y.encodeStateAsUpdate(room.doc)).toString('base64');
+  let docJSON: unknown = null;
+  try {
+    docJSON = yDocToProsemirrorJSON(room.doc, FRAGMENT);
+  } catch {
+    /* derive is best-effort; the authoritative ydocState always persists */
+  }
+  await db.update(schema.tabs).set({ ydocState, docJSON }).where(eq(schema.tabs.id, room.tabId));
+  room.persistedState = true;
+}
+
+async function persist(room: Room): Promise<void> {
+  if (room.persisting) {
+    schedulePersist(room); // a write landed mid-flush; capture it on the next tick
+    return;
+  }
   room.persisting = true;
   try {
-    const ydocState = Buffer.from(Y.encodeStateAsUpdate(room.doc)).toString('base64');
-    let docJSON: unknown = null;
-    try {
-      docJSON = yDocToProsemirrorJSON(room.doc, FRAGMENT);
-    } catch {
-      /* derive is best-effort; the authoritative ydocState always persists */
-    }
-    await db.update(schema.tabs).set({ ydocState, docJSON }).where(eq(schema.tabs.id, room.tabId));
-    room.persistedState = true;
+    await writeState(room);
   } catch (err) {
     console.error(`[ydoc] persist failed for ${room.tabId}:`, err);
   } finally {
     room.persisting = false;
   }
+}
+
+/**
+ * Flush every open room's current state to the DB. Registered on graceful shutdown (SIGTERM/SIGINT
+ * in server/index.ts) so in-memory Yjs edits sitting in the debounce window aren't lost when a
+ * deploy/restart tears the process down while clients are still connected. This is the fix for the
+ * orphan bug where task ROWS (written synchronously over REST) outlived their doc NODES (which lived
+ * only in this debounced in-memory snapshot). Best-effort per room so one failure can't block exit.
+ */
+export async function flushAllYdocRooms(): Promise<number> {
+  const pending = [...rooms.values()];
+  let flushed = 0;
+  await Promise.all(
+    pending.map(async (p) => {
+      let room: Room;
+      try {
+        room = await p;
+      } catch {
+        return; // room never finished loading; nothing to persist
+      }
+      if (room.persistTimer) {
+        clearTimeout(room.persistTimer);
+        room.persistTimer = null;
+      }
+      try {
+        await writeState(room); // bypass the debounce guard: write the final state now, once.
+        flushed++;
+      } catch (err) {
+        console.error(`[ydoc] shutdown flush failed for ${room.tabId}:`, err);
+      }
+    }),
+  );
+  return flushed;
 }
 
 // ── Public API (called from ws.ts) ────────────────────────────────────────────────────────

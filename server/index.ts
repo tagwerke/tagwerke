@@ -24,6 +24,7 @@ import { orgRoutes, ORG_ID } from './routes/org.ts';
 import { activityRoutes } from './routes/activity.ts';
 import { registerAuditHook } from './lib/audit.ts';
 import { registerWebsocket } from './ws.ts';
+import { flushAllYdocRooms } from './realtime/ydoc.ts';
 import { startBackupScheduler } from './jobs/backup.ts';
 
 const PORT = Number(process.env.PORT ?? 5174);
@@ -115,6 +116,35 @@ if (isProd) {
     return reply.code(404).send({ error: 'not found' });
   });
 }
+
+// Graceful shutdown: on a deploy/restart the orchestrator sends SIGTERM (then SIGKILL after a
+// grace period). Before we go down we MUST flush open Yjs rooms — their doc edits live only in an
+// in-memory, debounced snapshot, and losing them while the task ROWS persist is what orphaned
+// tasks from the board. Bounded so a stuck DB can't hold the process past the grace window.
+let shuttingDown = false;
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  app.log.info(`${signal} received — flushing Yjs rooms before exit`);
+  const FLUSH_TIMEOUT_MS = 8000; // stay under the typical 10s container grace period
+  try {
+    const flushed = await Promise.race([
+      flushAllYdocRooms(),
+      new Promise<number>((_, reject) => setTimeout(() => reject(new Error('flush timed out')), FLUSH_TIMEOUT_MS)),
+    ]);
+    app.log.info(`flushed ${flushed} Yjs room(s)`);
+  } catch (err) {
+    app.log.error({ err }, 'Yjs shutdown flush did not complete cleanly');
+  }
+  try {
+    await app.close();
+  } catch (err) {
+    app.log.error({ err }, 'app.close failed during shutdown');
+  }
+  process.exit(0);
+}
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
 
 try {
   await app.listen({ port: PORT, host: HOST });
