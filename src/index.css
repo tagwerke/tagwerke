@@ -2305,9 +2305,9 @@ input, select, textarea { font: inherit; color: inherit; }
 .cal-hour-label { position: absolute; right: 6px; transform: translateY(-50%); font-family: var(--mono); font-size: 9.5px; color: var(--ink-mute); }
 .cal-hour-label:first-child { transform: none; }
 
-.cal-col { position: relative; border-left: 1px solid var(--line); }
+.cal-col { position: relative; border-left: 1px solid var(--line); cursor: copy; }
 .cal-col.is-today { background: color-mix(in srgb, var(--pop) 3.5%, transparent); }
-.cal-hour-line { position: absolute; left: 0; right: 0; height: 1px; background: var(--line); }
+.cal-hour-line { position: absolute; left: 0; right: 0; height: 1px; background: var(--line); pointer-events: none; }
 
 .cal-event { position: absolute; overflow: hidden; display: flex; flex-direction: column; gap: 1px; padding: 3px 6px; border-radius: var(--r-sm); text-align: left; box-shadow: var(--shadow-card, 0 1px 2px rgba(0,0,0,0.08)); cursor: pointer; min-height: 14px; }
 .cal-event.is-meeting { background: color-mix(in srgb, var(--accent, var(--pop)) 14%, var(--bg-paper)); border: 1px solid color-mix(in srgb, var(--accent, var(--pop)) 40%, transparent); border-left: 3px solid var(--accent, var(--pop)); }
@@ -2317,8 +2317,16 @@ input, select, textarea { font: inherit; color: inherit; }
 .cal-event-title { font-size: 12px; font-weight: 600; color: var(--ink); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal-event-board { font-size: 10px; color: var(--ink-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.cal-now { position: absolute; left: 0; right: 0; height: 1px; background: var(--pop); z-index: 3; }
+.cal-now { position: absolute; left: 0; right: 0; height: 1px; background: var(--pop); z-index: 3; pointer-events: none; }
 .cal-now-dot { position: absolute; left: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--pop); }
+
+/* Event editor (reuses .modal / .field). */
+.cal-editor-times { display: flex; gap: 12px; }
+.cal-editor-times .field { flex: 1; }
+.cal-editor .modal-actions { justify-content: space-between; }
+.cal-editor-right { display: inline-flex; gap: 8px; margin-left: auto; }
+.cal-editor-delete { color: var(--pop); }
+.cal-editor-delete:hover { border-color: var(--pop); }
 
 /* Sidebar agenda header is now the calendar opener. */
 .agenda-head { width: 100%; border: 0; background: none; cursor: pointer; }

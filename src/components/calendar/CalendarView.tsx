@@ -9,6 +9,15 @@ import { useSession } from '../../session/useSession';
 import { api, drain, ApiError } from '../../api/client';
 import { toISO } from '../../util/dates';
 import { TimeGrid } from './TimeGrid';
+import { EventEditor } from './EventEditor';
+import { dayOf } from './geometry';
+import type { CalendarEvent } from '../../types';
+
+interface EditorTarget {
+  day: string;
+  event?: CalendarEvent;
+  seedStartMin?: number;
+}
 
 function shiftDate(iso: string, deltaDays: number): string {
   const d = new Date(iso + 'T00:00:00');
@@ -46,6 +55,7 @@ export function CalendarView() {
   const setPlannerMode = useStore((s) => s.setPlannerMode);
 
   const [error, setError] = useState<string | null>(null);
+  const [editor, setEditor] = useState<EditorTarget | null>(null);
   const today = toISO(new Date());
   const { from, to, days } = windowFor(plannerDate, plannerMode);
 
@@ -107,7 +117,17 @@ export function CalendarView() {
 
       {error && <div className="calendar-error">{error}</div>}
 
-      <TimeGrid days={days} events={events} today={today} />
+      <TimeGrid
+        days={days}
+        events={events}
+        today={today}
+        onCreateAt={(day, seedStartMin) => setEditor({ day, seedStartMin })}
+        onEditEvent={(event) => setEditor({ day: event.start ? dayOf(event.start) : today, event })}
+      />
+
+      {editor && (
+        <EventEditor day={editor.day} event={editor.event} seedStartMin={editor.seedStartMin} onClose={() => setEditor(null)} />
+      )}
     </main>
   );
 }

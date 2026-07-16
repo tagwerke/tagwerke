@@ -1,15 +1,14 @@
-// One event positioned on the grid. Read-only in phase 2: shows time + title, and clicking
-// a board-linked event opens its board. Project meetings take their board's project accent;
-// board-less 1:1s render in a neutral "personal" style. Drag/resize arrive in a later phase.
+// One event positioned on the grid. Shows time + title; clicking opens the editor. Project
+// meetings take their board's project accent; board-less 1:1s render in a neutral
+// "personal" style. Drag/resize arrive in a later phase.
 
 import { useStore } from '../../store';
 import { minsOfClock, fmtMin, type LaidOut } from './geometry';
 import type { CalendarEvent } from '../../types';
 
-export function EventCard({ event, box }: { event: CalendarEvent; box: LaidOut }) {
+export function EventCard({ event, box, onClick }: { event: CalendarEvent; box: LaidOut; onClick: () => void }) {
   const tabs = useStore((s) => s.tabs);
   const projects = useStore((s) => s.projects);
-  const setActiveTab = useStore((s) => s.setActiveTab);
 
   const tab = event.tabId ? tabs[event.tabId] : undefined;
   const project = tab ? projects[tab.projectId] : undefined;
@@ -29,7 +28,7 @@ export function EventCard({ event, box }: { event: CalendarEvent; box: LaidOut }
         width: `calc(${box.widthPct}% - 4px)`,
         ...(project ? ({ '--accent': project.color } as React.CSSProperties) : {}),
       }}
-      onClick={() => event.tabId && setActiveTab(event.tabId)}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
       title={event.title ?? tab?.name ?? '1:1'}
     >
       <span className="cal-event-time">{timeLabel}</span>

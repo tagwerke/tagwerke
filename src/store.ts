@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
-import type { BoardSettings, BoardView, CalendarEvent, Filter, ID, PlannerMode, Project, RootState, Tab, Task, TaskStatus, TimeBlock } from './types';
+import type { BlockFilter, BoardSettings, BoardView, CalendarEvent, Filter, ID, PlannerMode, Project, RootState, Tab, Task, TaskStatus, TimeBlock } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { api, enqueue } from './api/client';
@@ -46,9 +46,12 @@ interface Actions {
   setPlannerDate(date: string): void;
   setPlannerMode(mode: PlannerMode): void;
 
-  // Calendar — events for the current window (own board-less + member boards). Writes
-  // arrive in a later slice; phase 2 only reads. See src/components/calendar.
+  // Calendar — events for the current window (own board-less + member boards). Reads via
+  // setEvents; writes are optimistic + durable-outbox. See src/components/calendar.
   setEvents(events: CalendarEvent[]): void;
+  createEvent(input: { tabId?: ID | null; title?: string | null; start: string | null; end: string | null; allDay?: boolean; filter?: BlockFilter | null; createdBy?: ID | null }): CalendarEvent;
+  updateEvent(id: ID, patch: Partial<Omit<CalendarEvent, 'id' | 'createdBy' | 'occurrences'>>): void;
+  deleteEvent(id: ID): void;
 
   setFilter(patch: Partial<Filter>): void;
   resetFilter(): void;
@@ -382,6 +385,38 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         const map: Record<ID, CalendarEvent> = {};
         for (const e of events) map[e.id] = e;
         set({ events: map });
+      },
+      createEvent(input) {
+        const id = nanoid();
+        const start = input.start;
+        const event: CalendarEvent = {
+          id,
+          tabId: input.tabId ?? null,
+          title: input.title ?? null,
+          start,
+          end: input.end,
+          allDay: input.allDay ?? false,
+          filter: input.filter ?? null,
+          createdBy: input.createdBy ?? null,
+          occurrences: start ? [{ date: start.slice(0, 10), attendance: [] }] : [],
+        };
+        set((s) => ({ events: { ...s.events, [id]: event } }));
+        enqueue(() =>
+          api.calendar.create({ id, tabId: event.tabId, title: event.title, start: event.start, end: event.end, allDay: event.allDay, filter: event.filter }),
+        );
+        return event;
+      },
+      updateEvent(id, patch) {
+        set((s) => (s.events[id] ? { events: { ...s.events, [id]: { ...s.events[id], ...patch } } } : s));
+        enqueue(() => api.calendar.update(id, patch));
+      },
+      deleteEvent(id) {
+        set((s) => {
+          const events = { ...s.events };
+          delete events[id];
+          return { events };
+        });
+        enqueue(() => api.calendar.remove(id));
       },
 
       setFilter(patch) {

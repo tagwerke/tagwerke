@@ -14,6 +14,7 @@ import type { CalendarEvent } from '../../types';
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const SCROLL_TO_MIN = 7 * 60; // open the day around 07:00
+const SNAP_MIN = 15;
 
 function nowMinutes(): number {
   const d = new Date();
@@ -28,7 +29,19 @@ function allDayOn(events: CalendarEvent[], day: string): CalendarEvent[] {
   return events.filter((e) => (e.allDay || !e.start) && !!e.occurrences?.some((o) => o.date === day));
 }
 
-export function TimeGrid({ days, events, today }: { days: string[]; events: CalendarEvent[]; today: string }) {
+export function TimeGrid({
+  days,
+  events,
+  today,
+  onCreateAt,
+  onEditEvent,
+}: {
+  days: string[];
+  events: CalendarEvent[];
+  today: string;
+  onCreateAt: (day: string, startMin: number) => void;
+  onEditEvent: (event: CalendarEvent) => void;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isWeek = days.length > 1;
   const template = { '--cal-days': days.length } as React.CSSProperties;
@@ -89,13 +102,22 @@ export function TimeGrid({ days, events, today }: { days: string[]; events: Cale
             const timed = timedOn(events, day);
             const boxById = new Map(layoutDay(timed.map((e) => ({ id: e.id, start: e.start!, end: e.end! }))).map((b) => [b.id, b]));
             return (
-              <div className={`cal-col ${day === today ? 'is-today' : ''}`} key={day}>
+              <div
+                className={`cal-col ${day === today ? 'is-today' : ''}`}
+                key={day}
+                onClick={(e) => {
+                  // Click on empty grid → create at the snapped minute. Clicks on event
+                  // cards stopPropagation, so this only fires on the column background.
+                  const minute = Math.max(0, Math.min(DAY_MINUTES - SNAP_MIN, Math.round(e.nativeEvent.offsetY / PX_PER_MIN / SNAP_MIN) * SNAP_MIN));
+                  onCreateAt(day, minute);
+                }}
+              >
                 {HOURS.map((h) => (
                   <div className="cal-hour-line" key={h} style={{ top: `${h * HOUR_PX}px` }} />
                 ))}
                 {timed.map((e) => {
                   const box = boxById.get(e.id);
-                  return box ? <EventCard key={e.id} event={e} box={box} /> : null;
+                  return box ? <EventCard key={e.id} event={e} box={box} onClick={() => onEditEvent(e)} /> : null;
                 })}
                 {day === today && (
                   <div className="cal-now" style={{ top: `${now * PX_PER_MIN}px` }}>
