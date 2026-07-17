@@ -2341,7 +2341,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .cal-now-dot { position: absolute; left: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--pop); }
 
 /* Event editor (reuses .modal / .field). */
-.cal-editor { max-height: min(88vh, 720px); overflow-y: auto; }
+.cal-editor { max-height: min(84vh, 920px); overflow-y: auto; }
 .cal-editor-times { display: flex; gap: 12px; }
 .cal-editor-times .field { flex: 1; }
 .cal-editor .modal-actions { justify-content: space-between; }
@@ -2357,7 +2357,7 @@ input, select, textarea { font: inherit; color: inherit; }
 /* Meeting agenda: live board tasks, filtered. */
 .cal-agenda-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .cal-agenda-filter { display: inline-flex; gap: 4px; flex-wrap: wrap; }
-.cal-agenda { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px; }
+.cal-agenda { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 2px; max-height: 40vh; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px; }
 .cal-agenda-empty, .cal-agenda-more { font-size: 12px; padding: 4px 6px; }
 .cal-agenda-more { border-top: 1px dashed var(--line); margin-top: 2px; }
 
