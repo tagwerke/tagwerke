@@ -252,9 +252,9 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         enqueue(() => api.tabs.remove(id));
       },
       setActiveTab(id) {
-        // Opening a board lands on the doc view; leaving resets too (harmless). Opening a
-        // board also leaves the calendar (they share the main content area).
-        set(id ? { activeTabId: id, boardView: 'doc', plannerOpen: false } : { activeTabId: id, boardView: 'doc' });
+        // Opening a board lands on the doc view; leaving resets too (harmless). Any board /
+        // space / home selection also leaves the calendar (they share the main content area).
+        set({ activeTabId: id, boardView: 'doc', plannerOpen: false });
       },
       setBoardView(view) {
         set({ boardView: view });

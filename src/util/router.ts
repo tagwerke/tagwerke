@@ -10,6 +10,12 @@ export function navigate(to: string): void {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+/** The calendar route. */
+export const CALENDAR_PATH = '/calendar';
+export function isCalendarPath(path: string): boolean {
+  return path === CALENDAR_PATH;
+}
+
 /** The URL path for a given open board (or the grid when null). */
 export function boardPath(tabId: string | null): string {
   return tabId ? `/b/${encodeURIComponent(tabId)}` : '/';
