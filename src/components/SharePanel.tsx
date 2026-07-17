@@ -6,7 +6,7 @@
 // full reload to re-pull authoritative state.
 
 import { useEffect, useState } from 'react';
-import { api, ApiError, type BoardMember, type BoardRole } from '../api/client';
+import { api, drain, ApiError, type BoardMember, type BoardRole } from '../api/client';
 import { useSession } from '../session/useSession';
 import { useStore } from '../store';
 import { EmailLookup } from './EmailLookup';
@@ -29,8 +29,13 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
 
   async function refresh() {
     try {
+      // A just-created board is optimistic in the store while its POST /api/tabs is still
+      // in the durable outbox; the roster GET would 404 (no board_members row yet). Flush
+      // pending writes first so the membership row exists server-side before we read it.
+      await drain();
       const { members } = await api.members.list(tabId);
       setMembers(members);
+      setError(null); // success clears any transient failure so a stale 404 banner doesn't linger
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'failed to load members');
     }
