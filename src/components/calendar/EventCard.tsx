@@ -17,11 +17,20 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 const hm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
 type Mode = 'move' | 'resize-top' | 'resize-bottom';
+type Column = { day: string; rect: DOMRect };
 interface Drag {
   mode: Mode;
   startClientY: number;
   origStart: number;
   origEnd: number;
+  lastCol?: Column; // most recent column the pointer was over (for off-grid tolerance)
+}
+/** Viewport-space box for the floating ghost while dragging across day columns. */
+interface Fixed {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
 function weekdayOf(iso: string): string {
@@ -32,13 +41,13 @@ export function EventCard({
   event,
   box,
   onClick,
-  dayAtClientX,
+  columnAt,
 }: {
   event: CalendarEvent;
   box: LaidOut;
   onClick: () => void;
-  /** week view only: map a pointer x to its day column, enabling cross-day drag */
-  dayAtClientX?: (x: number) => string | null;
+  /** week view only: map a pointer x to its day column (+ rect), enabling cross-day drag */
+  columnAt?: (x: number) => { day: string; rect: DOMRect } | null;
 }) {
   const tabs = useStore((s) => s.tabs);
   const projects = useStore((s) => s.projects);
@@ -48,7 +57,7 @@ export function EventCard({
   const dragRef = useRef<Drag | null>(null);
   const movedRef = useRef(false);
   const suppressClickRef = useRef(false);
-  const [preview, setPreview] = useState<{ s: number; e: number; day: string } | null>(null);
+  const [preview, setPreview] = useState<{ s: number; e: number; day: string; fixed?: Fixed } | null>(null);
 
   const tab = event.tabId ? tabs[event.tabId] : undefined;
   const project = tab ? projects[tab.projectId] : undefined;
@@ -78,7 +87,7 @@ export function EventCard({
   const onPointerDown = (e: React.PointerEvent) => {
     if (!event.start || !event.end) return; // untimed events aren't draggable
     const mode = ((e.target as HTMLElement).dataset.handle as Mode) || 'move';
-    dragRef.current = { mode, startClientY: e.clientY, origStart: startMin, origEnd: endMin };
+    dragRef.current = { mode, startClientY: e.clientY, origStart: startMin, origEnd: endMin, lastCol: columnAt?.(e.clientX) ?? undefined };
     movedRef.current = false;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
@@ -88,9 +97,19 @@ export function EventCard({
     if (!d) return;
     const deltaMin = (e.clientY - d.startClientY) / PX_PER_MIN;
     if (Math.abs(e.clientY - d.startClientY) > 3) movedRef.current = true;
-    // Only a body-move can change day (resizing an edge stays on its day).
-    const targetDay = d.mode === 'move' && dayAtClientX ? dayAtClientX(e.clientX) ?? day : day;
-    setPreview({ ...resolve(d.mode, deltaMin), day: targetDay });
+    const { s, e: end } = resolve(d.mode, deltaMin);
+    // A body-move in week view floats as a ghost that snaps to the column under the
+    // pointer (edge-resize and day view stay anchored in place).
+    if (d.mode === 'move' && columnAt) {
+      const col = columnAt(e.clientX) ?? d.lastCol;
+      if (col) d.lastCol = col;
+      const fixed: Fixed | undefined = col
+        ? { left: col.rect.left + 2, width: col.rect.width - 4, top: col.rect.top + s * PX_PER_MIN, height: (end - s) * PX_PER_MIN }
+        : undefined;
+      setPreview({ s, e: end, day: col?.day ?? day, fixed });
+    } else {
+      setPreview({ s, e: end, day });
+    }
   };
 
   const onPointerUp = () => {
@@ -123,8 +142,13 @@ export function EventCard({
     }
   };
 
+  const ghost = preview?.fixed;
   const topPx = preview ? preview.s * PX_PER_MIN : box.topPx;
   const heightPx = preview ? (preview.e - preview.s) * PX_PER_MIN : box.heightPx;
+  const style: React.CSSProperties = ghost
+    ? { position: 'fixed', left: `${ghost.left}px`, top: `${ghost.top}px`, width: `${ghost.width}px`, height: `${ghost.height}px` }
+    : { top: `${topPx}px`, height: `${heightPx}px`, left: `calc(${box.leftPct}% + 2px)`, width: `calc(${box.widthPct}% - 4px)` };
+  if (project) (style as Record<string, string>)['--accent'] = project.color;
   const timeLabel = preview
     ? `${fmtMin(preview.s)}–${fmtMin(preview.e)}`
     : event.start
@@ -133,14 +157,8 @@ export function EventCard({
 
   return (
     <button
-      className={`cal-event ${personal ? 'is-personal' : 'is-meeting'} ${preview ? 'is-dragging' : ''}`}
-      style={{
-        top: `${topPx}px`,
-        height: `${heightPx}px`,
-        left: `calc(${box.leftPct}% + 2px)`,
-        width: `calc(${box.widthPct}% - 4px)`,
-        ...(project ? ({ '--accent': project.color } as React.CSSProperties) : {}),
-      }}
+      className={`cal-event ${personal ? 'is-personal' : 'is-meeting'} ${preview ? 'is-dragging' : ''} ${ghost ? 'is-ghost' : ''}`}
+      style={style}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

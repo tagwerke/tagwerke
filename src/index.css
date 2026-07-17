@@ -2324,6 +2324,8 @@ input, select, textarea { font: inherit; color: inherit; }
 .cal-event.is-personal { background: var(--bg-elev); border: 1px dashed var(--line-strong); }
 .cal-event:hover { filter: brightness(1.03); box-shadow: var(--shadow-pop, 0 4px 12px rgba(0,0,0,0.14)); }
 .cal-event.is-dragging { cursor: grabbing; z-index: 5; box-shadow: var(--shadow-pop, 0 8px 20px rgba(0,0,0,0.22)); opacity: 0.96; }
+/* Floating ghost while dragging across day columns (position:fixed, set inline). */
+.cal-event.is-ghost { z-index: 100; opacity: 0.92; box-shadow: var(--shadow-pop, 0 12px 28px rgba(0,0,0,0.28)); }
 .cal-event > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-event-time { font-family: var(--mono); font-size: 9px; color: var(--ink-mute); }
 .cal-event-title { font-size: 12px; font-weight: 600; color: var(--ink); line-height: 1.15; }

@@ -47,11 +47,12 @@ export function TimeGrid({
   const isWeek = days.length > 1;
   const template = { '--cal-days': days.length } as React.CSSProperties;
 
-  // Which day column sits under an x coordinate — for cross-day drag (week view only).
-  const dayAtClientX = (x: number): string | null => {
+  // Which day column sits under an x coordinate (+ its live rect) — for cross-day drag
+  // and the floating ghost. Week view only.
+  const columnAt = (x: number): { day: string; rect: DOMRect } | null => {
     for (const [day, el] of colRefs.current) {
-      const r = el.getBoundingClientRect();
-      if (x >= r.left && x < r.right) return day;
+      const rect = el.getBoundingClientRect();
+      if (x >= rect.left && x < rect.right) return { day, rect };
     }
     return null;
   };
@@ -129,7 +130,7 @@ export function TimeGrid({
                 {timed.map((e) => {
                   const box = boxById.get(e.id);
                   return box ? (
-                    <EventCard key={e.id} event={e} box={box} onClick={() => onEditEvent(e)} dayAtClientX={isWeek ? dayAtClientX : undefined} />
+                    <EventCard key={e.id} event={e} box={box} onClick={() => onEditEvent(e)} columnAt={isWeek ? columnAt : undefined} />
                   ) : null;
                 })}
                 {day === today && (
