@@ -162,17 +162,42 @@ function navFromTask(ctx: KeyCtx, dir: 'up' | 'down'): void {
   editor.view.focus();
 }
 
-/** Shift-Enter: leave the task list into a fresh prose paragraph after it. */
+/** Shift-Enter: escape into a fresh prose paragraph DIRECTLY below this task. Mid-list that means
+ *  splitting the taskList in two and writing between them; after the last item it degrades to the
+ *  old behavior (insert after the list). */
 function escapeToParagraph(ctx: KeyCtx): void {
   const { editor, getPos } = ctx;
   const pos = getPos();
   if (pos == null) return;
-  const $pos = editor.state.doc.resolve(pos);
-  const listAfter = $pos.after($pos.depth);
-  const tr = editor.state.tr.insert(listAfter, editor.schema.nodes.paragraph.create());
-  tr.setSelection(TextSelection.near(tr.doc.resolve(listAfter + 1)));
+  const { doc } = editor.state;
+  const item = doc.nodeAt(pos);
+  if (!item) return;
+  const afterTask = pos + item.nodeSize; // boundary between this task and the next, inside the list
+  const $pos = doc.resolve(pos);
+  const listEnd = $pos.after($pos.depth); // after the whole taskList
+  const tr = editor.state.tr;
+  let paraAt: number;
+  if (afterTask + 1 >= listEnd) {
+    // Last item in the list → paragraph goes after the list itself.
+    paraAt = listEnd;
+  } else {
+    // Split the taskList at this task; the paragraph lands in the gap between the two halves.
+    tr.split(afterTask, 1);
+    paraAt = afterTask + 1;
+  }
+  tr.insert(paraAt, editor.schema.nodes.paragraph.create());
+  tr.setSelection(TextSelection.near(tr.doc.resolve(paraAt + 1)));
   editor.view.dispatch(tr.scrollIntoView());
   editor.view.focus();
+}
+
+/** True when the (collapsed) caret sits at the very start of the title widget. */
+function caretAtStart(el: HTMLElement): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
+  const rng = sel.getRangeAt(0).cloneRange();
+  rng.setStart(el, 0);
+  return rng.toString() === '';
 }
 
 function onTitleKeyDown(e: ReactKeyboardEvent<HTMLDivElement>, ctx: KeyCtx): void {
@@ -197,6 +222,14 @@ function onTitleKeyDown(e: ReactKeyboardEvent<HTMLDivElement>, ctx: KeyCtx): voi
   if (e.key === 'Backspace' && empty) {
     e.preventDefault();
     deleteSelf(ctx);
+    return;
+  }
+  if (e.key === 'Backspace' && caretAtStart(el)) {
+    // Caret at the start of a non-empty title: nothing to delete here — hop to the end of the
+    // previous task/prose line instead (doc-editor muscle memory). Deliberately NOT a merge:
+    // tasks are entities with history, not text lines.
+    e.preventDefault();
+    navFromTask(ctx, 'up');
     return;
   }
   if (e.key === 'Tab') {
