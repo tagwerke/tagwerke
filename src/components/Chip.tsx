@@ -6,10 +6,11 @@ interface ChipProps {
   priority?: 1 | 2 | 3;
   color?: string;
   onClick?: () => void;
+  title?: string;
   children: ReactNode;
 }
 
-export function Chip({ kind, priority, color, onClick, children }: ChipProps) {
+export function Chip({ kind, priority, color, onClick, title, children }: ChipProps) {
   const setFilter = useStore((s) => s.setFilter);
   const filter = useStore((s) => s.filter);
 
@@ -33,6 +34,7 @@ export function Chip({ kind, priority, color, onClick, children }: ChipProps) {
       type="button"
       className={`chip chip-${kind}${priority ? ` p${priority}` : ''}`}
       onClick={handleClick}
+      title={title}
       style={color ? { '--chip-color': color } as React.CSSProperties : undefined}
     >
       {children}

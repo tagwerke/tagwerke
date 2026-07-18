@@ -21,7 +21,7 @@ import * as awarenessProtocol from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { yDocToProsemirrorJSON } from 'y-prosemirror';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 
 const PROTOCOL_VERSION = 1;
@@ -277,6 +277,105 @@ export async function flushAllYdocRooms(): Promise<number> {
     }),
   );
   return flushed;
+}
+
+// ── Reconcile engine (TASKS_AS_ENTITIES.md P4) ─────────────────────────────────────────────
+// The invariant: for a board, exactly one task-ref atom in the doc IFF a live row homed to it.
+// Because a ref is only an id (no content), both repairs are content-safe. This is what makes
+// restore work — clearing deletedAt on a row is not enough; the doc must regain its ref. It also
+// self-heals dropped creates / stale refs on board load.
+
+/** Every taskItem id present in the board's Y.Doc. */
+function collectDocRefIds(doc: Y.Doc): Set<string> {
+  const ids = new Set<string>();
+  const walk = (node: Y.XmlElement | Y.XmlFragment): void => {
+    for (let i = 0; i < node.length; i++) {
+      const child = node.get(i);
+      if (!(child instanceof Y.XmlElement)) continue;
+      if (child.nodeName === 'taskItem') {
+        const id = child.getAttribute('id');
+        if (id) ids.add(id);
+      } else {
+        walk(child);
+      }
+    }
+  };
+  walk(doc.getXmlFragment(FRAGMENT));
+  return ids;
+}
+
+/** Append id-only task-ref atoms at the end of the doc (into the trailing taskList, or a new one). */
+function appendRefs(doc: Y.Doc, ids: string[]): void {
+  const frag = doc.getXmlFragment(FRAGMENT);
+  const mk = (id: string): Y.XmlElement => {
+    const el = new Y.XmlElement('taskItem');
+    el.setAttribute('id', id);
+    return el;
+  };
+  const last = frag.length ? frag.get(frag.length - 1) : null;
+  if (last instanceof Y.XmlElement && last.nodeName === 'taskList') {
+    last.push(ids.map(mk));
+  } else {
+    const list = new Y.XmlElement('taskList');
+    list.push(ids.map(mk));
+    frag.push([list]);
+  }
+}
+
+/** Remove task-ref atoms with the given ids, and any taskList left empty by the removal. */
+function pruneRefs(doc: Y.Doc, orphanIds: Set<string>): void {
+  const frag = doc.getXmlFragment(FRAGMENT);
+  const walk = (node: Y.XmlElement | Y.XmlFragment): void => {
+    for (let i = node.length - 1; i >= 0; i--) {
+      const child = node.get(i);
+      if (!(child instanceof Y.XmlElement)) continue;
+      if (child.nodeName === 'taskItem' && orphanIds.has(child.getAttribute('id') ?? '')) node.delete(i, 1);
+      else walk(child);
+    }
+  };
+  walk(frag);
+  for (let i = frag.length - 1; i >= 0; i--) {
+    const child = frag.get(i);
+    if (child instanceof Y.XmlElement && child.nodeName === 'taskList' && child.length === 0) frag.delete(i, 1);
+  }
+}
+
+/**
+ * Reconcile a board's doc refs with its live task rows: append a ref for every live row missing one
+ * (restore / dropped create), prune every ref whose row is gone or trashed. Mutates the in-memory
+ * Y.Doc (so connected editors get the change live over the socket) and persists. Safe to call with
+ * no clients connected — the room is loaded, repaired, persisted, then released if still idle.
+ */
+export async function reconcileBoard(tabId: string): Promise<void> {
+  const room = await getRoom(tabId);
+  const liveRows = await db
+    .select({ id: schema.tasks.id })
+    .from(schema.tasks)
+    .where(and(eq(schema.tasks.homeTabId, tabId), isNull(schema.tasks.deletedAt)));
+  const liveIds = new Set(liveRows.map((r) => r.id));
+  const docIds = collectDocRefIds(room.doc);
+
+  const missing = [...liveIds].filter((id) => !docIds.has(id));
+  const orphans = new Set([...docIds].filter((id) => !liveIds.has(id)));
+
+  if (missing.length || orphans.size) {
+    Y.transact(room.doc, () => {
+      if (missing.length) appendRefs(room.doc, missing);
+      if (orphans.size) pruneRefs(room.doc, orphans);
+    });
+    // doc.on('update') already fanned the change to connected editors; make sure it's durable now.
+    await persist(room);
+  }
+
+  // If nobody is editing this board, don't leave the room resident in memory.
+  if (room.conns.size === 0) {
+    if (room.persistTimer) {
+      clearTimeout(room.persistTimer);
+      room.persistTimer = null;
+    }
+    rooms.delete(tabId);
+    room.doc.destroy();
+  }
 }
 
 // ── Public API (called from ws.ts) ────────────────────────────────────────────────────────

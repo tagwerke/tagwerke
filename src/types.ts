@@ -39,6 +39,10 @@ export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancel
 export interface Task {
   id: ID;
   homeTabId: ID;
+  // Sub-task nesting (TASKS_AS_ENTITIES.md, P2 node model): the parent task id, or undefined for a
+  // top-level task. Same-board only. Set directly by Tab/Shift-Tab in the editor; the doc renders
+  // indentation from it (the doc itself is a flat sequence of id-only task refs).
+  parentTaskId?: ID;
   text: string;
   // P0: status is authoritative. Optional during the transition; slice 2 makes it required
   // and removes `done`. Treat a missing status as 'todo'.

@@ -1,37 +1,29 @@
 import { Node, mergeAttributes } from '@tiptap/core';
-import { useStore } from '../../store';
 
+// TASKS_AS_ENTITIES.md P2: a taskItem is now an id-only REFERENCE (a leaf atom). The task's text
+// and metadata live on the entity (store.tasks), NOT in the document. TaskItemView renders the
+// title as a widget bound to the row; keyboard behaviour lives there (the node carries no editable
+// content). `tabId` is threaded through options so the node view can home newly-created siblings.
 export interface TaskItemOptions {
   HTMLAttributes: Record<string, unknown>;
-}
-
-declare module '@tiptap/core' {
-  interface Commands<ReturnType> {
-    taskItem: {
-      toggleTaskDone: (pos?: number) => ReturnType;
-    };
-  }
+  tabId: string;
 }
 
 export const TaskItem = Node.create<TaskItemOptions>({
   name: 'taskItem',
   addOptions() {
-    return { HTMLAttributes: {} };
+    return { HTMLAttributes: {}, tabId: '' };
   },
-  content: 'paragraph block*',
-  defining: true,
+  atom: true, // leaf: no ProseMirror content. Title/meta come from the entity.
+  selectable: true,
+  draggable: false, // drag-to-reorder (= moving the ref in the doc) is a later phase.
 
   addAttributes() {
-    // P0: the node carries only `id`. Status/done live on the task entity in the store
-    // (single source of truth), read by TaskItemView. The `done` node attr is gone.
     return {
       id: {
         default: null,
-        // Pressing Enter runs splitListItem, which by default clones every attr onto the
-        // new line. Cloning `id` makes two lines share one task, and the de-dup pass then
-        // re-IDs the wrong twin — so metadata (stored against the id) jumps to the new
-        // empty line. keepOnSplit:false drops the id from the new line; it gets a fresh
-        // one on commit, and the original keeps its id + metadata.
+        // Kept for parity with the legacy node; atoms don't split, but a stray clone still gets a
+        // fresh id from SyncPlugin's de-dup pass.
         keepOnSplit: false,
         parseHTML: (el) => (el as HTMLElement).getAttribute('data-id'),
         renderHTML: (attrs) => (attrs.id ? { 'data-id': attrs.id } : {}),
@@ -44,77 +36,7 @@ export const TaskItem = Node.create<TaskItemOptions>({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return [
-      'li',
-      mergeAttributes({ 'data-type': 'taskItem' }, this.options.HTMLAttributes, HTMLAttributes),
-      0,
-    ];
-  },
-
-  addKeyboardShortcuts() {
-    return {
-      Enter: () => this.editor.commands.splitListItem(this.name),
-      Tab: () => this.editor.commands.sinkListItem(this.name),
-      'Shift-Tab': () => this.editor.commands.liftListItem(this.name),
-      'Shift-Enter': () => {
-        // Escape the task list: insert an empty paragraph after the outermost
-        // taskList containing the cursor, and put the cursor there.
-        const { state, view } = this.editor;
-        const { $from } = state.selection;
-        let listDepth = -1;
-        for (let d = $from.depth; d >= 0; d--) {
-          if ($from.node(d).type.name === 'taskList') listDepth = d;
-        }
-        if (listDepth < 0) return false;
-        const afterList = $from.after(listDepth);
-        const para = state.schema.nodes.paragraph.create();
-        const tr = state.tr.insert(afterList, para);
-        const sel = state.selection.constructor;
-        const newPos = afterList + 1;
-        tr.setSelection(
-          // @ts-expect-error TextSelection.near is the correct API at runtime
-          sel.near(tr.doc.resolve(newPos))
-        );
-        view.dispatch(tr.scrollIntoView());
-        return true;
-      },
-      'Mod-Enter': () => toggleDoneAtSelection(this.editor.state, this.name),
-    };
-  },
-
-  addCommands() {
-    return {
-      // Toggle done by flipping the entity status in the store (done is derived).
-      toggleTaskDone:
-        (pos) =>
-        ({ state }) => {
-          const id = taskIdAt(state, this.name, pos);
-          if (!id) return false;
-          useStore.getState().toggleTaskDone(id);
-          return true;
-        },
-    };
+    // Leaf node: no content hole. The React node view supplies the visible title/meta.
+    return ['li', mergeAttributes({ 'data-type': 'taskItem' }, this.options.HTMLAttributes, HTMLAttributes)];
   },
 });
-
-/** The id of the taskItem at `pos`, or the one containing the selection. */
-function taskIdAt(state: import('@tiptap/pm/state').EditorState, nodeName: string, pos?: number): string | null {
-  if (pos != null) {
-    const node = state.doc.nodeAt(pos);
-    return node && node.type.name === nodeName ? ((node.attrs.id as string | null) ?? null) : null;
-  }
-  const { $from } = state.selection;
-  for (let depth = $from.depth; depth >= 0; depth--) {
-    if ($from.node(depth).type.name === nodeName) {
-      return ($from.node(depth).attrs.id as string | null) ?? null;
-    }
-  }
-  return null;
-}
-
-function toggleDoneAtSelection(state: import('@tiptap/pm/state').EditorState, nodeName: string): boolean {
-  const id = taskIdAt(state, nodeName);
-  if (!id) return false;
-  useStore.getState().toggleTaskDone(id);
-  return true;
-}

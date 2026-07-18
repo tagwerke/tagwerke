@@ -1,5 +1,6 @@
-import { Node, mergeAttributes, wrappingInputRule, InputRule } from '@tiptap/core';
-import { TextSelection } from '@tiptap/pm/state';
+import { Node, mergeAttributes, InputRule } from '@tiptap/core';
+import { nanoid } from 'nanoid';
+import { requestTaskFocus } from '../taskFocus';
 
 export const TaskList = Node.create({
   name: 'taskList',
@@ -15,40 +16,27 @@ export const TaskList = Node.create({
   },
 
   addInputRules() {
-    const type = this.type;
+    const listType = this.type;
     return [
-      wrappingInputRule({
-        find: /^\s*-\s$/,
-        type,
-      }),
-      // "- " after a Shift-Enter hardBreak. TipTap's textBefore renders leaf
-      // nodes as the literal "%leaf%", but that placeholder is 6 chars while
-      // the hardBreak is 1 doc position — so `range.from` is unusable here.
-      // Instead, locate the hardBreak by walking the parent paragraph.
+      // "- " at the start of an (otherwise empty) paragraph → a task list holding one id-only ref
+      // atom. The title lives on the entity, so nothing text-bearing is created; SyncPlugin mirrors
+      // the empty row and the node view (via requestTaskFocus) takes the caret.
       new InputRule({
-        find: /\n\s*-\s$/,
+        find: /^\s*-\s$/,
         handler: ({ state, range, chain }) => {
-          const $cursor = state.doc.resolve(range.to);
-          const paragraph = $cursor.parent;
-          const paraContentStart = $cursor.start();
-          let hardBreakOffset = -1;
-          paragraph.forEach((child, offset) => {
-            if (child.type.name === 'hardBreak' && offset < $cursor.parentOffset) {
-              hardBreakOffset = offset;
-            }
-          });
-          if (hardBreakOffset < 0) return null;
-          const from = paraContentStart + hardBreakOffset;
-          const to = range.to;
+          const $from = state.doc.resolve(range.from);
+          if ($from.parent.type.name !== 'paragraph') return null;
+          const taskItem = state.schema.nodes.taskItem;
+          if (!taskItem) return null;
+          const id = `t_${nanoid(8)}`;
+          const paraStart = $from.before();
+          const paraEnd = paraStart + $from.parent.nodeSize;
+          requestTaskFocus(id);
           chain()
             .command(({ tr, dispatch }) => {
-              tr.delete(from, to);
-              tr.split(from);
-              tr.setSelection(TextSelection.near(tr.doc.resolve(from + 1)));
-              if (dispatch) dispatch(tr);
+              if (dispatch) tr.replaceWith(paraStart, paraEnd, listType.create(null, taskItem.create({ id })));
               return true;
             })
-            .wrapIn(type)
             .run();
         },
       }),

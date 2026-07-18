@@ -2,12 +2,12 @@ import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { TaskItem } from './extensions/TaskItem';
 import { TaskList } from './extensions/TaskList';
 import { SyncPlugin } from './extensions/SyncPlugin';
+import { TaskNav } from './extensions/TaskNav';
 import { TaskItemView } from './TaskItemView';
-import { SuggestionOverlay, type ResolveHomeTab } from './SuggestionOverlay';
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
 import { acquireYRoom, retainYRoom, releaseYRoom } from '../realtime/yProvider';
@@ -50,10 +50,14 @@ export function TabEditor({ tabId, autoFocus }: Props) {
         TaskList,
         TaskItem.extend({
           addNodeView() {
-            return ReactNodeViewRenderer(TaskItemView);
+            // stopEvent: the title lives in a contentEditable widget inside this atom's node view;
+            // ProseMirror must NOT handle its keyboard/selection (the widget owns them). See
+            // TaskItemView + TASKS_AS_ENTITIES.md P2.
+            return ReactNodeViewRenderer(TaskItemView, { stopEvent: () => true });
           },
-        }),
+        }).configure({ tabId }),
         SyncPlugin.configure({ tabId }),
+        TaskNav,
         Collaboration.configure({ document: doc, field: 'default' }),
         CollaborationCaret.configure({
           provider,
@@ -88,14 +92,8 @@ export function TabEditor({ tabId, autoFocus }: Props) {
     });
   }, [editor, provider]);
 
-  // In a normal tab every task is homed to this tab, so the @ picker scopes to it.
-  const resolveHomeTab = useCallback<ResolveHomeTab>(() => tabId, [tabId]);
-
+  // The @/slash suggestion engine now lives per-title-widget (TaskTitleSuggest, rendered by
+  // TaskItemView), since the title is a contentEditable bound to the entity — not ProseMirror text.
   if (!editor) return null;
-  return (
-    <>
-      <EditorContent editor={editor} className="prose-editor" />
-      <SuggestionOverlay editor={editor} resolveHomeTab={resolveHomeTab} />
-    </>
-  );
+  return <EditorContent editor={editor} className="prose-editor" />;
 }

@@ -5,6 +5,7 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
+import { reconcileBoard } from '../realtime/ydoc.ts';
 
 // Fields whose changes are worth an accountability trail. `position` is excluded (reorder
 // noise); `done`/`owner` are derived/legacy. See AUDIT_IMPLEMENTATION_PLAN §B2.
@@ -33,6 +34,7 @@ const upsertBody = z.object({
   date: z.string().nullable().optional(),
   priority: priority.nullable().optional(),
   position: z.number().int().optional(),
+  parentTaskId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
   done: z.boolean().optional(),
 });
@@ -45,6 +47,7 @@ const patchBody = z.object({
   date: z.string().nullable().optional(),
   priority: priority.nullable().optional(),
   position: z.number().int().optional(),
+  parentTaskId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
   done: z.boolean().optional(),
 });
@@ -64,6 +67,20 @@ async function assigneeAllowed(homeTabId: string, assigneeId: string | null | un
   return (await boardRole(assigneeId, homeTabId)) != null;
 }
 
+/** True when `parentTaskId` is null/undefined, or names a DIFFERENT task on the same board.
+ *  Same-board sub-task nesting only (TASKS_AS_ENTITIES.md P2). Deeper cycle prevention is a
+ *  client concern — Tab only nests under an existing sibling — and can be hardened here later. */
+async function parentAllowed(homeTabId: string, id: string, parentTaskId: string | null | undefined): Promise<boolean> {
+  if (parentTaskId == null) return true;
+  if (parentTaskId === id) return false; // a task can't be its own parent
+  const rows = await db
+    .select({ homeTabId: schema.tasks.homeTabId })
+    .from(schema.tasks)
+    .where(eq(schema.tasks.id, parentTaskId))
+    .limit(1);
+  return rows[0]?.homeTabId === homeTabId;
+}
+
 export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
 
@@ -80,6 +97,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'assignee is not a member of the home board' });
       if (!(await assigneeAllowed(b.data.homeTabId, b.data.reviewerId)))
         return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
+      if (!(await parentAllowed(b.data.homeTabId, id, b.data.parentTaskId)))
+        return reply.code(400).send({ error: 'parent task is not on the home board' });
       const userId = req.user!.id;
       // status is authoritative; `done` is the derived back-compat mirror.
       const status = b.data.status ?? (b.data.done ? 'done' : 'todo');
@@ -97,6 +116,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         date: b.data.date ?? null,
         priority: b.data.priority ?? null,
         position: b.data.position ?? 0,
+        parentTaskId: b.data.parentTaskId ?? null,
         owner: b.data.owner ?? null,
         done: status === 'done',
         // Retain a recognizable Trash label; null only when genuinely never titled (§G).
@@ -111,6 +131,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         date: values.date,
         priority: values.priority,
         position: values.position,
+        parentTaskId: values.parentTaskId,
         owner: values.owner,
         done: values.done,
         // Resurrect: re-adding a task (e.g. editor undo / re-typing a line) clears any
@@ -153,6 +174,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'assignee is not a member of the home board' });
       if (b.data.reviewerId != null && !(await assigneeAllowed(homeTabId, b.data.reviewerId)))
         return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
+      if (b.data.parentTaskId !== undefined && !(await parentAllowed(homeTabId, id, b.data.parentTaskId)))
+        return reply.code(400).send({ error: 'parent task is not on the home board' });
 
       // Keep the derived `done` mirror in sync whenever status is patched.
       const set = { ...b.data } as Record<string, unknown>;
@@ -235,6 +258,16 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { id } = req.params as { id: string };
       await db.update(schema.tasks).set({ deletedAt: null, deletedBy: null }).where(eq(schema.tasks.id, id));
+      // The row is live again, but the doc lost its ref when the task was deleted. Reconcile
+      // re-appends the id-only ref so the task reappears on the board (TASKS_AS_ENTITIES.md P4 —
+      // this is THE restore fix). Best-effort: if it fails, a later board-open reconcile heals it.
+      if (req.boardScope) {
+        try {
+          await reconcileBoard(req.boardScope);
+        } catch (err) {
+          req.log.error({ err, tabId: req.boardScope }, 'restore: board reconcile failed');
+        }
+      }
       req.auditHandled = true;
       recordAudit({
         actorId: req.user!.id, action: 'task_restore', targetType: 'task', targetId: id,

@@ -29,6 +29,7 @@ interface Actions {
   upsertTask(t: Partial<Task> & { id: ID; homeTabId: ID; text: string }): Task;
   setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'reviewerId' | 'position'>>): void;
   setTaskText(id: ID, text: string): void;
+  setTaskParent(id: ID, parentTaskId: ID | undefined): void;
   setTaskStatus(id: ID, status: TaskStatus): void;
   setTaskAssignee(id: ID, assigneeId: ID | undefined): void;
   toggleTaskDone(id: ID): void;
@@ -275,6 +276,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           assigneeId: meta.assigneeId ?? existing?.assigneeId,
           date: meta.date ?? existing?.date,
           priority: meta.priority ?? existing?.priority,
+          parentTaskId: meta.parentTaskId ?? existing?.parentTaskId,
           owner: meta.owner ?? existing?.owner,
           position: meta.position ?? existing?.position ?? 0,
           done: status === 'done',
@@ -289,6 +291,10 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       },
       setTaskText(id, text) {
         patchTask(id, { text });
+      },
+      setTaskParent(id, parentTaskId) {
+        // parentTaskId is a normal Task field; persist.ts diffs it and emits the PATCH.
+        patchTask(id, { parentTaskId });
       },
       setTaskStatus(id, status) {
         patchTask(id, { status, done: status === 'done' });

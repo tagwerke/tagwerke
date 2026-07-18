@@ -89,6 +89,7 @@ export async function assembleState(userId: string) {
       ...(t.approvedAt instanceof Date ? { approvedAt: t.approvedAt.getTime() } : {}),
       ...(t.date != null ? { date: t.date } : {}),
       ...(t.priority != null ? { priority: t.priority } : {}),
+      ...(t.parentTaskId != null ? { parentTaskId: t.parentTaskId } : {}),
       ...(t.owner != null ? { owner: t.owner } : {}),
     };
   }

@@ -37,7 +37,15 @@ export function TaskMeta({ taskId, editable = true }: { taskId: ID; editable?: b
 
   return (
     <div className="task-meta" contentEditable={false}>
-      {ownerLabel ? <Chip kind="owner">{ownerLabel}</Chip> : null}
+      {ownerLabel ? (
+        <Chip
+          kind="owner"
+          onClick={editable ? () => setTaskMeta(taskId, { assigneeId: undefined, owner: undefined }) : undefined}
+          title={editable ? 'Remove assignee' : undefined}
+        >
+          {ownerLabel}
+        </Chip>
+      ) : null}
       {showReview && editable && members && members.length ? (
         <select
           className={`meta-reviewer ${task.reviewerId ? 'set' : ''}`}
@@ -60,7 +68,14 @@ export function TaskMeta({ taskId, editable = true }: { taskId: ID; editable?: b
       ) : null}
       {approverName && task.status === 'done' ? <Chip kind="owner">approved · {approverName}</Chip> : null}
       {task.priority ? (
-        <Chip kind="priority" priority={task.priority}>{'!'.repeat(task.priority)}</Chip>
+        <Chip
+          kind="priority"
+          priority={task.priority}
+          onClick={editable ? () => setTaskMeta(taskId, { priority: undefined }) : undefined}
+          title={editable ? 'Remove priority' : undefined}
+        >
+          {'!'.repeat(task.priority)}
+        </Chip>
       ) : null}
       {task.date ? (
         <button

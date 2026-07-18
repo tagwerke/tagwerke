@@ -38,6 +38,7 @@ type TaskPatch = {
   date?: string | null;
   priority?: 1 | 2 | 3 | null;
   position?: number;
+  parentTaskId?: ID | null;
 };
 
 function changedFields(p: Task, t: Task): TaskPatch | null {
@@ -49,6 +50,7 @@ function changedFields(p: Task, t: Task): TaskPatch | null {
   if ((p.date ?? null) !== (t.date ?? null)) patch.date = t.date ?? null;
   if ((p.priority ?? null) !== (t.priority ?? null)) patch.priority = t.priority ?? null;
   if ((p.position ?? 0) !== (t.position ?? 0)) patch.position = t.position ?? 0;
+  if ((p.parentTaskId ?? null) !== (t.parentTaskId ?? null)) patch.parentTaskId = t.parentTaskId ?? null;
   // approvedBy/approvedAt are DB-managed (set on the in_review → done transition) and never
   // sent from the client.
   return Object.keys(patch).length ? patch : null;
@@ -64,6 +66,7 @@ function fullBody(t: Task) {
     date: t.date ?? null,
     priority: t.priority ?? null,
     position: t.position ?? 0,
+    parentTaskId: t.parentTaskId ?? null,
     owner: t.owner ?? null,
   };
 }

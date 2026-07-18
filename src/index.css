@@ -414,6 +414,29 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-item.is-done > .task-content > p { text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.25); }
 .task-content { grid-area: content; min-width: 0; }
 .task-content p { margin: 0; color: var(--ink); }
+
+/* Task title: an editable widget bound to the entity (TASKS_AS_ENTITIES.md P2). It must read as
+   inline text you can edit — never a boxy input. No border/background; the caret is the only
+   editing affordance. A muted placeholder shows for an untitled task; the active row gets the same
+   faint wash the list rows use on hover (no hard edge around the text). */
+.task-title {
+  grid-area: content;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.task-title:empty::before {
+  content: attr(data-placeholder);
+  color: var(--ink-mute);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.task-item:focus-within { background: var(--bg-paper); border-radius: var(--r-sm); }
+.task-item.is-done > .task-title { text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.25); }
+.task-item.is-cancelled > .task-title { text-decoration: line-through; color: var(--ink-mute); opacity: 0.7; }
 .task-indicator {
   grid-area: indicator;
   position: relative;
