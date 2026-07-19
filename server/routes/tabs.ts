@@ -5,6 +5,7 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
+import { dlog, sid } from '../lib/dlog.ts';
 
 // Opt-in per-board guardrails (AUDIT_IMPLEMENTATION_PLAN §F4). Admin-only to change.
 const settingsBody = z.object({
@@ -76,6 +77,7 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     if (!b.success) return reply.code(400).send({ error: 'invalid tab' });
     const userId = req.user!.id;
     const starred = b.data.starred ?? false;
+    dlog('tabs', `POST /api/tabs board=${sid(b.data.id)} user=${sid(userId)} → inserting tab + admin membership`);
     await db.transaction(async (tx) => {
       // Shared content only; created_by is attribution. Per-user view state
       // (category/order/starred) lives on the membership row below.
@@ -95,6 +97,7 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
         starred,
       });
     });
+    dlog('tabs', `POST /api/tabs board=${sid(b.data.id)} COMMITTED (membership now exists → ydoc-join will pass)`);
     return reply.code(201).send({ ok: true });
   });
 

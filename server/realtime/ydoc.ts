@@ -23,6 +23,7 @@ import * as decoding from 'lib0/decoding';
 import { yDocToProsemirrorJSON } from 'y-prosemirror';
 import { and, eq, isNull } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
+import { dlog, sid } from '../lib/dlog.ts';
 
 const PROTOCOL_VERSION = 1;
 const messageSync = 0;
@@ -85,6 +86,7 @@ async function loadRoom(tabId: string): Promise<Room> {
       .limit(1)
   )[0];
 
+  dlog('room', `loadRoom board=${sid(tabId)} rowExists=${!!row} ydocState=${row?.ydocState ? `${row.ydocState.length}ch` : 'NULL'} docJSON=${row?.docJSON ? 'present' : 'NULL'}`);
   const doc = new Y.Doc();
   const persistedState = !!row?.ydocState;
   if (row?.ydocState) {
@@ -110,7 +112,9 @@ async function loadRoom(tabId: string): Promise<Room> {
   room.awareness.setLocalState(null);
 
   doc.on('update', (update: Uint8Array, origin: unknown) => {
-    if (room.doc.getXmlFragment(FRAGMENT).length > 0) room.hasContent = true;
+    const fragLen = room.doc.getXmlFragment(FRAGMENT).length;
+    if (fragLen > 0) room.hasContent = true;
+    dlog('ydoc', `doc.update board=${sid(tabId)} bytes=${update.length} fragLen=${fragLen} hasContent=${room.hasContent} → schedulePersist`);
     // Relay to every other participant as a sync-update message. `origin` is the ws that sent
     // the update (readSyncMessage sets it); exclude it so it doesn't get its own edit echoed.
     const originWs = origin && room.conns.has(origin as WebSocket) ? (origin as WebSocket) : null;
@@ -172,6 +176,7 @@ function schedulePersistRetry(room: Room): void {
   if (room.persistTimer) return;
   if (room.persistRetries >= MAX_PERSIST_RETRIES) return;
   room.persistRetries++;
+  dlog('ydoc', `persist RETRY board=${sid(room.tabId)} attempt=${room.persistRetries} (tabs row still missing)`);
   const delay = Math.min(PERSIST_DEBOUNCE_MS * room.persistRetries, 5000);
   room.persistTimer = setTimeout(() => {
     room.persistTimer = null;
@@ -186,7 +191,10 @@ async function writeState(room: Room): Promise<boolean> {
   // Never overwrite a not-yet-migrated legacy doc with an empty snapshot. If the Y.Doc is still
   // empty and no real content has ever flowed through this room, there is nothing worth saving —
   // and persisting would clobber the legacy `docJSON` that seeding still needs to read.
-  if (!room.hasContent && room.doc.getXmlFragment(FRAGMENT).length === 0) return true;
+  if (!room.hasContent && room.doc.getXmlFragment(FRAGMENT).length === 0) {
+    dlog('ydoc', `writeState board=${sid(room.tabId)} SKIP (empty, nothing to save)`);
+    return true;
+  }
 
   const ydocState = Buffer.from(Y.encodeStateAsUpdate(room.doc)).toString('base64');
   let docJSON: unknown = null;
@@ -205,7 +213,11 @@ async function writeState(room: Room): Promise<boolean> {
     .set({ ydocState, docJSON })
     .where(eq(schema.tabs.id, room.tabId))
     .returning({ id: schema.tabs.id });
-  if (updated.length === 0) return false; // row not created yet → caller retries
+  if (updated.length === 0) {
+    dlog('ydoc', `writeState board=${sid(room.tabId)} UPDATE matched 0 ROWS (tabs row missing) → will RETRY. ydocState=${ydocState.length}ch LOST for now`);
+    return false; // row not created yet → caller retries
+  }
+  dlog('ydoc', `writeState board=${sid(room.tabId)} SAVED ydocState=${ydocState.length}ch`);
   room.persistedState = true;
 
   // Additive existence backfill: guarantee a task ROW exists for every task NODE in the doc. Rows
@@ -424,6 +436,7 @@ export async function reconcileBoard(tabId: string): Promise<void> {
 export async function ydocJoin(tabId: string, ws: WebSocket): Promise<void> {
   const room = await getRoom(tabId);
   if (!room.conns.has(ws)) room.conns.set(ws, new Set());
+  dlog('ydoc', `ydocJoin board=${sid(tabId)} conns=${room.conns.size} persistedState=${room.persistedState} hasContent=${room.hasContent} legacyDocJSON=${room.legacyDocJSON != null} → sending syncStep1`);
 
   // Start sync: send our state vector so the client replies with what we're missing.
   const sync = encoding.createEncoder();
@@ -447,6 +460,7 @@ export async function ydocJoin(tabId: string, ws: WebSocket): Promise<void> {
   // once, on the client (it has the schema). Grant to exactly one connection.
   if (!room.persistedState && !room.hasContent && room.legacyDocJSON != null && room.seedClaimedBy == null) {
     room.seedClaimedBy = ws;
+    dlog('ydoc', `ydocJoin board=${sid(tabId)} → granting LEGACY SEED`);
     try {
       ws.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'ydoc-seed', boardId: tabId, docJSON: room.legacyDocJSON }));
     } catch {
@@ -462,6 +476,7 @@ export async function ydocJoin(tabId: string, ws: WebSocket): Promise<void> {
     // intentionally-deleted content is not resurrected. Mutually exclusive with the legacy seed
     // above (that path requires docJSON; this one requires its absence).
     room.seedClaimedBy = ws;
+    dlog('ydoc', `ydocJoin board=${sid(tabId)} → granting RECOVERY (never-persisted board)`);
     try {
       ws.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'ydoc-recoverable', boardId: tabId }));
     } catch {
@@ -511,6 +526,7 @@ export async function ydocLeave(tabId: string, ws: WebSocket): Promise<void> {
   const owned = room.conns.get(ws);
   if (!owned) return;
   room.conns.delete(ws);
+  dlog('ydoc', `ydocLeave board=${sid(tabId)} remainingConns=${room.conns.size}`);
   if (owned.size > 0) {
     // Removing states fires awareness 'update' → peers see the cursor disappear.
     awarenessProtocol.removeAwarenessStates(room.awareness, [...owned], null);

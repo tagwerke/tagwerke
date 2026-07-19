@@ -12,6 +12,7 @@ import { useStore } from '../store';
 import { useSession } from '../session/useSession';
 import { acquireYRoom, retainYRoom, releaseYRoom } from '../realtime/yProvider';
 import { colorForKey } from '../util/avatar';
+import { dlog, sid } from '../util/dlog';
 import type { ID } from '../types';
 import { registerEditor, unregisterEditor } from './registry';
 
@@ -88,6 +89,7 @@ export function TabEditor({ tabId, autoFocus }: Props) {
       onUpdate({ editor }) {
         // Yjs is authoritative and persisted server-side; we only mirror into the local store so
         // this tab's board preview stays current. There is NO server doc-save (see persist.ts).
+        dlog('editor', `onUpdate board=${sid(tabId)} empty=${editor.isEmpty} → setTabDoc (local preview only)`);
         setTabDoc(tabId, editor.getJSON());
       },
     },
@@ -96,9 +98,10 @@ export function TabEditor({ tabId, autoFocus }: Props) {
 
   useEffect(() => {
     if (!editor) return;
+    dlog('editor', `editor MOUNTED board=${sid(tabId)} (recoverySource=${docHasContent(recoverySource) ? 'has content' : 'empty'})`);
     registerEditor(tabId, editor);
     return () => unregisterEditor(tabId, editor);
-  }, [editor, tabId]);
+  }, [editor, tabId, recoverySource]);
 
   // Legacy migration: the server grants a one-time seed of pre-CRDT content. Writing it into the
   // editor flows the old content into the (empty) Y.Doc, which then syncs + persists.

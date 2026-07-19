@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import type { BlockFilter, BoardSettings, BoardView, CalendarEvent, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task, TaskStatus } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
+import { dlog, sid } from './util/dlog';
 import { api, enqueue } from './api/client';
 
 function nextPosition(orders: number[]): number {
@@ -196,6 +197,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           tabs: { ...s.tabs, [id]: tab },
           tabOrder: [...s.tabOrder, id],
         }));
+        dlog('store', `createTab board=${sid(id)} "${name}" → optimistic + enqueue POST /api/tabs (async outbox)`);
         enqueue(() => api.tabs.create({ id, projectId, name, position, starred: false, type: 'normal' }));
         return tab;
       },

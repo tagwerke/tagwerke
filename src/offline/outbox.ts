@@ -16,6 +16,7 @@
 
 import { outboxAdd, outboxAll, outboxDelete, outboxClear } from './idb';
 import { offline } from './status';
+import { dlog } from '../util/dlog';
 
 export interface Mutation {
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -87,6 +88,7 @@ export function pendingTaskIds(): Set<string> {
 type SendResult = 'ok' | 'conflict' | 'transient' | 'handled';
 
 async function send(op: Mutation, handlers?: Handlers): Promise<SendResult> {
+  dlog('outbox', `send → ${op.method} ${op.path}`);
   let r: Response;
   try {
     r = await fetch(op.path, {
@@ -105,6 +107,7 @@ async function send(op: Mutation, handlers?: Handlers): Promise<SendResult> {
   } catch {
     /* non-JSON body — leave undefined */
   }
+  dlog('outbox', `resp ← ${op.method} ${op.path} status=${r.status}`);
   if (r.ok) {
     handlers?.onOk?.(body);
     return 'ok';

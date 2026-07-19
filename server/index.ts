@@ -148,6 +148,8 @@ process.on('SIGINT', () => void shutdown('SIGINT'));
 
 try {
   await app.listen({ port: PORT, host: HOST });
+  const { dlog } = await import('./lib/dlog.ts');
+  dlog('boot', `server listening on ${HOST}:${PORT} — doc/CRDT trace ACTIVE (NODE_ENV=${process.env.NODE_ENV ?? 'unset'})`);
 } catch (err) {
   app.log.error(err);
   process.exit(1);

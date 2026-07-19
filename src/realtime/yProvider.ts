@@ -16,6 +16,7 @@ import {
   sendYdoc,
   type YdocRoomClient,
 } from './socket';
+import { dlog, sid } from '../util/dlog';
 import type { ID } from '../types';
 
 const messageSync = 0;
@@ -101,6 +102,7 @@ export class YSocketProvider implements YdocRoomClient {
 
   onReady = (): void => {
     if (this.destroyed) return;
+    dlog('provider', `onReady board=${sid(this.tabId)} → join + syncStep1`);
     this.synced = false;
     joinYdocRoom(this.tabId); // authz'd join; server replies with its own sync step 1
     // Start the sync handshake from our side too.
@@ -121,7 +123,9 @@ export class YSocketProvider implements YdocRoomClient {
         const encoder = encoding.createEncoder();
         encoding.writeVarUint(encoder, messageSync);
         const syncType = syncProtocol.readSyncMessage(decoder, encoder, this.doc, this);
-        if (encoding.length(encoder) > 1) sendYdoc(this.tabId, b64encode(encoder));
+        const willReply = encoding.length(encoder) > 1;
+        dlog('provider', `onFrame board=${sid(this.tabId)} syncType=${syncType} reply=${willReply} fragLen=${this.doc.getXmlFragment('default').length}`);
+        if (willReply) sendYdoc(this.tabId, b64encode(encoder));
         // Receiving the server's state (step 2) means our doc is now current.
         if (syncType === syncProtocol.messageYjsSyncStep2 && !this.synced) this.markSynced();
         return;
@@ -153,6 +157,7 @@ export class YSocketProvider implements YdocRoomClient {
   // --- internals -----------------------------------------------------------------------
 
   private markSynced(): void {
+    dlog('provider', `markSynced board=${sid(this.tabId)} fragLen=${this.doc.getXmlFragment('default').length} pendingSeed=${!!this.pendingSeed}`);
     this.synced = true;
     if (this.pendingSeed) {
       const { docJSON } = this.pendingSeed;
@@ -183,7 +188,11 @@ export class YSocketProvider implements YdocRoomClient {
 
   private onDocUpdate = (update: Uint8Array, origin: unknown): void => {
     // Skip updates we ourselves applied from the network (origin === this); only send local edits.
-    if (origin === this) return;
+    if (origin === this) {
+      dlog('provider', `localUpdate board=${sid(this.tabId)} bytes=${update.length} origin=SELF(network) → not sent`);
+      return;
+    }
+    dlog('provider', `localUpdate board=${sid(this.tabId)} bytes=${update.length} synced=${this.synced} → sending ydoc frame (KEYSTROKE)`);
     const enc = encoding.createEncoder();
     encoding.writeVarUint(enc, messageSync);
     syncProtocol.writeUpdate(enc, update);
@@ -245,11 +254,14 @@ const DESTROY_DELAY_MS = 2000;
 export function acquireYRoom(tabId: ID): { doc: Y.Doc; provider: YSocketProvider } {
   let r = roomCache.get(tabId);
   if (!r) {
+    dlog('provider', `acquireYRoom board=${sid(tabId)} → CREATING new Y.Doc + provider`);
     const doc = new Y.Doc();
     const provider = new YSocketProvider(tabId, doc);
     r = { doc, provider, refs: 0, destroyTimer: null };
     roomCache.set(tabId, r);
     provider.connect();
+  } else {
+    dlog('provider', `acquireYRoom board=${sid(tabId)} → REUSING cached room (refs=${r.refs})`);
   }
   if (r.destroyTimer) {
     clearTimeout(r.destroyTimer);

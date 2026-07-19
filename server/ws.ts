@@ -27,6 +27,7 @@ import {
   type Subscriber,
 } from './lib/bus.ts';
 import { ydocJoin, ydocMessage, ydocLeave, ydocDropConnection } from './realtime/ydoc.ts';
+import { dlog, sid } from './lib/dlog.ts';
 
 const PROTOCOL_VERSION = 1;
 const HEARTBEAT_MS = 30_000;
@@ -79,10 +80,12 @@ export async function registerWebsocket(app: FastifyInstance): Promise<void> {
     // request carries cookies (fastify/cookie is registered), so this is the normal path.
     const user = await resolveUser(req);
     if (!user) {
+      dlog('ws', 'connection REJECTED (unauthenticated)');
       send(socket, { v: PROTOCOL_VERSION, type: 'error', code: 'unauthenticated' });
       socket.close(1008, 'unauthenticated');
       return;
     }
+    dlog('ws', `connection OPEN user=${sid(user.id)} → sending ready`);
 
     const sub: Subscriber = { ws: socket, userId: user.id, channels: new Set() };
     // Board doc rooms this connection has authenticated into (ydoc-join). A 'ydoc' frame is
@@ -158,17 +161,23 @@ export async function registerWebsocket(app: FastifyInstance): Promise<void> {
           if (!boardId) return;
           const role = await boardRole(user.id, boardId);
           if (!role) {
+            dlog('ws', `ydoc-join board=${sid(boardId)} user=${sid(user.id)} → FORBIDDEN (no membership row yet) → sending error`);
             send(socket, { v: PROTOCOL_VERSION, type: 'error', code: 'forbidden', boardId });
             return;
           }
           joinedDocRooms.add(boardId);
+          dlog('ws', `ydoc-join board=${sid(boardId)} user=${sid(user.id)} role=${role} → ACCEPTED → joinedDocRooms={${[...joinedDocRooms].map(sid).join(',')}}`);
           await ydocJoin(boardId, socket);
           return;
         }
         case 'ydoc': {
           const boardId = msg.boardId;
           if (!boardId || typeof msg.data !== 'string') return;
-          if (!joinedDocRooms.has(boardId)) return; // must ydoc-join (authz) first
+          if (!joinedDocRooms.has(boardId)) {
+            dlog('ws', `ydoc frame board=${sid(boardId)} DROPPED (not joined — never passed authz)`);
+            return; // must ydoc-join (authz) first
+          }
+          dlog('ws', `ydoc frame board=${sid(boardId)} bytes=${msg.data.length} → applying`);
           await ydocMessage(boardId, socket, msg.data);
           return;
         }
@@ -176,6 +185,7 @@ export async function registerWebsocket(app: FastifyInstance): Promise<void> {
           const boardId = msg.boardId;
           if (!boardId) return;
           joinedDocRooms.delete(boardId);
+          dlog('ws', `ydoc-leave board=${sid(boardId)}`);
           await ydocLeave(boardId, socket);
           return;
         }

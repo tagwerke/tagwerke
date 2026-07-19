@@ -15,6 +15,7 @@
 import { useStore } from '../store';
 import { flush, suspendPersistence, resumePersistence, setBaseline } from '../api/persist';
 import { pendingTaskIds } from '../offline/outbox';
+import { dlog, sid } from '../util/dlog';
 import type { ID, Task } from '../types';
 
 const RECONNECT_MIN_MS = 1000;
@@ -68,9 +69,11 @@ function scheduleRejoin(tabId: ID): void {
   if (st.timer || st.attempts >= MAX_REJOIN_ATTEMPTS) return;
   st.attempts++;
   const delay = Math.min(500 * st.attempts, 4000);
+  dlog('ydoc-join', `scheduleRejoin board=${sid(tabId)} attempt=${st.attempts}/${MAX_REJOIN_ATTEMPTS} in ${delay}ms`);
   st.timer = setTimeout(() => {
     st.timer = null;
     const room = ydocRooms.get(tabId);
+    dlog('ydoc-join', `rejoin FIRING board=${sid(tabId)} attempt=${st.attempts} ready=${ready} room=${!!room}`);
     if (ready && room) room.onReady(); // re-sends ydoc-join + syncStep1
   }, delay);
   ydocRejoin.set(tabId, st);
@@ -79,13 +82,16 @@ function scheduleRejoin(tabId: ID): void {
 export function registerYdocRoom(tabId: ID, client: YdocRoomClient): void {
   ydocRooms.set(tabId, client);
   clearRejoin(tabId); // fresh registration → reset any stale backoff
+  dlog('ydoc-join', `registerYdocRoom board=${sid(tabId)} socketReady=${ready}${ready ? ' → onReady() now' : ' → wait for ready'}`);
   if (ready) client.onReady(); // socket already up → join right away
 }
 export function unregisterYdocRoom(tabId: ID): void {
   clearRejoin(tabId);
+  dlog('ydoc-join', `unregisterYdocRoom board=${sid(tabId)} → sending ydoc-leave`);
   if (ydocRooms.delete(tabId)) sendJSON({ type: 'ydoc-leave', boardId: tabId });
 }
 export function joinYdocRoom(tabId: ID): void {
+  dlog('ydoc-join', `→ sending ydoc-join board=${sid(tabId)}`);
   sendJSON({ type: 'ydoc-join', boardId: tabId });
 }
 export function sendYdoc(tabId: ID, dataB64: string): void {
@@ -197,6 +203,7 @@ function handleMessage(raw: string): void {
   switch (msg.type) {
     case 'ready':
       ready = true;
+      dlog('socket', `received READY → re-driving ${ydocRooms.size} doc room(s)`);
       subscribedBoard = null; // force a fresh subscribe for the current board
       syncSubscription();
       // Re-drive every open doc room so it re-joins (authz) and resyncs after a reconnect.
@@ -215,6 +222,7 @@ function handleMessage(raw: string): void {
       // The server rejects a doc-join with { code:'forbidden', boardId } when we're not (yet) a
       // member — which, for a board we just created, is the outbox race. Retry with backoff.
       const m = msg as { code?: string; boardId?: string };
+      dlog('socket', `received ERROR code=${m.code} board=${sid(m.boardId)}${m.code === 'forbidden' && m.boardId && ydocRooms.has(m.boardId) ? ' → scheduling rejoin' : ' (no rejoin)'}`);
       if (m.code === 'forbidden' && m.boardId && ydocRooms.has(m.boardId)) scheduleRejoin(m.boardId);
       return;
     }
@@ -256,6 +264,7 @@ function connect(): void {
   }
 
   socket.onopen = () => {
+    dlog('socket', `WebSocket OPEN (reconnect=${hadConnection}) → awaiting server 'ready'`);
     reconnectDelay = RECONNECT_MIN_MS;
     // A reconnect (not the first connect) means we may have missed writes → resync.
     if (hadConnection) opts?.onResync();
@@ -263,6 +272,7 @@ function connect(): void {
   };
   socket.onmessage = (e) => handleMessage(String(e.data));
   socket.onclose = () => {
+    dlog('socket', 'WebSocket CLOSED → scheduling reconnect');
     ready = false;
     socket = null;
     scheduleReconnect();

@@ -2,6 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
+import { dlog } from './util/dlog';
+
+dlog('boot', `app runtime start — doc/CRDT trace ACTIVE (dev=${import.meta.env.DEV}). Note: React StrictMode double-invokes mounts.`);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
