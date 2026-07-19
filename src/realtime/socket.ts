@@ -46,11 +46,43 @@ export interface YdocRoomClient {
 }
 const ydocRooms = new Map<ID, YdocRoomClient>();
 
+// Rejoin backoff for a doc-join the server rejected as `forbidden`. On a FRESHLY created board the
+// membership row (which authorizes the join) is created by POST /api/tabs over the offline outbox —
+// a separate async channel — so the first join can lose the race and be rejected. Without a retry
+// the client never re-joins, every typed frame is dropped server-side, and the whole first session
+// is lost (it only "works the second time" once the board exists). We re-drive the room's join with
+// bounded backoff; a genuinely forbidden board simply exhausts the attempts and stops.
+const MAX_REJOIN_ATTEMPTS = 12;
+const ydocRejoin = new Map<ID, { attempts: number; timer: ReturnType<typeof setTimeout> | null }>();
+
+function clearRejoin(tabId: ID): void {
+  const st = ydocRejoin.get(tabId);
+  if (st?.timer) clearTimeout(st.timer);
+  ydocRejoin.delete(tabId);
+}
+
+/** Schedule a re-attempt of a rejected doc-join, backing off as the outbox catches up. */
+function scheduleRejoin(tabId: ID): void {
+  if (!ydocRooms.has(tabId)) return;
+  const st = ydocRejoin.get(tabId) ?? { attempts: 0, timer: null };
+  if (st.timer || st.attempts >= MAX_REJOIN_ATTEMPTS) return;
+  st.attempts++;
+  const delay = Math.min(500 * st.attempts, 4000);
+  st.timer = setTimeout(() => {
+    st.timer = null;
+    const room = ydocRooms.get(tabId);
+    if (ready && room) room.onReady(); // re-sends ydoc-join + syncStep1
+  }, delay);
+  ydocRejoin.set(tabId, st);
+}
+
 export function registerYdocRoom(tabId: ID, client: YdocRoomClient): void {
   ydocRooms.set(tabId, client);
+  clearRejoin(tabId); // fresh registration → reset any stale backoff
   if (ready) client.onReady(); // socket already up → join right away
 }
 export function unregisterYdocRoom(tabId: ID): void {
+  clearRejoin(tabId);
   if (ydocRooms.delete(tabId)) sendJSON({ type: 'ydoc-leave', boardId: tabId });
 }
 export function joinYdocRoom(tabId: ID): void {
@@ -168,11 +200,22 @@ function handleMessage(raw: string): void {
       subscribedBoard = null; // force a fresh subscribe for the current board
       syncSubscription();
       // Re-drive every open doc room so it re-joins (authz) and resyncs after a reconnect.
+      for (const tabId of ydocRooms.keys()) clearRejoin(tabId); // fresh handshake → reset backoff
       for (const room of ydocRooms.values()) room.onReady();
       return;
     case 'ydoc': {
       const m = msg as { boardId?: string; data?: string };
-      if (m.boardId && typeof m.data === 'string') ydocRooms.get(m.boardId)?.onFrame(m.data);
+      if (m.boardId && typeof m.data === 'string') {
+        clearRejoin(m.boardId); // a frame means the join was accepted → stop retrying
+        ydocRooms.get(m.boardId)?.onFrame(m.data);
+      }
+      return;
+    }
+    case 'error': {
+      // The server rejects a doc-join with { code:'forbidden', boardId } when we're not (yet) a
+      // member — which, for a board we just created, is the outbox race. Retry with backoff.
+      const m = msg as { code?: string; boardId?: string };
+      if (m.code === 'forbidden' && m.boardId && ydocRooms.has(m.boardId)) scheduleRejoin(m.boardId);
       return;
     }
     case 'ydoc-seed': {
