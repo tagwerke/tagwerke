@@ -41,6 +41,7 @@ let unsubStore: (() => void) | null = null;
 export interface YdocRoomClient {
   onFrame(dataB64: string): void; // an inbound { type:'ydoc' } payload for this board
   onSeed(docJSON: unknown): void; // server granted a one-time legacy seed
+  onRecoverGrant(): void; // server: board never persisted → may recover from the local snapshot
   onReady(): void; // socket is (re)connected & ready → (re)join + resync
 }
 const ydocRooms = new Map<ID, YdocRoomClient>();
@@ -177,6 +178,11 @@ function handleMessage(raw: string): void {
     case 'ydoc-seed': {
       const m = msg as { boardId?: string; docJSON?: unknown };
       if (m.boardId) ydocRooms.get(m.boardId)?.onSeed(m.docJSON ?? null);
+      return;
+    }
+    case 'ydoc-recoverable': {
+      const m = msg as { boardId?: string };
+      if (m.boardId) ydocRooms.get(m.boardId)?.onRecoverGrant();
       return;
     }
     case 'entity':

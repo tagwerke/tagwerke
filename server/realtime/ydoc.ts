@@ -42,6 +42,7 @@ interface Room {
   conns: Map<WebSocket, Set<number>>;
   persistTimer: ReturnType<typeof setTimeout> | null;
   persisting: boolean;
+  persistRetries: number; // consecutive persists that found no tabs row yet (drives backoff)
   // Seeding of a pre-CRDT document (legacy docJSON) into an empty Y.Doc happens on the client
   // (it has the schema). We grant it to exactly one connection so two openers can't double-seed.
   persistedState: boolean; // ydoc_state already existed / has been written → never seed again
@@ -99,6 +100,7 @@ async function loadRoom(tabId: string): Promise<Room> {
     conns: new Map(),
     persistTimer: null,
     persisting: false,
+    persistRetries: 0,
     persistedState,
     legacyDocJSON: row?.docJSON ?? null,
     seedClaimedBy: null,
@@ -161,12 +163,30 @@ function schedulePersist(room: Room): void {
   }, PERSIST_DEBOUNCE_MS);
 }
 
+// Cap the retry loop for a doc whose tabs row never materializes (e.g. a poisoned POST /api/tabs).
+// ~2.5 min of backoff; the last-out flush in ydocLeave is the final backstop after that.
+const MAX_PERSIST_RETRIES = 30;
+
+/** Re-attempt a persist that found no tabs row yet, backing off as the outbox catches up. */
+function schedulePersistRetry(room: Room): void {
+  if (room.persistTimer) return;
+  if (room.persistRetries >= MAX_PERSIST_RETRIES) return;
+  room.persistRetries++;
+  const delay = Math.min(PERSIST_DEBOUNCE_MS * room.persistRetries, 5000);
+  room.persistTimer = setTimeout(() => {
+    room.persistTimer = null;
+    void persist(room);
+  }, delay);
+}
+
 // The actual DB write of a room's current state. No debounce/in-flight guard — callers own that.
-async function writeState(room: Room): Promise<void> {
+// Returns false ONLY when the write found no tabs row to update (so the caller retries); true when
+// it persisted or there was nothing worth saving.
+async function writeState(room: Room): Promise<boolean> {
   // Never overwrite a not-yet-migrated legacy doc with an empty snapshot. If the Y.Doc is still
   // empty and no real content has ever flowed through this room, there is nothing worth saving —
   // and persisting would clobber the legacy `docJSON` that seeding still needs to read.
-  if (!room.hasContent && room.doc.getXmlFragment(FRAGMENT).length === 0) return;
+  if (!room.hasContent && room.doc.getXmlFragment(FRAGMENT).length === 0) return true;
 
   const ydocState = Buffer.from(Y.encodeStateAsUpdate(room.doc)).toString('base64');
   let docJSON: unknown = null;
@@ -175,7 +195,17 @@ async function writeState(room: Room): Promise<void> {
   } catch {
     /* derive is best-effort; the authoritative ydocState always persists */
   }
-  await db.update(schema.tabs).set({ ydocState, docJSON }).where(eq(schema.tabs.id, room.tabId));
+  // UPDATE (not upsert): the tabs row is created by POST /api/tabs over the offline outbox — a
+  // SEPARATE channel from this socket, with no ordering guarantee. On a freshly created board the
+  // row may not exist yet, in which case this UPDATE matches ZERO rows and silently drops the whole
+  // document. `.returning()` surfaces that so persist() retries until the row lands, instead of
+  // marking the room persisted and losing the entire first editing session (text + task refs).
+  const updated = await db
+    .update(schema.tabs)
+    .set({ ydocState, docJSON })
+    .where(eq(schema.tabs.id, room.tabId))
+    .returning({ id: schema.tabs.id });
+  if (updated.length === 0) return false; // row not created yet → caller retries
   room.persistedState = true;
 
   // Additive existence backfill: guarantee a task ROW exists for every task NODE in the doc. Rows
@@ -192,6 +222,7 @@ async function writeState(room: Room): Promise<void> {
       console.error(`[ydoc] row backfill failed for ${room.tabId}:`, err);
     }
   }
+  return true;
 }
 
 /** Concatenated text of a taskItem's own first paragraph (its title line, excluding subtasks). */
@@ -238,7 +269,15 @@ async function persist(room: Room): Promise<void> {
   }
   room.persisting = true;
   try {
-    await writeState(room);
+    const wrote = await writeState(room);
+    if (wrote) {
+      room.persistRetries = 0;
+    } else {
+      // The tabs row hasn't been created yet (POST /api/tabs still in flight on the outbox). Retry
+      // with backoff so the document lands the moment the row exists — this is what makes a brand-new
+      // board's first editing session durable instead of vanishing on the first refresh.
+      schedulePersistRetry(room);
+    }
   } catch (err) {
     console.error(`[ydoc] persist failed for ${room.tabId}:`, err);
   } finally {
@@ -413,6 +452,21 @@ export async function ydocJoin(tabId: string, ws: WebSocket): Promise<void> {
     } catch {
       room.seedClaimedBy = null;
     }
+  } else if (!room.persistedState && !room.hasContent && room.legacyDocJSON == null && room.seedClaimedBy == null) {
+    // Recovery grant (companion to the durability fix in writeState). A board that has NEVER
+    // persisted a Yjs state AND has no legacy docJSON is the exact footprint of the lost-first-
+    // session bug: the creator's text/task-refs were typed but the racing UPDATE dropped them, so
+    // they may survive ONLY in that client's offline snapshot (its local tabs[].docJSON). Grant
+    // exactly one client permission to re-seed the empty doc from that local copy. A legitimately
+    // cleared board has persistedState=true (it persisted an empty state), so it never qualifies —
+    // intentionally-deleted content is not resurrected. Mutually exclusive with the legacy seed
+    // above (that path requires docJSON; this one requires its absence).
+    room.seedClaimedBy = ws;
+    try {
+      ws.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'ydoc-recoverable', boardId: tabId }));
+    } catch {
+      room.seedClaimedBy = null;
+    }
   }
 }
 
@@ -464,11 +518,19 @@ export async function ydocLeave(tabId: string, ws: WebSocket): Promise<void> {
   if (room.seedClaimedBy === ws && !room.hasContent) room.seedClaimedBy = null;
 
   if (room.conns.size === 0) {
-    // Last one out: flush pending state, then free the room from memory.
+    // Last one out: flush the final state, then free the room from memory. Flush UNCONDITIONALLY,
+    // not just when a debounce timer is pending — a short first edit whose debounce already fired
+    // would otherwise leave with no final write (the gap that let quick create→type→refresh lose
+    // everything). persist() no-ops if there's nothing worth saving.
     if (room.persistTimer) {
       clearTimeout(room.persistTimer);
       room.persistTimer = null;
-      await persist(room);
+    }
+    await persist(room);
+    // persist() may have scheduled a retry (row still missing) — cancel it; we're tearing down.
+    if (room.persistTimer) {
+      clearTimeout(room.persistTimer);
+      room.persistTimer = null;
     }
     rooms.delete(tabId);
     room.doc.destroy();

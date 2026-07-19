@@ -47,6 +47,12 @@ export class YSocketProvider implements YdocRoomClient {
   private readySeed: { docJSON: unknown } | null = null; // synced + empty → ready to apply
   private seedListener: ((docJSON: unknown) => void) | null = null;
   private destroyed = false;
+  // Recovery (companion to the server durability fix): the server grants this when a board has never
+  // persisted a doc, so the editor may re-seed the empty doc from the client's offline snapshot.
+  private recoverGranted = false; // server said this board has no persisted state
+  private recoverReady = false; // granted + synced + still empty → editor may recover
+  private recoverFired = false;
+  private recoverListener: (() => void) | null = null;
 
   /** The editor subscribes here; fired once with the legacy content to seed a pre-CRDT doc.
    *  A method (not a settable field) so the editor never mutates the provider directly. */
@@ -55,6 +61,20 @@ export class YSocketProvider implements YdocRoomClient {
     if (this.readySeed) cb(this.readySeed.docJSON); // grant already arrived → fire now
     return () => {
       if (this.seedListener === cb) this.seedListener = null;
+    };
+  }
+
+  /** The editor subscribes here; fired at most once when the server has granted recovery, the doc
+   *  is synced, and it's still empty — the editor then re-seeds it from the local offline snapshot.
+   *  Companion to the tabs-row durability fix; see server/realtime/ydoc.ts (ydocJoin). */
+  onRecoverReady(cb: () => void): () => void {
+    this.recoverListener = cb;
+    if (this.recoverReady && !this.recoverFired) {
+      this.recoverFired = true;
+      cb();
+    }
+    return () => {
+      if (this.recoverListener === cb) this.recoverListener = null;
     };
   }
 
@@ -122,6 +142,14 @@ export class YSocketProvider implements YdocRoomClient {
     else this.pendingSeed = { docJSON };
   };
 
+  onRecoverGrant = (): void => {
+    // The server signalled this board has no persisted state — the editor may recover from the
+    // local snapshot once we're synced and the doc is confirmed empty.
+    if (this.destroyed) return;
+    this.recoverGranted = true;
+    this.considerRecovery();
+  };
+
   // --- internals -----------------------------------------------------------------------
 
   private markSynced(): void {
@@ -130,6 +158,19 @@ export class YSocketProvider implements YdocRoomClient {
       const { docJSON } = this.pendingSeed;
       this.pendingSeed = null;
       this.applySeed(docJSON);
+    }
+    this.considerRecovery(); // a recovery grant may have arrived before sync completed
+  }
+
+  private considerRecovery(): void {
+    if (this.recoverFired || this.destroyed) return;
+    if (!this.recoverGranted || !this.synced) return;
+    // Only a genuinely empty doc is recovered — a peer may have populated it since the grant.
+    if (this.doc.getXmlFragment('default').length > 0) return;
+    this.recoverReady = true;
+    if (this.recoverListener) {
+      this.recoverFired = true;
+      this.recoverListener();
     }
   }
 
