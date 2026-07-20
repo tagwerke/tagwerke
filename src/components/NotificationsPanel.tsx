@@ -29,6 +29,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
   const unread = useNotifications((s) => s.unread);
   const markRead = useNotifications((s) => s.markRead);
   const markAllRead = useNotifications((s) => s.markAllRead);
+  const clearAll = useNotifications((s) => s.clearAll);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const setPlannerOpen = useStore((s) => s.setPlannerOpen);
 
@@ -49,6 +50,9 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
           <div className="notif-head-actions">
             {unread > 0 && (
               <button className="link-btn" onClick={markAllRead}>Mark all read</button>
+            )}
+            {items.length > 0 && (
+              <button className="link-btn" onClick={clearAll}>Clear</button>
             )}
             <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
           </div>

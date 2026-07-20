@@ -273,6 +273,7 @@ export const api = {
     list: () => req<{ notifications: NotificationDTO[]; unread: number }>('/api/notifications'),
     markRead: (id: ID) => req(`/api/notifications/${id}/read`, { method: 'POST' }),
     markAllRead: () => req('/api/notifications/read-all', { method: 'POST' }),
+    clearAll: () => req('/api/notifications', { method: 'DELETE' }),
     // Web push (Phase 4). vapidKey() returns { key: null } when push is unconfigured server-side.
     vapidKey: () => req<{ key: string | null }>('/api/notifications/vapid-key'),
     subscribePush: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>

@@ -22,6 +22,8 @@ interface NotificationsState {
   markRead(id: ID): void;
   /** Mark every notification read (optimistic + server). */
   markAllRead(): void;
+  /** Delete the whole feed (optimistic + server). */
+  clearAll(): void;
   /** Drop all local feed state (logout). */
   reset(): void;
 }
@@ -71,6 +73,12 @@ export const useNotifications = create<NotificationsState>((set, get) => ({
     const nowIso = new Date().toISOString();
     set((s) => ({ items: s.items.map((i) => (i.readAt ? i : { ...i, readAt: nowIso })), unread: 0 }));
     void api.notifications.markAllRead().catch(() => {});
+  },
+
+  clearAll() {
+    if (get().items.length === 0) return;
+    set({ items: [], unread: 0 });
+    void api.notifications.clearAll().catch(() => {});
   },
 
   reset() {

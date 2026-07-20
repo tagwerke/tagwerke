@@ -69,6 +69,13 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true });
   });
 
+  // Clear (delete) this user's entire feed. Scoped to the owner, so it only ever touches your own
+  // rows. Hard delete — the feed is a transient convenience surface, not the audit trail.
+  app.delete('/api/notifications', async (req, reply) => {
+    await db.delete(schema.notifications).where(eq(schema.notifications.userId, req.user!.id));
+    return reply.send({ ok: true });
+  });
+
   // The browser needs the public VAPID key to build a push subscription. null = push disabled
   // (no keys configured) → the client hides the "enable push" affordance.
   app.get('/api/notifications/vapid-key', async () => {
