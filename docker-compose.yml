@@ -49,6 +49,11 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      # Web push (notifications). Generate with `npx web-push generate-vapid-keys`.
+      # Without these, in-app notifications still work — only device/desktop push is disabled.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       # Automatic daily backups (on by default; see docs/self-hosting.md).
       BACKUP_DISABLED: ${BACKUP_DISABLED:-}
       BACKUP_KEEP: ${BACKUP_KEEP:-14}
