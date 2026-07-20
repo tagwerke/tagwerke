@@ -278,6 +278,7 @@ export const api = {
     vapidKey: () => req<{ key: string | null }>('/api/notifications/vapid-key'),
     subscribePush: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
       req('/api/notifications/subscribe', { method: 'POST', body: JSON.stringify(sub) }),
+    testPush: () => req('/api/notifications/test', { method: 'POST' }),
   },
 };
 

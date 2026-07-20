@@ -9,7 +9,8 @@ import { nanoid } from 'nanoid';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
-import { vapidPublicKey } from '../lib/webpush.ts';
+import { vapidPublicKey, pushToUser } from '../lib/webpush.ts';
+import { dlog, sid } from '../lib/dlog.ts';
 
 const FEED_LIMIT = 50;
 
@@ -86,7 +87,10 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
   // so re-subscribing the same browser is idempotent and re-points it at the current user.
   app.post('/api/notifications/subscribe', async (req, reply) => {
     const b = subscribeBody.safeParse(req.body);
-    if (!b.success) return reply.code(400).send({ error: 'invalid subscription' });
+    if (!b.success) {
+      dlog('push', `subscribe user=${sid(req.user!.id)} REJECTED — invalid body`);
+      return reply.code(400).send({ error: 'invalid subscription' });
+    }
     await db
       .insert(schema.pushSubscriptions)
       .values({ id: nanoid(), userId: req.user!.id, endpoint: b.data.endpoint, p256dh: b.data.keys.p256dh, auth: b.data.keys.auth })
@@ -94,6 +98,20 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
         target: schema.pushSubscriptions.endpoint,
         set: { userId: req.user!.id, p256dh: b.data.keys.p256dh, auth: b.data.keys.auth },
       });
+    dlog('push', `subscribe user=${sid(req.user!.id)} SAVED endpoint=…${b.data.endpoint.slice(-12)}`);
+    return reply.send({ ok: true });
+  });
+
+  // Self-test: fire a REAL web push to the caller's own devices, bypassing the event flow. Lets a
+  // user verify end-to-end push delivery on THIS device in one click — no second account, no board.
+  // Logs the subscription count + per-endpoint send result via [srv:push].
+  app.post('/api/notifications/test', async (req, reply) => {
+    dlog('push', `TEST push requested by user=${sid(req.user!.id)}`);
+    await pushToUser(req.user!.id, {
+      title: 'Test push ✅',
+      body: 'If you see this as a system notification, web push works on this device.',
+      tabId: null,
+    });
     return reply.send({ ok: true });
   });
 }

@@ -122,7 +122,12 @@ export function PushOptIn() {
   if (state === 'unsupported' || state === 'loading') return null;
 
   if (state === 'granted') {
-    return <div className="notif-push notif-push-on">Push is on for this device.</div>;
+    return (
+      <div className="notif-push notif-push-on">
+        <span>Push is on for this device.</span>
+        <button className="link-btn" onClick={() => void api.notifications.testPush()}>Send test push</button>
+      </div>
+    );
   }
   if (state === 'denied') {
     return <div className="notif-push">Push is blocked in your browser settings for this site.</div>;
