@@ -55,13 +55,13 @@ export function notify(userId: string, input: NotifyInput): void {
       type: 'notification',
       notification: { ...row, createdAt: row.createdAt.toISOString(), readAt: null },
     });
-    // Presence gate: only reach for a device push when the user isn't connected right now.
+    // Device push is ALWAYS sent (presence gating removed by request): a connected or backgrounded
+    // app still gets a device notification, not just the live in-app frame. subscriberCount is
+    // logged for visibility only — it no longer suppresses anything.
     const live = subscriberCount(userChannel(userId));
-    dlog('push', `notify user=${sid(userId)} type=${row.type} liveSockets=${live} → ${live === 0 ? 'PUSH' : 'in-app only (connected)'}`);
-    if (live === 0) {
-      await pushToUser(userId, { title: row.title, body: row.body, tabId: row.tabId, notifId: row.id }).catch((err) => {
-        dlog('push', `notify user=${sid(userId)} pushToUser threw`, err);
-      });
-    }
+    dlog('push', `notify user=${sid(userId)} type=${row.type} liveSockets=${live} → PUSH (gate off)`);
+    await pushToUser(userId, { title: row.title, body: row.body, tabId: row.tabId, notifId: row.id }).catch((err) => {
+      dlog('push', `notify user=${sid(userId)} pushToUser threw`, err);
+    });
   })();
 }
