@@ -15,6 +15,7 @@ import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
 import { publish, userChannel, subscriberCount } from './bus.ts';
 import { pushToUser } from './webpush.ts';
+import { dlog, sid } from './dlog.ts';
 
 const PROTOCOL_VERSION = 1;
 
@@ -55,8 +56,12 @@ export function notify(userId: string, input: NotifyInput): void {
       notification: { ...row, createdAt: row.createdAt.toISOString(), readAt: null },
     });
     // Presence gate: only reach for a device push when the user isn't connected right now.
-    if (subscriberCount(userChannel(userId)) === 0) {
-      await pushToUser(userId, { title: row.title, body: row.body, tabId: row.tabId, notifId: row.id }).catch(() => {});
+    const live = subscriberCount(userChannel(userId));
+    dlog('push', `notify user=${sid(userId)} type=${row.type} liveSockets=${live} → ${live === 0 ? 'PUSH' : 'in-app only (connected)'}`);
+    if (live === 0) {
+      await pushToUser(userId, { title: row.title, body: row.body, tabId: row.tabId, notifId: row.id }).catch((err) => {
+        dlog('push', `notify user=${sid(userId)} pushToUser threw`, err);
+      });
     }
   })();
 }

@@ -11,6 +11,7 @@
 import webpush from 'web-push';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
+import { dlog, sid } from './dlog.ts';
 
 const PUBLIC = process.env.VAPID_PUBLIC_KEY;
 const PRIVATE = process.env.VAPID_PRIVATE_KEY;
@@ -43,26 +44,34 @@ export interface PushPayload {
 /** Send a push to every device `userId` has registered. No-op if push is unconfigured or the
  *  user has no subscriptions. Best-effort per endpoint; prunes endpoints the push service rejects. */
 export async function pushToUser(userId: string, payload: PushPayload): Promise<void> {
-  if (!configured) return;
+  if (!configured) {
+    dlog('push', `pushToUser user=${sid(userId)} SKIP — VAPID not configured`);
+    return;
+  }
   let subs: { endpoint: string; p256dh: string; auth: string }[];
   try {
     subs = await db
       .select({ endpoint: schema.pushSubscriptions.endpoint, p256dh: schema.pushSubscriptions.p256dh, auth: schema.pushSubscriptions.auth })
       .from(schema.pushSubscriptions)
       .where(eq(schema.pushSubscriptions.userId, userId));
-  } catch {
+  } catch (err) {
+    dlog('push', `pushToUser user=${sid(userId)} subscription lookup FAILED`, err);
     return; // best-effort: a DB hiccup must not break the request that triggered the notify
   }
+  dlog('push', `pushToUser user=${sid(userId)} subscriptions=${subs.length}`);
   if (!subs.length) return;
   const data = JSON.stringify(payload);
   await Promise.all(
     subs.map(async (s) => {
       try {
         await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, data);
+        dlog('push', `pushToUser user=${sid(userId)} sent OK endpoint=…${s.endpoint.slice(-12)}`);
       } catch (err: unknown) {
         // 404/410 = the subscription is gone (browser cleared it / expired). Prune it so we
         // stop trying. Any other error (transient network/5xx) is left for the next send.
         const status = (err as { statusCode?: number })?.statusCode;
+        const body = (err as { body?: string })?.body;
+        dlog('push', `pushToUser user=${sid(userId)} send FAILED status=${status ?? '?'} endpoint=…${s.endpoint.slice(-12)} body=${body ?? (err as Error)?.message ?? ''}`);
         if (status === 404 || status === 410) {
           await db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.endpoint, s.endpoint)).catch(() => {});
         }
