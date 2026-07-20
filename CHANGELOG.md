@@ -8,7 +8,49 @@ automatically on boot — always take a backup before upgrading.
 
 ## [Unreleased]
 
-## [0.1.0] — 2026-07-18 (planned first public release)
+## [0.2.0] — 2026-07-20
+
+Second public release. The headline is **collaboration**: Tagwerke is now real-time and
+no longer reads as a single-player tool. Database migrations (through `0024`) apply
+automatically on boot — **take a backup before upgrading** (the built-in daily backup or
+`scripts/backup.sh`).
+
+### Added
+
+- **Keystroke-level co-editing (Yjs CRDT)** — two people edit the same board's text at
+  once with character-granular merge and live cursors; no locks, no last-write-wins loss.
+  One authoritative `Y.Doc` per board over the app WebSocket; `docJSON` is now a derived
+  snapshot.
+- **Live updates** — task/entity changes and **board-membership changes** (add/remove/role)
+  fan out over the socket, so peers and the affected user's sidebar update without a refresh.
+- **Notifications** — presence-routed: a live in-app bell when you're connected, and **web
+  push** to your phone/desktop when you're away (task assigned, review requested, approved,
+  added to a board). Opt-in per device; in-app is always on. The `get.sh` installer
+  auto-generates the required VAPID keypair.
+- **Calendar** — a `/calendar` route with a day/week grid: drag to move, drag-edge to
+  resize, cross-day drag, an inline event editor, a sidebar agenda, and meeting RSVP.
+
+### Changed
+
+- **Tasks are now first-class entities** — the database row is the single source of truth
+  for a task's text, status, and existence; the board document holds prose plus id-only
+  references, and the server reconciles the two on every change. This structurally removes
+  a class of bugs where a restored or dropped task failed to reappear on the board.
+- **The time-block Planner was retired**, replaced by the calendar as the time-oriented view.
+
+### Fixed
+
+- New-board text/tasks could be lost on the first refresh due to a membership race on the
+  document-join; the client now retries a rejected join, and first-session state persists
+  durably.
+
+### Known limitations
+
+- No comments on tasks yet, and no importers (CSV/Jira) — both are planned next.
+- No SAML, no SCIM, no public API tokens/webhooks.
+- Audit retention pruning is still a manual command (schedule it via cron).
+
+## [0.1.0] — 2026-07-07 (first public release)
 
 First public, versioned release.
 

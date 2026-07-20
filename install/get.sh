@@ -149,7 +149,7 @@ fi
 have curl || die "curl is required (apt-get install -y curl) — it fetched this script, so this should not happen"
 
 # ---- docker ------------------------------------------------------------------
-step 1/7 "Docker"
+step 1/8 "Docker"
 if have docker && docker compose version >/dev/null 2>&1; then
   say "  ok: docker + compose plugin already installed"
 else
@@ -173,11 +173,11 @@ else
 fi
 
 # ---- install dir + compose bundle --------------------------------------------
-step 2/7 "Install directory: ${TAGWERKE_DIR}"
+step 2/8 "Install directory: ${TAGWERKE_DIR}"
 mkdir -p "$TAGWERKE_DIR" "$TAGWERKE_DIR/backups"
 cd "$TAGWERKE_DIR"
 
-step 3/7 "Compose bundle for v${TAGWERKE_VERSION}"
+step 3/8 "Compose bundle for v${TAGWERKE_VERSION}"
 for f in $BUNDLE_FILES; do
   if [ -n "$TAGWERKE_BUNDLE_DIR" ]; then
     cp "$TAGWERKE_BUNDLE_DIR/$f" "./$f"
@@ -201,7 +201,7 @@ gen_secret() { # gen_secret <bytes> — hex, so it is always URL/compose-safe
     head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; fi
 }
 
-step 4/7 "Secrets + configuration (.env)"
+step 4/8 "Secrets + configuration (.env)"
 if [ ! -f .env ]; then
   umask 077
   SESSION_SECRET="$(gen_secret 48)"
@@ -264,7 +264,7 @@ esac
 
 # ---- optional: age backup key (opt-in) ----------------------------------------
 if [ "$TAGWERKE_BACKUP_KEY" = "1" ] && ! grep -q '^BACKUP_AGE_RECIPIENT=age1' .env 2>/dev/null; then
-  step 5/7 "Backup encryption key (age)"
+  step 5/8 "Backup encryption key (age)"
   # age ships inside the app image — generate the key there, keep it here.
   docker compose pull -q app >/dev/null 2>&1 || true
   docker compose run --rm --no-deps app age-keygen > tagwerke-backup-key.txt 2>/dev/null \
@@ -276,11 +276,35 @@ if [ "$TAGWERKE_BACKUP_KEY" = "1" ] && ! grep -q '^BACKUP_AGE_RECIPIENT=age1' .e
   say "  ok: backups will be encrypted to ${PUBKEY}"
   warn "the SECRET key is ${TAGWERKE_DIR}/tagwerke-backup-key.txt — move it OFF this server (password manager / offline). Without it, encrypted backups cannot be restored; with it, anyone can read them."
 else
-  step 5/7 "Backup encryption key — skipped (opt in with TAGWERKE_BACKUP_KEY=1; see docs/self-hosting.md)"
+  step 5/8 "Backup encryption key — skipped (opt in with TAGWERKE_BACKUP_KEY=1; see docs/self-hosting.md)"
+fi
+
+# ---- web-push VAPID keys (auto-generated; enables notification push) ----------
+# In-app notifications always work; PUSH (phone/desktop when away) needs a VAPID
+# keypair. web-push ships inside the app image — generate the pair there, like the
+# age key above. Missing keys are non-fatal: push just stays off until they exist.
+if ! grep -q '^VAPID_PUBLIC_KEY=' .env 2>/dev/null; then
+  step 6/8 "Notification push keys (VAPID)"
+  docker compose pull -q app >/dev/null 2>&1 || true
+  VAPID_OUT="$(docker compose run --rm --no-deps app \
+    node -e 'const k=require("web-push").generateVAPIDKeys();process.stdout.write(k.publicKey+"\n"+k.privateKey+"\n")' \
+    2>/dev/null)" || true
+  VAPID_PUB="$(printf '%s\n' "$VAPID_OUT" | sed -n 1p)"
+  VAPID_PRIV="$(printf '%s\n' "$VAPID_OUT" | sed -n 2p)"
+  if [ -n "$VAPID_PUB" ] && [ -n "$VAPID_PRIV" ]; then
+    set_env VAPID_PUBLIC_KEY "$VAPID_PUB"
+    set_env VAPID_PRIVATE_KEY "$VAPID_PRIV"
+    grep -q '^VAPID_SUBJECT=' .env 2>/dev/null || set_env VAPID_SUBJECT "mailto:no-reply@${HOST:-localhost}"
+    say "  ok: generated VAPID keypair — notification push enabled"
+  else
+    warn "could not generate VAPID keys — in-app notifications still work; push stays off until you set VAPID_* in .env (see .env.example)"
+  fi
+else
+  step 6/8 "Notification push keys — already configured"
 fi
 
 # ---- start --------------------------------------------------------------------
-step 6/7 "Starting Tagwerke (docker compose up -d)"
+step 7/8 "Starting Tagwerke (docker compose up -d)"
 docker compose pull -q || warn "image pull failed — continuing with locally available images"
 docker compose up -d
 
@@ -300,7 +324,7 @@ done
 say "  ok: /health is green"
 
 # ---- first invite --------------------------------------------------------------
-step 7/7 "First signup invite"
+step 8/8 "First signup invite"
 INVITE="$(docker compose exec -T app npm run --silent invite 2>/dev/null | sed -n 's/.*invite code:[[:space:]]*//p' | head -n1 | tr -d '[:space:]')"
 [ -n "$INVITE" ] || die "could not mint an invite — try manually: cd ${TAGWERKE_DIR} && docker compose exec app npm run invite"
 
