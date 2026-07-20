@@ -39,6 +39,9 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       NODE_ENV: production
       PORT: "5174"
+      # Opt-in verbose server trace (dlog). Set DO_DEBUG=1 in Dokploy to surface [srv:*] lines
+      # (push routing, CRDT) in the container logs; leave empty for a quiet production instance.
+      DO_DEBUG: ${DO_DEBUG:-}
       # Public URL used in password-reset links (must be the real domain, not localhost).
       APP_URL: ${APP_URL:-http://localhost:5173}
       ORG_NAME: ${ORG_NAME:-Workspace}
