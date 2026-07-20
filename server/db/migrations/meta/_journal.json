@@ -169,6 +169,13 @@
       "when": 1784316397911,
       "tag": "0023_groovy_brother_voodoo",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784479597932,
+      "tag": "0024_parched_riptide",
+      "breakpoints": true
     }
   ]
 }

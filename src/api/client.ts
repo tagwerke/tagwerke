@@ -8,7 +8,7 @@
 // stay as direct fetches and simply fail while offline.
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import type { BlockFilter, CalendarEvent, ID, RsvpStatus, TaskStatus } from '../types';
+import type { BlockFilter, CalendarEvent, ID, Notification as NotificationDTO, RsvpStatus, TaskStatus } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
 
@@ -267,6 +267,16 @@ export const api = {
     // Recovery: unlock a user who lost their 2FA / all their passkeys.
     resetTwoFactor: (id: ID) => req(`/api/admin/users/${id}/reset-2fa`, { method: 'POST' }),
     resetPasskeys: (id: ID) => req(`/api/admin/users/${id}/reset-passkeys`, { method: 'POST' }),
+  },
+  // ── Notifications (per-user feed + web push) — reads/own-state, direct fetch ──
+  notifications: {
+    list: () => req<{ notifications: NotificationDTO[]; unread: number }>('/api/notifications'),
+    markRead: (id: ID) => req(`/api/notifications/${id}/read`, { method: 'POST' }),
+    markAllRead: () => req('/api/notifications/read-all', { method: 'POST' }),
+    // Web push (Phase 4). vapidKey() returns { key: null } when push is unconfigured server-side.
+    vapidKey: () => req<{ key: string | null }>('/api/notifications/vapid-key'),
+    subscribePush: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+      req('/api/notifications/subscribe', { method: 'POST', body: JSON.stringify(sub) }),
   },
 };
 

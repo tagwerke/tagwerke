@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import { auth, getState, setWriteErrorHandler, type SessionUser } from '../api/client';
 import { startPersistence, setBaseline, suspendPersistence, resumePersistence, flush } from '../api/persist';
 import { startRealtime, stopRealtime } from '../realtime/socket';
+import { useNotifications } from '../notifications/useNotifications';
 import { startOutbox, clearOutbox, pendingTaskIds, outboxIdle } from '../offline/outbox';
 import { saveSnapshot, loadSnapshot, saveCachedUser, loadCachedUser, clearSnapshot } from '../offline/snapshot';
 import { offline } from '../offline/status';
@@ -36,6 +37,9 @@ function hydrateAndPersist(state: RootState, keepTaskIds?: Set<ID>): void {
   // Live updates: connect the realtime socket (idempotent). On a reconnect it re-pulls
   // authoritative state to catch anything missed while disconnected.
   startRealtime({ onResync: () => void repull() });
+  // Pull the notification feed for this login (live ones then arrive over the socket).
+  // hydrateAndPersist runs once per login — repull()/resync does NOT come through here.
+  void useNotifications.getState().load();
 }
 
 /** Pull authoritative state; if the network is down, boot from the last snapshot. */
@@ -191,6 +195,7 @@ export const useSession = create<SessionState>((set) => ({
     stopRealtime();
     clearSnapshot();
     clearOutbox();
+    useNotifications.getState().reset();
     set({ user: null, status: 'unauthenticated', error: null });
   },
 

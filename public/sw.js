@@ -64,3 +64,43 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+
+// ── Web push (NOTIFICATIONS.md, Phase 4) ────────────────────────────────────
+// The server (server/lib/webpush.ts) sends a JSON payload { title, body, tabId, notifId };
+// show it as a system notification. Clicking it focuses an existing app tab (navigating it to
+// the related board) or opens a new one. Payload parsing is defensive — a malformed push must
+// never throw and kill the handler.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+  const title = data.title || 'Tagwerke';
+  const options = {
+    body: data.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: data.notifId || undefined, // collapse duplicate deliveries of the same notification
+    data: { tabId: data.tabId || null },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const tabId = event.notification.data && event.notification.data.tabId;
+  const target = tabId ? `/b/${tabId}` : '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          if ('navigate' in client) client.navigate(target).catch(() => {});
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});

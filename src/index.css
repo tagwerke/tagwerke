@@ -2390,3 +2390,39 @@ input, select, textarea { font: inherit; color: inherit; }
 .agenda-head { width: 100%; border: 0; background: none; cursor: pointer; }
 .agenda-head:hover .agenda-open { opacity: 1; }
 .agenda-open { margin-left: auto; color: var(--ink-mute); opacity: 0; transition: opacity 0.12s; }
+
+/* ── Notifications (bell + feed panel) ────────────────────────────────────── */
+.notif-bell { position: relative; }
+.notif-badge {
+  position: absolute; top: -5px; right: -4px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  background: var(--pop); color: #fff;
+  border-radius: 999px;
+}
+.notif-head-actions { display: flex; align-items: center; gap: 10px; }
+
+.notif-list { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; margin: 4px -6px 0; }
+.notif-empty { color: var(--ink-mute); text-align: center; padding: 28px 0; margin: 0; }
+
+.notif-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  width: 100%; text-align: left;
+  padding: 10px 8px; border: 0; border-radius: var(--r-md);
+  background: none; color: inherit;
+}
+.notif-row:hover { background: var(--line); }
+.notif-row.is-unread { background: color-mix(in srgb, var(--pop) 7%, transparent); }
+.notif-row.is-unread:hover { background: color-mix(in srgb, var(--pop) 12%, transparent); }
+
+.notif-icon { flex: none; margin-top: 1px; color: var(--ink-soft); }
+.notif-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.notif-title { font-weight: 600; }
+.notif-body { color: var(--ink-soft); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notif-time { color: var(--ink-mute); font-size: 12px; }
+.notif-dot { flex: none; width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--pop); }
+
+.notif-push { color: var(--ink-mute); font-size: 13px; padding: 2px 2px 8px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.notif-push-on { color: var(--ink-soft); }
+.notif-push-btn { width: 100%; justify-content: center; margin-bottom: 8px; }

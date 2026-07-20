@@ -86,6 +86,22 @@ export interface BlockFilter {
 
 export type PlannerMode = 'day' | 'week';
 
+// ── Notifications (per-user feed) ──────────────────────────────────────────
+export type NotificationType = 'task_assigned' | 'review_requested' | 'task_approved' | 'board_added';
+
+/** One row of the notification feed, as the server serializes it (ISO timestamps). */
+export interface Notification {
+  id: ID;
+  type: NotificationType;
+  title: string;
+  body?: string | null;
+  /** Board to open when clicked; null for account-level events. */
+  tabId?: ID | null;
+  actorId?: ID | null;
+  readAt?: string | null; // ISO; null = unread
+  createdAt: string; // ISO
+}
+
 // ── Calendar (events model) ────────────────────────────────────────────────
 export type RsvpStatus = 'accepted' | 'declined' | 'tentative' | 'needs-action';
 

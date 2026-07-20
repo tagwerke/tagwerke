@@ -384,3 +384,50 @@ export const auditLog = pgTable(
     index('audit_log_action_idx').on(t.action, t.createdAt),
   ],
 );
+
+// Per-user notification feed (NOTIFICATIONS.md). One row per delivered notification — the
+// in-app bell/list AND the read state. Distinct from `audit_log` (which is the org-wide
+// forensic trail): this is a small, recipient-scoped, user-facing feed. Every row is emitted
+// through the single `notify()` spine (server/lib/notify.ts), which also fans it live over the
+// user's realtime channel and, when the user is offline, pushes it to their devices.
+// `actorId`/`tabId` are NOT FKs (like audit_log's actorId): a notification is a point-in-time
+// record that must survive the actor or board being erased/pruned.
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // Event kind: 'task_assigned' | 'review_requested' | 'task_approved' | 'board_added'.
+    // Kept as free text (not an enum) so new kinds don't need a migration.
+    type: text('type').notNull(),
+    title: text('title').notNull(), // the one-line headline shown in the feed
+    body: text('body'), // optional second line
+    // The board to open when the notification is clicked (null for account-level events later).
+    // Not an FK: a pruned/left board should leave the historical notification intact.
+    tabId: text('tab_id'),
+    actorId: text('actor_id'), // who caused it (for an avatar/initials); no FK — see note above
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('notifications_user_idx').on(t.userId, t.createdAt)],
+);
+
+// Web-push endpoints (NOTIFICATIONS.md, Phase 4). One row per browser/device a user opted in
+// from. `endpoint` is the push service URL (unique); `p256dh`/`auth` are the client's keys the
+// server encrypts each payload to. A dead endpoint (410/404 on send) is deleted by the sender.
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('push_subs_user_idx').on(t.userId)],
+);

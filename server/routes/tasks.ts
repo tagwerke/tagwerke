@@ -5,7 +5,28 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
+import { notify } from '../lib/notify.ts';
 import { reconcileBoard } from '../realtime/ydoc.ts';
+
+/** Short, single-line label of a task for a notification body. */
+function taskLabel(text: string | null | undefined): string {
+  const s = (text ?? '').trim();
+  if (!s) return 'A task';
+  return s.length > 80 ? `${s.slice(0, 79)}…` : s;
+}
+
+/** Fire an "assigned to you" notification when assignment changed to a real, different user.
+ *  Shared by PUT and PATCH — the two paths that ever set assigneeId (see NOTIFICATIONS.md §2). */
+function notifyAssigneeChange(
+  nextAssignee: string | null | undefined,
+  prevAssignee: string | null | undefined,
+  actorId: string,
+  tabId: string,
+  text: string | null | undefined,
+): void {
+  if (!nextAssignee || nextAssignee === prevAssignee || nextAssignee === actorId) return;
+  notify(nextAssignee, { type: 'task_assigned', title: 'Assigned to you', body: taskLabel(text), tabId, actorId });
+}
 
 // Fields whose changes are worth an accountability trail. `position` is excluded (reorder
 // noise); `done`/`owner` are derived/legacy. See AUDIT_IMPLEMENTATION_PLAN §B2.
@@ -154,6 +175,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           payload: { created: { text: values.text, status: values.status } },
         });
       }
+      // Notify a newly-assigned user — covers "create a task already assigned to someone" (which
+      // lands here, not on PATCH) and a full-replace that changes the assignee.
+      notifyAssigneeChange(values.assigneeId, before?.assigneeId, userId, values.homeTabId, values.text);
       return reply.send({ ok: true });
     },
   );
@@ -198,6 +222,24 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           actorId: req.user!.id, action: 'task_approved', targetType: 'task', targetId: id,
           scopeId: homeTabId, method: 'PATCH', status: 200, payload: { reviewerId: before.reviewerId ?? null },
         });
+      }
+
+      // Notifications (NOTIFICATIONS.md §2). All key off before/after we already have in hand.
+      const actor = req.user!.id;
+      const text = typeof b.data.text === 'string' ? b.data.text : before.text;
+      // Assigned to you — assignment changed to a real, different user.
+      notifyAssigneeChange(b.data.assigneeId, before.assigneeId, actor, homeTabId, text);
+      // Review requested — the task just transitioned INTO in_review and has a reviewer.
+      const reviewerId = b.data.reviewerId ?? before.reviewerId;
+      if (b.data.status === 'in_review' && before.status !== 'in_review' && reviewerId && reviewerId !== actor) {
+        notify(reviewerId, { type: 'review_requested', title: 'Review requested', body: taskLabel(text), tabId: homeTabId, actorId: actor });
+      }
+      // Approved — the reviewer signed off (in_review → done). Tell whoever did the work.
+      if (approving) {
+        const recipient = before.assigneeId ?? before.createdBy;
+        if (recipient && recipient !== actor) {
+          notify(recipient, { type: 'task_approved', title: 'Task approved', body: taskLabel(text), tabId: homeTabId, actorId: actor });
+        }
       }
       return reply.send({ ok: true });
     },

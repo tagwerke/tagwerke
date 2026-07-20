@@ -15,9 +15,10 @@ import { SearchPalette } from './components/SearchPalette';
 import { AdminPage } from './components/AdminPage';
 import { SecurityPanel } from './components/SecurityPanel';
 import { MoreSheet } from './components/MoreSheet';
+import { NotificationsPanel } from './components/NotificationsPanel';
 import { usePath, boardPath, parseBoardId, isCalendarPath, CALENDAR_PATH } from './util/router';
 
-export type Panel = 'new' | 'filter' | 'search' | 'security' | 'more';
+export type Panel = 'new' | 'filter' | 'search' | 'security' | 'more' | 'notifications';
 
 export default function App() {
   const status = useSession((s) => s.status);
@@ -113,6 +114,7 @@ function Workspace() {
       {panel === 'filter' && <FilterPanel onClose={closePanel} />}
       {panel === 'search' && <SearchPalette onClose={closePanel} />}
       {panel === 'security' && <SecurityPanel onClose={closePanel} />}
+      {panel === 'notifications' && <NotificationsPanel onClose={closePanel} />}
       {panel === 'more' && <MoreSheet onClose={closePanel} onOpen={setPanel} />}
     </div>
   );

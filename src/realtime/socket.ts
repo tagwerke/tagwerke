@@ -15,8 +15,9 @@
 import { useStore } from '../store';
 import { flush, suspendPersistence, resumePersistence, setBaseline } from '../api/persist';
 import { pendingTaskIds } from '../offline/outbox';
+import { useNotifications } from '../notifications/useNotifications';
 import { dlog, sid } from '../util/dlog';
-import type { ID, Task } from '../types';
+import type { ID, Notification, Task } from '../types';
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
@@ -245,6 +246,13 @@ function handleMessage(raw: string): void {
       // sidebar reflects it without a manual refresh. Same mechanism as a reconnect resync.
       opts?.onResync();
       return;
+    case 'notification': {
+      // A live notification on our personal channel (server/lib/notify.ts). Feed it to the
+      // standalone notifications store — bell badge + list update instantly, no re-pull.
+      const m = msg as { notification?: Notification };
+      if (m.notification?.id) useNotifications.getState().receive(m.notification);
+      return;
+    }
     // The board document now syncs as a Yjs CRDT (type 'ydoc'/'ydoc-seed', handled above via
     // the ydocRooms registry). There is no 'doc' version-invalidation anymore.
     default:

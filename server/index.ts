@@ -22,6 +22,7 @@ import { historyRoutes } from './routes/history.ts';
 import { sudoRoutes } from './routes/sudo.ts';
 import { orgRoutes, ORG_ID } from './routes/org.ts';
 import { activityRoutes } from './routes/activity.ts';
+import { notificationRoutes } from './routes/notifications.ts';
 import { registerAuditHook } from './lib/audit.ts';
 import { registerWebsocket } from './ws.ts';
 import { flushAllYdocRooms } from './realtime/ydoc.ts';
@@ -95,6 +96,7 @@ await app.register(auditRoutes);
 await app.register(historyRoutes);
 await app.register(orgRoutes);
 await app.register(activityRoutes);
+await app.register(notificationRoutes);
 
 // Realtime socket (live updates). Authenticates off the session cookie registered above;
 // must come after @fastify/cookie. Same process/port — no extra container.

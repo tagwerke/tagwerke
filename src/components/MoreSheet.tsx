@@ -1,5 +1,6 @@
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
+import { useNotifications } from '../notifications/useNotifications';
 import type { Panel } from '../App';
 
 // Overflow sheet for the mobile bottom nav: secondary actions that don't earn a
@@ -7,6 +8,7 @@ import type { Panel } from '../App';
 export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (panel: Panel) => void }) {
   const needs2fa = useSession((s) => !!s.user && !s.user.totpEnabled);
   const logout = useSession((s) => s.logout);
+  const unread = useNotifications((s) => s.unread);
   const resetFilter = useStore((s) => s.resetFilter);
   const filterCount = useStore((s) => {
     const f = s.filter;
@@ -20,6 +22,11 @@ export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (p
     <div className="modal-backdrop sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-grip" />
+        <button className="sheet-row" onClick={() => onOpen('notifications')}>
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8 2a3.5 3.5 0 00-3.5 3.5c0 3-1.5 4-1.5 4h10s-1.5-1-1.5-4A3.5 3.5 0 008 2zM6.5 12a1.5 1.5 0 003 0" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span>notifications</span>
+          {unread > 0 && <span className="sheet-badge">{unread > 9 ? '9+' : unread}</span>}
+        </button>
         <button className="sheet-row" onClick={() => onOpen('filter')}>
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M2 3h12M4 8h8M6 13h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           <span>filter</span>

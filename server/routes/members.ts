@@ -11,6 +11,7 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 import { recordAudit } from '../lib/audit.ts';
+import { notify } from '../lib/notify.ts';
 import { publish, userChannel } from '../lib/bus.ts';
 
 const roleEnum = z.enum(['viewer', 'editor', 'admin']);
@@ -126,6 +127,11 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
         starred: false,
       });
       notifyBoardList(targetId, id, 'added'); // the new member's sidebar picks it up live
+      // Notify the added user (feed + push). Board name as the body; skip self-adds.
+      if (targetId !== req.user!.id) {
+        const tab = (await db.select({ name: schema.tabs.name }).from(schema.tabs).where(eq(schema.tabs.id, id)).limit(1))[0];
+        notify(targetId, { type: 'board_added', title: 'Added to a board', body: tab?.name ?? 'A board', tabId: id, actorId: req.user!.id });
+      }
       return reply.code(201).send({ ok: true, userId: targetId });
     },
   );
