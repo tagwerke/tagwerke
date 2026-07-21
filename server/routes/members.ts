@@ -13,6 +13,7 @@ import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 import { recordAudit } from '../lib/audit.ts';
 import { notify } from '../lib/notify.ts';
 import { publish, userChannel } from '../lib/bus.ts';
+import { applyBoardAccessChange } from '../realtime/connections.ts';
 
 const roleEnum = z.enum(['viewer', 'editor', 'admin']);
 
@@ -24,6 +25,13 @@ function notifyBoardList(targetUserId: string, tabId: string, action: 'added' | 
 }
 const addBody = z.object({ email: z.string().email().max(320), role: roleEnum.default('viewer') });
 const patchBody = z.object({ role: roleEnum });
+
+// Rate limits (IP-keyed, like the auth routes — see server/auth/routes.ts). The abuse surfaces here
+// are membership churn (mass invites / role-flips) and email/account enumeration via the user search
+// plus the add-member existence oracle (404 no-user vs 409 already-member). Limits are generous
+// enough that no legitimate admin hits them.
+const MEMBER_WRITE_RL = { max: 60, timeWindow: '1 minute' } as const;
+const LOOKUP_RL = { max: 30, timeWindow: '1 minute' } as const;
 
 async function adminCount(tabId: string): Promise<number> {
   const rows = await db
@@ -57,7 +65,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
   // platform-admin data). Authorized for anyone who can manage members on some board, so board
   // admins can add any teammate without already sharing a board with them. Enumeration is bounded
   // by the query requirement; org-wide privacy, if ever needed, belongs behind an org setting.
-  app.get('/api/users/lookup', async (req, reply) => {
+  app.get('/api/users/lookup', { config: { rateLimit: LOOKUP_RL } }, async (req, reply) => {
     const q = ((req.query as { q?: string }).q ?? '').trim();
     if (q.length < 2) return { users: [] }; // below the search threshold → nothing (no bulk list)
     if (!(await canManageAnyBoard(req.user!.id)))
@@ -94,7 +102,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
   // Add an existing user to the board. Admin only.
   app.post(
     '/api/tabs/:id/members',
-    { preHandler: requireBoardRole('admin', paramTabId) },
+    { preHandler: requireBoardRole('admin', paramTabId), config: { rateLimit: MEMBER_WRITE_RL } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const b = addBody.safeParse(req.body);
@@ -139,7 +147,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
   // Change a member's role. Admin only. Cannot demote the last admin.
   app.patch(
     '/api/tabs/:id/members/:userId',
-    { preHandler: requireBoardRole('admin', paramTabId) },
+    { preHandler: requireBoardRole('admin', paramTabId), config: { rateLimit: MEMBER_WRITE_RL } },
     async (req, reply) => {
       const { id, userId } = req.params as { id: string; userId: string };
       const b = patchBody.safeParse(req.body);
@@ -163,6 +171,9 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
         .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId)));
 
       notifyBoardList(userId, id, 'role'); // their permissions changed → re-pull to reflect it
+      // Re-tier any live socket this user has open on the board, so a demotion drops write access
+      // (and a promotion grants it) immediately — not only after they reconnect.
+      await applyBoardAccessChange(userId, id, b.data.role);
       req.auditHandled = true;
       recordAudit({
         actorId: req.user!.id,
@@ -178,7 +189,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
 
   // Remove a member. Removing someone else requires admin; removing YOURSELF (leave the
   // board) is allowed for any member. Either way, the last admin cannot be removed.
-  app.delete('/api/tabs/:id/members/:userId', async (req, reply) => {
+  app.delete('/api/tabs/:id/members/:userId', { config: { rateLimit: MEMBER_WRITE_RL } }, async (req, reply) => {
     const { id, userId } = req.params as { id: string; userId: string };
     const me = req.user!.id;
 
@@ -205,6 +216,10 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
       .where(and(eq(schema.boardMembers.tabId, id), eq(schema.boardMembers.userId, userId)));
 
     notifyBoardList(userId, id, 'removed'); // the removed user's board disappears live
+    // Evict any live socket this user has on the board: leave its doc room and unsubscribe it from
+    // the board's entity channel, so a non-cooperative client can no longer read or write it over
+    // an already-open connection (the notify above only asks a cooperative client to drop it).
+    await applyBoardAccessChange(userId, id, null);
 
     // Explicit audit (was a blind spot): access revocation must be visible. Distinguishes
     // self-leave from an admin removing someone.

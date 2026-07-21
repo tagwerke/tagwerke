@@ -45,7 +45,6 @@ async function main(): Promise<void> {
     await db
       .select({
         name: schema.tabs.name,
-        docSchema: schema.tabs.docSchema,
         docVersion: schema.tabs.docVersion,
         ydocState: schema.tabs.ydocState,
         docJSON: schema.tabs.docJSON,
@@ -68,7 +67,6 @@ async function main(): Promise<void> {
   const trashed = tasks.filter((t) => t.deletedAt);
 
   console.log(`\nBoard: ${row.name}  (${id})`);
-  console.log(`  doc_schema   : ${row.docSchema}`);
   console.log(`  doc_version  : ${row.docVersion}`);
   console.log(`  ydoc_state   : ${row.ydocState == null ? 'NULL (no CRDT state persisted)' : `${row.ydocState.length} b64 chars`}`);
   if (row.docJSON == null) {

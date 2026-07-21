@@ -176,6 +176,13 @@
       "when": 1784479597932,
       "tag": "0024_parched_riptide",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784652994201,
+      "tag": "0025_drop_doc_schema",
+      "breakpoints": true
     }
   ]
 }

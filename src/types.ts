@@ -18,6 +18,9 @@ export interface BoardSettings {
   restrictDelete?: 'admin'; // only board admins may delete content here
 }
 
+/** The caller's role on a board (from board_members). Ranked viewer < editor < admin. */
+export type BoardRole = 'viewer' | 'editor' | 'admin';
+
 export interface Tab {
   id: ID;
   projectId: ID;
@@ -25,6 +28,9 @@ export interface Tab {
   order: number;
   starred: boolean;
   type: TabType;
+  // The caller's OWN role on this board. Drives read-only vs editable UI (viewer = read-only doc).
+  // Absent only transiently before the first /api/state load; treat missing as read-only-safe.
+  role?: BoardRole;
   docJSON?: unknown;
   // Optimistic-concurrency counter for the shared document (live updates). Set from
   // /api/state and advanced by each doc save's response; sent back as baseVersion so a

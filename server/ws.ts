@@ -15,7 +15,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import websocketPlugin from '@fastify/websocket';
 import { resolveUser } from './auth/session.ts';
-import { boardRole } from './auth/boards.ts';
+import { boardRole, roleAtLeast } from './auth/boards.ts';
 import { isContentRoute, targetTypeForPath } from './lib/audit.ts';
 import {
   boardChannel,
@@ -27,10 +27,18 @@ import {
   type Subscriber,
 } from './lib/bus.ts';
 import { ydocJoin, ydocMessage, ydocLeave, ydocDropConnection } from './realtime/ydoc.ts';
+import { registerConn, dropConn, type ConnCtx } from './realtime/connections.ts';
 import { dlog, sid } from './lib/dlog.ts';
 
 const PROTOCOL_VERSION = 1;
 const HEARTBEAT_MS = 30_000;
+// Per-connection ydoc-join throttle (fixed window). A member can only join boards they belong to
+// (non-members are rejected before any room load) and rooms are cached, so the abuse surface is
+// small — this is defense-in-depth against a join-spam loop. Generous vs. legitimate traffic: the
+// client's rejoin-on-forbidden backoff is ≤12 attempts seconds apart, and a reconnect re-joins only
+// the handful of open board rooms, so real use never approaches this.
+const JOIN_WINDOW_MS = 10_000;
+const MAX_JOINS_PER_WINDOW = 20;
 
 function send(ws: WebSocket, message: unknown): void {
   try {
@@ -88,12 +96,21 @@ export async function registerWebsocket(app: FastifyInstance): Promise<void> {
     dlog('ws', `connection OPEN user=${sid(user.id)} → sending ready`);
 
     const sub: Subscriber = { ws: socket, userId: user.id, channels: new Set() };
-    // Board doc rooms this connection has authenticated into (ydoc-join). A 'ydoc' frame is
-    // only processed for a board already in this set, so authz is checked once at join.
-    const joinedDocRooms = new Set<string>();
+    // Board doc rooms this connection authenticated into (ydoc-join), mapped to the CURRENT role.
+    // A 'ydoc' frame is only processed for a board in this map (authz checked at join), and the role
+    // gates writes per frame. applyBoardAccessChange keeps the role fresh mid-session, so a demoted
+    // or removed member loses write/read here without waiting to reconnect. Registered so the member
+    // routes can reach this live connection to revoke/re-tier access.
+    const ctx: ConnCtx = { socket, sub, userId: user.id, joinedDocRooms: new Map() };
+    const joinedDocRooms = ctx.joinedDocRooms;
+    registerConn(ctx);
     // Personal feed: board-list / membership changes for boards not currently open.
     subscribe(sub, userChannel(user.id));
     send(socket, { v: PROTOCOL_VERSION, type: 'ready', userId: user.id });
+
+    // ydoc-join throttle state (fixed window, per connection).
+    let joinWindowStart = Date.now();
+    let joinCount = 0;
 
     // Liveness: proxies drop idle sockets, and a half-open connection would leak a
     // subscriber. Ping on an interval; a socket that misses a pong is terminated (its
@@ -159,26 +176,41 @@ export async function registerWebsocket(app: FastifyInstance): Promise<void> {
         case 'ydoc-join': {
           const boardId = msg.boardId;
           if (!boardId) return;
+          // Throttle join spam before doing the membership lookup / room load.
+          const now = Date.now();
+          if (now - joinWindowStart > JOIN_WINDOW_MS) {
+            joinWindowStart = now;
+            joinCount = 0;
+          }
+          if (++joinCount > MAX_JOINS_PER_WINDOW) {
+            dlog('ws', `ydoc-join board=${sid(boardId)} user=${sid(user.id)} RATE-LIMITED (${joinCount} in ${JOIN_WINDOW_MS}ms window)`);
+            send(socket, { v: PROTOCOL_VERSION, type: 'error', code: 'rate_limited', boardId });
+            return;
+          }
           const role = await boardRole(user.id, boardId);
           if (!role) {
             dlog('ws', `ydoc-join board=${sid(boardId)} user=${sid(user.id)} → FORBIDDEN (no membership row yet) → sending error`);
             send(socket, { v: PROTOCOL_VERSION, type: 'error', code: 'forbidden', boardId });
             return;
           }
-          joinedDocRooms.add(boardId);
-          dlog('ws', `ydoc-join board=${sid(boardId)} user=${sid(user.id)} role=${role} → ACCEPTED → joinedDocRooms={${[...joinedDocRooms].map(sid).join(',')}}`);
-          await ydocJoin(boardId, socket);
+          joinedDocRooms.set(boardId, role);
+          dlog('ws', `ydoc-join board=${sid(boardId)} user=${sid(user.id)} role=${role} → ACCEPTED → joinedDocRooms={${[...joinedDocRooms.keys()].map(sid).join(',')}}`);
+          await ydocJoin(boardId, socket, roleAtLeast(role, 'editor'));
           return;
         }
         case 'ydoc': {
           const boardId = msg.boardId;
           if (!boardId || typeof msg.data !== 'string') return;
-          if (!joinedDocRooms.has(boardId)) {
+          // Role is looked up per frame (kept current by applyBoardAccessChange): absent → never
+          // joined (drop); present → gate writes on editor+ inside ydocMessage. This is what makes
+          // a viewer read-only and a mid-session demotion/removal take effect without a reconnect.
+          const role = joinedDocRooms.get(boardId);
+          if (!role) {
             dlog('ws', `ydoc frame board=${sid(boardId)} DROPPED (not joined — never passed authz)`);
             return; // must ydoc-join (authz) first
           }
-          dlog('ws', `ydoc frame board=${sid(boardId)} bytes=${msg.data.length} → applying`);
-          await ydocMessage(boardId, socket, msg.data);
+          dlog('ws', `ydoc frame board=${sid(boardId)} bytes=${msg.data.length} role=${role} → applying`);
+          await ydocMessage(boardId, socket, msg.data, roleAtLeast(role, 'editor'));
           return;
         }
         case 'ydoc-leave': {
@@ -205,6 +237,7 @@ export async function registerWebsocket(app: FastifyInstance): Promise<void> {
     const cleanup = (): void => {
       clearInterval(heartbeat);
       dropSubscriber(sub);
+      dropConn(ctx); // remove from the user→connections registry
       void ydocDropConnection(socket); // leave every Yjs room, drop this peer's cursors
     };
     socket.on('close', cleanup);

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { and, desc, eq, isNotNull, isNull, notInArray } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
-import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, paramTabId } from '../auth/boards.ts';
+import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, boardRequiresReview, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
 import { notify } from '../lib/notify.ts';
 import { reconcileBoard } from '../realtime/ydoc.ts';
@@ -125,6 +125,20 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const status = b.data.status ?? (b.data.done ? 'done' : 'todo');
       // Prior row (if any): distinguishes create vs replace for the audit trail.
       const before = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0];
+      // Cross-board hijack guard: this is an upsert on a client-supplied id, and the conflict path
+      // rewrites homeTabId. The preHandler only proved editor on the TARGET board — so without this,
+      // anyone with editor on any board could overwrite/steal any task by id (task ids are not
+      // secret) by re-homing it to their own board. A legitimate cross-board move requires editor on
+      // the board the task is LEAVING too; deny otherwise. 404 (not 403) keeps a board you can't see
+      // non-probeable, matching auth/boards.ts.
+      if (before && before.homeTabId !== b.data.homeTabId && !(await hasBoardRole(userId, before.homeTabId, 'editor')))
+        return reply.code(404).send({ error: 'not found' });
+      // requireReview guardrail (§F): on a review-required board, `done` is reachable only via the
+      // in_review → done approval — never a direct jump (including creating a task straight to done).
+      // An already-done task re-written by a full-sync/move keeps passing (before.status === 'done').
+      if (status === 'done' && before?.status !== 'in_review' && before?.status !== 'done'
+          && (await boardRequiresReview(b.data.homeTabId)))
+        return reply.code(403).send({ error: 'this board requires review before a task can be marked done' });
       const hasTitle = b.data.text.trim().length > 0;
       const values = {
         id,
@@ -200,6 +214,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
       if (b.data.parentTaskId !== undefined && !(await parentAllowed(homeTabId, id, b.data.parentTaskId)))
         return reply.code(400).send({ error: 'parent task is not on the home board' });
+      // requireReview guardrail (§F): on a review-required board, `done` is reachable only via the
+      // in_review → done approval (the `approving` capture below). Reject a direct jump; an already-
+      // done task (idempotent re-write) still passes.
+      if (b.data.status === 'done' && before.status !== 'in_review' && before.status !== 'done'
+          && (await boardRequiresReview(homeTabId)))
+        return reply.code(403).send({ error: 'this board requires review before a task can be marked done' });
 
       // Keep the derived `done` mirror in sync whenever status is patched.
       const set = { ...b.data } as Record<string, unknown>;
@@ -285,6 +305,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const b = orphanBody.safeParse(req.body);
       if (!b.success) return reply.code(400).send({ error: 'invalid request' });
       const userId = req.user!.id;
+      // Opt-in preventive control (F4): mirror the single-delete guard so this bulk path can't be
+      // used to mass-delete on a board that restricts deletion to admins.
+      if ((await restrictsDeleteToAdmin(b.data.homeTabId)) && !(await hasBoardRole(userId, b.data.homeTabId, 'admin')))
+        return reply.code(403).send({ error: 'only admins may delete on this board' });
       // Soft delete orphans (tasks no longer in the doc) — recoverable, not destroyed (§G).
       const conds = [eq(schema.tasks.homeTabId, b.data.homeTabId), isNull(schema.tasks.deletedAt)];
       if (b.data.keepIds.length) conds.push(notInArray(schema.tasks.id, b.data.keepIds));

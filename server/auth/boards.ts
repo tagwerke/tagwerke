@@ -45,6 +45,12 @@ export async function hasBoardRole(userId: string, tabId: string, min: BoardRole
   return role != null && RANK[role] >= RANK[min];
 }
 
+/** Synchronous rank comparison for an ALREADY-resolved role (no DB round-trip). Used by the
+ *  realtime layer to gate doc writes per frame against the role cached at join. */
+export function roleAtLeast(role: BoardRole, min: BoardRole): boolean {
+  return RANK[role] >= RANK[min];
+}
+
 /**
  * The one opt-in preventive control (AUDIT_IMPLEMENTATION_PLAN §F4): when a board sets
  * `settings.restrictDelete === 'admin'`, only board admins may delete its content. Default
@@ -58,6 +64,22 @@ export async function restrictsDeleteToAdmin(tabId: string): Promise<boolean> {
     .limit(1);
   const s = rows[0]?.settings as { restrictDelete?: string } | null | undefined;
   return s?.restrictDelete === 'admin';
+}
+
+/**
+ * Opt-in preventive control (AUDIT_IMPLEMENTATION_PLAN §F): when a board sets
+ * `settings.requireReview`, a task may reach `done` only through the in_review → done approval —
+ * never a direct jump. Default (unset) = today's behavior (any editor may mark done). Best-effort:
+ * a missing board reads false.
+ */
+export async function boardRequiresReview(tabId: string): Promise<boolean> {
+  const rows = await db
+    .select({ settings: schema.tabs.settings })
+    .from(schema.tabs)
+    .where(eq(schema.tabs.id, tabId))
+    .limit(1);
+  const s = rows[0]?.settings as { requireReview?: boolean } | null | undefined;
+  return s?.requireReview === true;
 }
 
 type TabIdResolver = (req: FastifyRequest) => string | undefined | Promise<string | undefined>;

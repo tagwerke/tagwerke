@@ -5,7 +5,10 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
+import { publish, userChannel } from '../lib/bus.ts';
 import { dlog, sid } from '../lib/dlog.ts';
+import { applyBoardAccessChange } from '../realtime/connections.ts';
+import { destroyRoom } from '../realtime/ydoc.ts';
 
 // Opt-in per-board guardrails (AUDIT_IMPLEMENTATION_PLAN §F4). Admin-only to change.
 const settingsBody = z.object({
@@ -50,6 +53,10 @@ const patchBody = z.object({
 
 const reorderBody = z.object({ order: z.array(z.string().min(1)) });
 
+// Rate limit (IP-keyed, like the auth routes — see server/auth/routes.ts) on board creation: caps
+// mass-create abuse (storage exhaustion) from one client. Generous enough that no human hits it.
+const CREATE_BOARD_RL = { max: 30, timeWindow: '1 minute' } as const;
+
 export async function tabRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
 
@@ -72,7 +79,7 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post('/api/tabs', async (req, reply) => {
+  app.post('/api/tabs', { config: { rateLimit: CREATE_BOARD_RL } }, async (req, reply) => {
     const b = createBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid tab' });
     const userId = req.user!.id;
@@ -199,10 +206,28 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const before = (await db.select({ name: schema.tabs.name }).from(schema.tabs).where(eq(schema.tabs.id, id)).limit(1))[0];
+      // Capture the roster BEFORE the delete cascades board_members away — we need it to tell
+      // every member's other open sessions to drop the board live (see the publish loop below).
+      const members = await db
+        .select({ userId: schema.boardMembers.userId })
+        .from(schema.boardMembers)
+        .where(eq(schema.boardMembers.tabId, id));
       // Deleting the tab cascades its tasks, memberships, events, and the time_blocks
       // that reference it (all FK on delete cascade). (Delete requires admin via preHandler,
       // so the per-board restrictDelete guardrail is already satisfied.)
       await db.delete(schema.tabs).where(eq(schema.tabs.id, id));
+      // A deleted board is NOT broadcast by the ws onResponse hook (it skips tab entities), so
+      // without this every other open session keeps showing the board until a manual refresh.
+      // Notify each member's personal feed — their client repulls state and drops it live, the
+      // same mechanism the members route uses for share/unshare (server/routes/members.ts).
+      for (const { userId } of members) {
+        publish(userChannel(userId), { v: 1, type: 'board-list', action: 'removed', tabId: id });
+        // Evict any live socket from the now-deleted board (doc room + entity channel), matching the
+        // members route's revocation — the board is gone, so no session should keep streaming it.
+        await applyBoardAccessChange(userId, id, null);
+      }
+      // Free the in-memory Yjs room: its tabs row is gone, so persistence would only retry-fail.
+      await destroyRoom(id);
       req.auditHandled = true;
       recordAudit({
         actorId: req.user!.id, action: 'DELETE /api/tabs/:id', targetType: 'tab', targetId: id,

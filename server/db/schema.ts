@@ -120,11 +120,6 @@ export const tabs = pgTable(
     // Optimistic-concurrency counter for the pre-CRDT document model. Retained (harmless) so
     // existing reads don't break; no longer written now that the doc merges via Yjs.
     docVersion: integer('doc_version').notNull().default(0),
-    // Document model version (see internal/planning/TASKS_AS_ENTITIES.md D8). 1 = legacy: task
-    // text lives inside taskItem nodes in the doc. 2 = tasks-as-entities: taskItem is an id-only
-    // reference and text lives on the row. Gates the one-time doc migration (P3) so a board is
-    // transformed exactly once. Existing + new rows start at 1; the migration bumps to 2.
-    docSchema: integer('doc_schema').notNull().default(1),
     // Board facets / attribution.
     location: text('location'),
     createdBy: text('created_by'), // attribution; access derives from board_members

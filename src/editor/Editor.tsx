@@ -34,6 +34,11 @@ function docHasContent(json: unknown): boolean {
 export function TabEditor({ tabId, autoFocus }: Props) {
   const setTabDoc = useStore((s) => s.setTabDoc);
   const user = useSession((s) => s.user);
+  // The caller's role on this board. A viewer gets a read-only document; the server enforces the
+  // same rule over the socket (viewer doc-writes are dropped), so this is the matching UX, not the
+  // security boundary. Unknown role (brief pre-load flicker) stays editable — the server still guards.
+  const role = useStore((s) => s.tabs[tabId]?.role);
+  const canEdit = role !== 'viewer';
 
   // One shared Y.Doc + socket-multiplexed provider per board, from a module cache that survives
   // React StrictMode's mount→unmount→remount and transient editor re-creation. acquire (render)
@@ -86,6 +91,7 @@ export function TabEditor({ tabId, autoFocus }: Props) {
         }),
       ],
       autofocus: autoFocus ? 'end' : false,
+      editable: canEdit, // initial editability; kept in sync live by the effect below
       onUpdate({ editor }) {
         // Yjs is authoritative and persisted server-side; we only mirror into the local store so
         // this tab's board preview stays current. There is NO server doc-save (see persist.ts).
@@ -102,6 +108,12 @@ export function TabEditor({ tabId, autoFocus }: Props) {
     registerEditor(tabId, editor);
     return () => unregisterEditor(tabId, editor);
   }, [editor, tabId, recoverySource]);
+
+  // Keep editability in sync with the caller's role without recreating the editor: a live demotion
+  // (board-list 'role' → /api/state re-pull → role changes here) flips the doc read-only in place.
+  useEffect(() => {
+    editor?.setEditable(canEdit);
+  }, [editor, canEdit]);
 
   // Legacy migration: the server grants a one-time seed of pre-CRDT content. Writing it into the
   // editor flows the old content into the (empty) Y.Doc, which then syncs + persists.

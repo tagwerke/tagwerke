@@ -432,8 +432,11 @@ export async function reconcileBoard(tabId: string): Promise<void> {
 // ── Public API (called from ws.ts) ────────────────────────────────────────────────────────
 
 /** A client joined a board's document room. Registers the connection, starts the sync
- *  handshake, sends current awareness, and grants a one-time seed for legacy docs. */
-export async function ydocJoin(tabId: string, ws: WebSocket): Promise<void> {
+ *  handshake, sends current awareness, and grants a one-time seed for legacy docs. `canWrite`
+ *  (editor+ on the board) gates the seed/recovery grants: both re-seed the doc from client content,
+ *  which is a write, so a viewer must never receive them — otherwise the client would apply a seed
+ *  locally whose push the write-gate then drops, leaving a divergent doc. */
+export async function ydocJoin(tabId: string, ws: WebSocket, canWrite: boolean): Promise<void> {
   const room = await getRoom(tabId);
   if (!room.conns.has(ws)) room.conns.set(ws, new Set());
   dlog('ydoc', `ydocJoin board=${sid(tabId)} conns=${room.conns.size} persistedState=${room.persistedState} hasContent=${room.hasContent} legacyDocJSON=${room.legacyDocJSON != null} → sending syncStep1`);
@@ -457,8 +460,8 @@ export async function ydocJoin(tabId: string, ws: WebSocket): Promise<void> {
   }
 
   // Legacy migration: a document with pre-CRDT content but no Yjs state yet must be seeded
-  // once, on the client (it has the schema). Grant to exactly one connection.
-  if (!room.persistedState && !room.hasContent && room.legacyDocJSON != null && room.seedClaimedBy == null) {
+  // once, on the client (it has the schema). Grant to exactly one EDITOR connection.
+  if (canWrite && !room.persistedState && !room.hasContent && room.legacyDocJSON != null && room.seedClaimedBy == null) {
     room.seedClaimedBy = ws;
     dlog('ydoc', `ydocJoin board=${sid(tabId)} → granting LEGACY SEED`);
     try {
@@ -466,7 +469,7 @@ export async function ydocJoin(tabId: string, ws: WebSocket): Promise<void> {
     } catch {
       room.seedClaimedBy = null;
     }
-  } else if (!room.persistedState && !room.hasContent && room.legacyDocJSON == null && room.seedClaimedBy == null) {
+  } else if (canWrite && !room.persistedState && !room.hasContent && room.legacyDocJSON == null && room.seedClaimedBy == null) {
     // Recovery grant (companion to the durability fix in writeState). A board that has NEVER
     // persisted a Yjs state AND has no legacy docJSON is the exact footprint of the lost-first-
     // session bug: the creator's text/task-refs were typed but the racing UPDATE dropped them, so
@@ -485,8 +488,15 @@ export async function ydocJoin(tabId: string, ws: WebSocket): Promise<void> {
   }
 }
 
-/** Handle an inbound Yjs frame (base64 of a y-protocols sync|awareness message). */
-export async function ydocMessage(tabId: string, ws: WebSocket, dataB64: string): Promise<void> {
+/**
+ * Handle an inbound Yjs frame (base64 of a y-protocols sync|awareness message). `canWrite` is the
+ * connection's authorization to MUTATE the doc (editor+ on the board); a viewer passes false. It
+ * gates only the write sub-messages — a viewer can still run the read handshake (syncStep1 → the
+ * server replies syncStep2) and advertise its cursor (awareness), so read-only editing works, but
+ * its edits (syncStep2 carrying content, or an incremental update) are dropped. This is the server-
+ * side enforcement of the viewer role for the document; the HTTP layer already gates task rows.
+ */
+export async function ydocMessage(tabId: string, ws: WebSocket, dataB64: string, canWrite: boolean): Promise<void> {
   const room = await getRoom(tabId);
   if (!room.conns.has(ws)) return; // must join first
   let bytes: Uint8Array;
@@ -499,12 +509,23 @@ export async function ydocMessage(tabId: string, ws: WebSocket, dataB64: string)
   const messageType = decoding.readVarUint(decoder);
   switch (messageType) {
     case messageSync: {
+      // Dispatch the sync sub-message ourselves (rather than readSyncMessage) so the write path can
+      // be gated on `canWrite` while the read path stays open to viewers. Origin = ws so the relay
+      // fired by doc.on('update') excludes the sender.
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, messageSync);
-      // Applies syncStep2/update onto room.doc (firing doc.on('update') → relay+persist) and
-      // writes any reply (syncStep2 for a step1) into `encoder`. Origin = ws so the relay
-      // excludes the sender.
-      syncProtocol.readSyncMessage(decoder, encoder, room.doc, ws);
+      const syncType = decoding.readVarUint(decoder);
+      if (syncType === syncProtocol.messageYjsSyncStep1) {
+        // Read request: reply with what the client is missing. Never mutates the server doc.
+        syncProtocol.readSyncStep1(decoder, encoder, room.doc);
+      } else if (syncType === syncProtocol.messageYjsSyncStep2 || syncType === syncProtocol.messageYjsUpdate) {
+        if (!canWrite) {
+          dlog('ydoc', `ydoc WRITE frame board=${sid(tabId)} DROPPED (role below editor)`);
+          return; // viewer (or demoted member): silently drop the mutation
+        }
+        if (syncType === syncProtocol.messageYjsSyncStep2) syncProtocol.readSyncStep2(decoder, room.doc, ws);
+        else syncProtocol.readUpdate(decoder, room.doc, ws);
+      }
       if (encoding.length(encoder) > 1) frame(ws, tabId, encoder);
       return;
     }
@@ -551,6 +572,26 @@ export async function ydocLeave(tabId: string, ws: WebSocket): Promise<void> {
     rooms.delete(tabId);
     room.doc.destroy();
   }
+}
+
+/** Tear a board's room out of memory. Called when the board itself is deleted (tabs.ts), so we
+ *  don't keep a resident doc or retry-persist against a tabs row that no longer exists. Idempotent;
+ *  connected peers are evicted separately (applyBoardAccessChange) before this runs. */
+export async function destroyRoom(tabId: string): Promise<void> {
+  const p = rooms.get(tabId);
+  if (!p) return;
+  rooms.delete(tabId);
+  let room: Room;
+  try {
+    room = await p;
+  } catch {
+    return; // never finished loading — nothing resident to free
+  }
+  if (room.persistTimer) {
+    clearTimeout(room.persistTimer);
+    room.persistTimer = null;
+  }
+  room.doc.destroy();
 }
 
 /** Remove a connection from every room it joined (called on socket close). */

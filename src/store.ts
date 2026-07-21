@@ -127,6 +127,17 @@ export const useStore = create<RootState & Actions>()((set, get) => {
   const patchTask = (id: ID, patch: Partial<Task>) =>
     set((s) => (s.tasks[id] ? { tasks: { ...s.tasks, [id]: { ...s.tasks[id], ...patch } } } : s));
 
+  // On a board with requireReview set, `done` is reachable only via the in_review → done approval —
+  // the server rejects a direct jump (auth/boards.ts). Mirror that here so "mark done" instead
+  // submits the task for review (→ in_review), avoiding an optimistic done that the server bounces.
+  // Approving an already-in_review task (the reviewer's done) passes through unchanged.
+  const reviewGate = (id: ID, target: TaskStatus): TaskStatus => {
+    if (target !== 'done') return target;
+    const t = get().tasks[id];
+    if (!t || (t.status ?? 'todo') === 'in_review') return target;
+    return get().tabs[t.homeTabId]?.settings?.requireReview ? 'in_review' : target;
+  };
+
   return {
       ...makeInitial(),
 
@@ -299,7 +310,8 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         patchTask(id, { parentTaskId });
       },
       setTaskStatus(id, status) {
-        patchTask(id, { status, done: status === 'done' });
+        const next = reviewGate(id, status);
+        patchTask(id, { status: next, done: next === 'done' });
       },
       setTaskAssignee(id, assigneeId) {
         patchTask(id, { assigneeId });
@@ -307,7 +319,8 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       toggleTaskDone(id) {
         const t = get().tasks[id];
         if (!t) return;
-        const next: TaskStatus = (t.status ?? 'todo') === 'done' ? 'todo' : 'done';
+        const target: TaskStatus = (t.status ?? 'todo') === 'done' ? 'todo' : 'done';
+        const next = reviewGate(id, target);
         patchTask(id, { status: next, done: next === 'done' });
       },
       deleteTask(id) {

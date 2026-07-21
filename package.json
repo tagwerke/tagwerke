@@ -23,7 +23,6 @@
     "seed-users": "tsx server/scripts/seed-users.ts",
     "reset-pw": "tsx server/scripts/reset-password.ts",
     "prune-audit": "tsx server/scripts/prune-audit.ts",
-    "migrate-docs": "tsx server/scripts/migrate-doc-schema.ts",
     "erase-user": "tsx server/scripts/erase-user.ts",
     "export-user": "tsx server/scripts/export-user.ts"
   },
