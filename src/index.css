@@ -2136,8 +2136,36 @@ input, select, textarea { font: inherit; color: inherit; }
 .sidebar-sec-head { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0 4px 8px 9px; }
 .sidebar-sec-label { font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; font-weight: 700; color: var(--ink-mute); }
 .sidebar-spacer { flex: 1; }
-.sidebar-account { display: flex; align-items: center; gap: 9px; padding: 8px; border-top: 1px solid var(--line); }
+.sidebar-account-wrap { position: relative; }
+.sidebar-account {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 8px; border: 0; border-top: 1px solid var(--line); border-radius: 0;
+  background: none; text-align: left; cursor: pointer;
+}
+.sidebar-account:hover { background: var(--line); }
 .sidebar-account-email { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
+
+/* Profile drawer — trigger is the account row at the very bottom of the sidebar, so unlike
+   .space-form it opens UPWARD (`bottom`, not `top`). Same anchor/dismiss mechanics otherwise. */
+.profile-drawer {
+  position: absolute; bottom: calc(100% + 4px); left: 9px; right: 6px; z-index: 40;
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop); padding: 6px; display: flex; flex-direction: column; gap: 2px;
+}
+.profile-drawer-head {
+  padding: 4px 8px 8px; margin-bottom: 2px; border-bottom: 1px solid var(--line);
+}
+.profile-drawer-email {
+  font-size: 12px; font-weight: 600; color: var(--ink-mute);
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.profile-drawer-row {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 8px; border: 0; border-radius: var(--r-sm); background: none;
+  font-size: 13px; font-weight: 500; color: var(--ink-soft); text-align: left; cursor: pointer;
+}
+.profile-drawer-row:hover { background: var(--line); color: var(--ink); }
+.profile-drawer-row.danger:hover { color: var(--pop); background: rgba(255,106,61,0.06); }
 
 /* Spaces list */
 .space-list { display: flex; flex-direction: column; gap: 1px; }
@@ -2244,10 +2272,25 @@ input, select, textarea { font: inherit; color: inherit; }
 .panel-toggle.on { background: var(--ink); color: var(--bg); }
 
 .board-toolbar { display: flex; align-items: center; gap: 12px; padding: 4px clamp(16px, 3vw, 32px) 12px; border-bottom: 1px solid var(--line); }
-.help-btn { margin-left: auto; position: relative; width: 26px; height: 26px; border-radius: 999px; border: 1px solid var(--line); font-weight: 700; font-size: 13px; }
+.help-btn { position: relative; width: 26px; height: 26px; border-radius: 999px; border: 1px solid var(--line); font-weight: 700; font-size: 13px; }
 .help-btn:hover { border-color: var(--line-strong); color: var(--ink); }
 .help-btn.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .help-btn-dot { position: absolute; top: 1px; right: 1px; width: 7px; height: 7px; border-radius: 50%; background: var(--pop); border: 1.5px solid var(--bg-paper); }
+/* Top-bar "?" (grid/calendar only, no board open) — same pill shape as its search/bell siblings,
+   with the same relative-positioned dot as the board-toolbar help button above. */
+.topbar-help { position: relative; font-weight: 700; }
+
+/* Help pane opened from the top bar — the board-toolbar one is embedded inline in board-content
+   (own scroll area), so here it needs a modal shell to sit in. */
+.info-modal {
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  width: min(760px, calc(100vw - 32px));
+  height: min(80vh, 760px);
+  overflow: hidden;
+}
 
 /* Help / info pane — a generic auxiliary-content slot behind the board toolbar's "?" button. */
 .info-pane { padding: 24px clamp(16px, 3vw, 32px) 40px; max-width: 760px; height: 100%; overflow-y: auto; }

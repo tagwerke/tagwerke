@@ -16,9 +16,10 @@ import { AdminPage } from './components/AdminPage';
 import { SecurityPanel } from './components/SecurityPanel';
 import { MoreSheet } from './components/MoreSheet';
 import { NotificationsPanel } from './components/NotificationsPanel';
+import { InfoPane } from './components/InfoPane';
 import { usePath, boardPath, parseBoardId, isCalendarPath, CALENDAR_PATH } from './util/router';
 
-export type Panel = 'new' | 'filter' | 'search' | 'security' | 'more' | 'notifications';
+export type Panel = 'new' | 'filter' | 'search' | 'security' | 'more' | 'notifications' | 'help';
 
 export default function App() {
   const status = useSession((s) => s.status);
@@ -65,6 +66,17 @@ function Workspace() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // The help modal is InfoPane wrapped for standalone use (it has no Escape handling of its own —
+  // its other home, swapped inline into an open board, closes via its own "x" button instead).
+  useEffect(() => {
+    if (panel !== 'help') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closePanel();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [panel]);
+
   // Navigation lives in the URL so a refresh (or a shared link) restores the open board or
   // the calendar. URL → store: whenever the path changes (initial load, back/forward),
   // reflect it. /calendar drives the calendar; /b/:id a board; / the grid.
@@ -94,7 +106,7 @@ function Workspace() {
 
   return (
     <div className="app-shell">
-      <Sidebar />
+      <Sidebar onOpen={setPanel} />
       <div className="main">
         <TopBar onOpen={setPanel} />
         {plannerOpen ? (
@@ -116,6 +128,13 @@ function Workspace() {
       {panel === 'security' && <SecurityPanel onClose={closePanel} />}
       {panel === 'notifications' && <NotificationsPanel onClose={closePanel} />}
       {panel === 'more' && <MoreSheet onClose={closePanel} onOpen={setPanel} />}
+      {panel === 'help' && (
+        <div className="modal-backdrop" onClick={closePanel}>
+          <div className="info-modal" onClick={(e) => e.stopPropagation()}>
+            <InfoPane kind="help" onClose={closePanel} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

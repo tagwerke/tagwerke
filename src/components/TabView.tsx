@@ -97,11 +97,6 @@ export function TabView({ tabId }: { tabId: string }) {
 
       {isBoard && (
         <div className="board-toolbar">
-          <div className="seg board-views">
-            {VIEWS.map((v) => (
-              <button key={v} className={view === v ? 'on' : ''} onClick={() => setBoardView(v)}>{VIEW_LABEL[v]}</button>
-            ))}
-          </div>
           <button
             className={`icon-btn help-btn ${pane === 'help' ? 'on' : ''}`}
             onClick={() => setPane((p) => (p === 'help' ? null : 'help'))}
@@ -111,6 +106,11 @@ export function TabView({ tabId }: { tabId: string }) {
             ?
             {hasNewHelp && pane !== 'help' && <span className="help-btn-dot" aria-label="new" />}
           </button>
+          <div className="seg board-views">
+            {VIEWS.map((v) => (
+              <button key={v} className={view === v ? 'on' : ''} onClick={() => setBoardView(v)}>{VIEW_LABEL[v]}</button>
+            ))}
+          </div>
         </div>
       )}
 

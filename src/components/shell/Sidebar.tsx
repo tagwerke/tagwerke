@@ -9,9 +9,11 @@ import { useSession } from '../../session/useSession';
 import { Avatar } from '../common/Avatar';
 import { AgendaRail } from './AgendaRail';
 import { SpaceForm } from './SpaceForm';
+import { ProfileDrawer } from './ProfileDrawer';
 import type { Project } from '../../types';
+import type { Panel } from '../../App';
 
-export function Sidebar() {
+export function Sidebar({ onOpen }: { onOpen: (panel: Panel) => void }) {
   const projectOrder = useStore((s) => s.projectOrder);
   const projects = useStore((s) => s.projects);
   const filter = useStore((s) => s.filter);
@@ -21,6 +23,7 @@ export function Sidebar() {
   const me = useSession((s) => s.user);
 
   const [creating, setCreating] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const activeSpace = filter.projectIds.length === 1 ? filter.projectIds[0] : null;
 
@@ -71,9 +74,18 @@ export function Sidebar() {
       <div className="sidebar-spacer" />
 
       {me && (
-        <div className="sidebar-account">
-          <Avatar name={me.email} size={26} />
-          <span className="sidebar-account-email">{me.email.split('@')[0]}</span>
+        <div className="sidebar-account-wrap">
+          <button
+            className="sidebar-account"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => setProfileOpen((v) => !v)}
+          >
+            <Avatar name={me.email} size={26} />
+            <span className="sidebar-account-email">{me.email.split('@')[0]}</span>
+          </button>
+          {profileOpen && (
+            <ProfileDrawer email={me.email} onOpen={onOpen} onClose={() => setProfileOpen(false)} />
+          )}
         </div>
       )}
     </aside>
