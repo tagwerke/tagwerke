@@ -36,6 +36,12 @@ export function resolveDateKeyword(raw: string, now = new Date()): string | unde
   return undefined;
 }
 
+/** Short weekday name for a date grid column header: "Mon", "Tue", … */
+export function formatWeekday(iso: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleString('en-US', { weekday: 'short' });
+}
+
 export function formatDateChip(iso: string, now = new Date()): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
   const today = toISO(now);

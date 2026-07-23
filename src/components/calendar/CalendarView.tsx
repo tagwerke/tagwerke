@@ -104,14 +104,20 @@ export function CalendarView() {
           <span>board</span>
         </button>
         <div className="calendar-nav">
-          <button className="icon-btn" onClick={() => setPlannerDate(shiftDate(plannerDate, -step))} aria-label="previous">‹</button>
-          <button className="btn ghost" onClick={() => setPlannerDate(today)}>today</button>
-          <button className="icon-btn" onClick={() => setPlannerDate(shiftDate(plannerDate, step))} aria-label="next">›</button>
+          <div className="calendar-datenav">
+            <button className="icon-btn" onClick={() => setPlannerDate(shiftDate(plannerDate, -step))} aria-label="previous">
+              <svg viewBox="0 0 16 16" width="14" height="14"><path d="M10 3L4 8l6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
+            </button>
+            <button className="btn ghost" onClick={() => setPlannerDate(today)}>Today</button>
+            <button className="icon-btn" onClick={() => setPlannerDate(shiftDate(plannerDate, step))} aria-label="next">
+              <svg viewBox="0 0 16 16" width="14" height="14"><path d="M6 3l6 5-6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
+            </button>
+          </div>
           <input type="date" className="calendar-date-input" value={plannerDate} onChange={(e) => e.target.value && setPlannerDate(e.target.value)} />
         </div>
-        <div className="calendar-modes">
-          <button className={`btn ghost ${plannerMode === 'day' ? 'is-active' : ''}`} onClick={() => setPlannerMode('day')}>day</button>
-          <button className={`btn ghost ${plannerMode === 'week' ? 'is-active' : ''}`} onClick={() => setPlannerMode('week')}>week</button>
+        <div className="seg calendar-modes">
+          <button className={plannerMode === 'day' ? 'on' : ''} onClick={() => setPlannerMode('day')}>Day</button>
+          <button className={plannerMode === 'week' ? 'on' : ''} onClick={() => setPlannerMode('week')}>Week</button>
         </div>
       </header>
 

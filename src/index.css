@@ -89,7 +89,10 @@ input, select, textarea { font: inherit; color: inherit; }
   color: var(--ink);
   font-style: italic;
 }
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+.topbar-utility { display: flex; align-items: center; gap: 8px; }
+.topbar-divider { width: 1px; height: 20px; background: var(--line-strong); }
+.btn-new-tab { font-weight: 600; padding: 0 16px; }
 
 /* Connectivity pill (offline / syncing) — sits between the brand and actions. */
 .net-pill {
@@ -341,12 +344,44 @@ input, select, textarea { font: inherit; color: inherit; }
   color: var(--ink);
 }
 .ProseMirror p {
+  position: relative;
   margin: 0 0 6px;
   color: var(--ink-soft);
 }
 .ProseMirror p:empty::before {
   content: '';
 }
+/* Empty-line "+" (EmptyLineAdd): always visible (muted), not hover-only — the whole point is to be
+   discoverable without already knowing it's there. Hidden entirely on a read-only doc: ProseMirror
+   mirrors non-editability onto this attribute, so this needs no separate JS-driven visibility check. */
+.pm-add-task-btn {
+  position: absolute;
+  left: -26px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px dashed var(--line-strong);
+  background: var(--bg-paper);
+  color: var(--ink-mute);
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity .12s, border-color .12s, color .12s, background .12s;
+}
+.pm-add-task-btn:hover, .pm-add-task-btn:focus-visible {
+  opacity: 1;
+  border-color: var(--ink-mute);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.ProseMirror[contenteditable="false"] .pm-add-task-btn { display: none; }
 .ProseMirror h1, .ProseMirror h2, .ProseMirror h3 {
   font-family: var(--serif);
   font-weight: 600;
@@ -627,6 +662,17 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .chip-priority.p1 { color: var(--ink-soft); }
 .chip-priority.p2 { color: var(--pop); border-color: rgba(255,106,61,0.3); }
+/* .chip-priority.pN has the same specificity as .chip.active and comes later in the cascade, so
+   without this it silently wins the tie on color/border-color/background — the chip never visibly
+   toggles (p3: no change at all; p1/p2: partial, and p1's active state was unreadable — dark text
+   on a dark background). Three classes beats two, so this restores the standard active look. */
+.chip-priority.p1.active,
+.chip-priority.p2.active,
+.chip-priority.p3.active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
 .chip-priority.p3 {
   color: white;
   background: var(--pop);
@@ -799,6 +845,12 @@ input, select, textarea { font: inherit; color: inherit; }
   color: var(--ink);
 }
 .today-suggest-item.active { background: var(--bg-elev); }
+.today-suggest-cat {
+  padding: 5px 10px 2px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.today-suggest-cat:not(:first-child) { border-top: 1px solid var(--line); margin-top: 3px; }
 .today-suggest-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--ink-mute);
@@ -1252,6 +1304,7 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .search-kind.tab { color: var(--pop); }
 .search-kind.task { color: var(--ink-soft); }
+.search-kind.note { color: var(--pop-2); }
 .search-text { flex: 1; color: var(--ink); }
 .search-context { color: var(--ink-mute); font-size: 11px; }
 
@@ -2080,12 +2133,8 @@ input, select, textarea { font: inherit; color: inherit; }
   position: sticky; top: 0; height: 100vh; overflow: auto;
 }
 .sidebar-brand { background: none; border: 0; padding: 2px 6px; cursor: pointer; }
-.sidebar-sec-head { position: relative; display: flex; align-items: center; gap: 6px; margin: 0 4px 8px 9px; }
-.sidebar-sec-label { font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; font-weight: 700; color: var(--ink-mute); }
-/* Match the space rows' gear button (22×22, same right inset) so the + sits in that same column,
-   and center the glyph with inline-flex + line-height:1 instead of relying on the font's metrics. */
-.sidebar-add { margin-left: auto; width: 22px; height: 22px; border-radius: var(--r-sm); display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 0; color: var(--ink-mute); font-size: 17px; border: 0; background: none; cursor: pointer; }
-.sidebar-add:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+.sidebar-sec-head { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0 4px 8px 9px; }
+.sidebar-sec-label { font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; font-weight: 700; color: var(--ink-mute); }
 .sidebar-spacer { flex: 1; }
 .sidebar-account { display: flex; align-items: center; gap: 9px; padding: 8px; border-top: 1px solid var(--line); }
 .sidebar-account-email { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
@@ -2100,9 +2149,13 @@ input, select, textarea { font: inherit; color: inherit; }
 .space-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .space-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .space-count { font-family: var(--mono); font-size: 10px; color: var(--ink-mute); padding-right: 6px; }
-.space-gear { width: 22px; height: 22px; border-radius: var(--r-sm); display: none; place-items: center; color: var(--ink-mute); font-size: 12px; border: 0; background: none; flex: none; cursor: pointer; margin-right: 4px; }
-.space:hover .space-gear { display: grid; }
-.space:hover .space-count { display: none; }
+/* Always present (not hover-only) so settings are discoverable on touch too, just dimmed at rest. */
+.space-gear { width: 22px; height: 22px; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--ink-mute); font-size: 12px; border: 0; background: none; flex: none; cursor: pointer; margin-right: 4px; opacity: 0.45; transition: opacity .12s, background .12s; }
+.space:hover .space-gear, .space-gear:focus-visible, .space-gear:hover { opacity: 1; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.space-add-wrap { position: relative; margin-top: 3px; }
+.space-add-row { width: 100%; display: flex; align-items: center; gap: 9px; padding: 6px 8px 6px 9px; border-radius: var(--r-sm); border: 1px dashed var(--line-strong); background: none; color: var(--ink-mute); font-size: 13px; cursor: pointer; }
+.space-add-row:hover { color: var(--ink); border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.space-add-icon { width: 14px; flex: none; text-align: center; font-size: 14px; line-height: 1; }
 /* Shared space create/edit popover (SpaceForm). Anchored under its trigger (the + in the section
    head, or a space row's gear) and spanning that container's width. */
 .space-form { position: absolute; top: calc(100% + 4px); left: 9px; right: 6px; z-index: 40; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-pop); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
@@ -2117,11 +2170,15 @@ input, select, textarea { font: inherit; color: inherit; }
 .space-form-action.danger { color: var(--pop); border-color: color-mix(in srgb, var(--pop) 30%, transparent); }
 .space-form-action.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--pop) 8%, transparent); }
 
-/* Agenda rail — timeline (matches internal/design/shell-d-hybrid.html) */
-.agenda-head { display: flex; align-items: baseline; gap: 8px; margin: 0 4px 3px 9px; }
+/* Agenda rail — timeline (matches internal/design/shell-d-hybrid.html). The header is the
+   calendar opener: a real (always-visible) chevron, not a hover-only text arrow, since this is a
+   navigation link, not just a content label. */
+.agenda-head { width: 100%; display: flex; align-items: center; gap: 8px; margin: 0; padding: 3px 4px 3px 9px; border: 0; border-radius: var(--r-sm); background: none; cursor: pointer; }
+.agenda-head:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .agenda-title { font-family: var(--serif); font-style: italic; font-size: 17px; font-weight: 600; }
-.agenda-date { font-size: 10px; color: var(--ink-mute); text-transform: uppercase; letter-spacing: 1.1px; font-weight: 700; }
-.agenda-sub { font-size: 11px; color: var(--ink-mute); margin: 0 4px 12px 9px; }
+.agenda-open { margin-left: auto; flex: none; color: var(--ink-mute); }
+.agenda-head:hover .agenda-open { color: var(--ink); }
+.agenda-sub { font-size: 11px; color: var(--ink-mute); margin: 0; padding: 0 4px 12px 9px; }
 
 .agenda-timeline { position: relative; margin: 0 2px 8px 46px; border-left: 1px solid var(--line); }
 .agenda-hour { position: relative; height: 50px; }
@@ -2142,8 +2199,8 @@ input, select, textarea { font: inherit; color: inherit; }
 .agenda-nowline::before { content: ""; position: absolute; left: 34px; top: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--pop); }
 .agenda-nowline .lbl { position: absolute; left: -2px; top: -6px; font-family: var(--mono); font-size: 8.5px; color: var(--pop); font-weight: 700; }
 
-.agenda-add { margin: 2px 4px 0; font-size: 12px; color: var(--ink-mute); background: none; border: 1px dashed var(--line); border-radius: var(--r-sm); padding: 6px; text-align: center; cursor: pointer; }
-.agenda-add:hover { color: var(--ink); border-color: var(--line-strong); }
+.agenda-add { margin: 6px 0 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; font-size: 12px; font-weight: 600; color: var(--ink-soft); background: var(--bg-paper); border: 1px solid var(--line-strong); border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+.agenda-add:hover { color: var(--ink); border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 4%, transparent); }
 
 /* Phones: the sidebar folds away; the bottom nav takes over (Phase 8 refines). */
 @media (max-width: 720px) {
@@ -2154,6 +2211,11 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* ── Scope strip (board grid: scope + inline facets + count) ─────────────── */
 .scope-strip { display: flex; align-items: center; gap: 12px; padding: 6px 2px 14px; margin-bottom: 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.scope-search { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-paper); color: var(--ink-mute); flex: 0 1 220px; }
+.scope-search:focus-within { border-color: var(--line-strong); color: var(--ink); }
+.scope-search svg { flex: none; }
+.scope-search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font: inherit; font-size: 12px; color: var(--ink); }
+.scope-search input::placeholder { color: var(--ink-mute); }
 .scope-current { display: inline-flex; align-items: center; gap: 8px; font-family: var(--serif); font-style: italic; font-size: 15px; font-weight: 600; color: var(--ink); }
 .scope-current.all { color: var(--ink-soft); }
 .scope-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
@@ -2182,9 +2244,57 @@ input, select, textarea { font: inherit; color: inherit; }
 .panel-toggle.on { background: var(--ink); color: var(--bg); }
 
 .board-toolbar { display: flex; align-items: center; gap: 12px; padding: 4px clamp(16px, 3vw, 32px) 12px; border-bottom: 1px solid var(--line); }
-.seg.board-views { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px; background: var(--bg-paper); }
-.seg.board-views button { padding: 5px 15px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--ink-mute); border: 0; background: none; cursor: pointer; }
-.seg.board-views button.on { background: var(--ink); color: var(--bg); }
+.help-btn { margin-left: auto; position: relative; width: 26px; height: 26px; border-radius: 999px; border: 1px solid var(--line); font-weight: 700; font-size: 13px; }
+.help-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+.help-btn.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.help-btn-dot { position: absolute; top: 1px; right: 1px; width: 7px; height: 7px; border-radius: 50%; background: var(--pop); border: 1.5px solid var(--bg-paper); }
+
+/* Help / info pane — a generic auxiliary-content slot behind the board toolbar's "?" button. */
+.info-pane { padding: 24px clamp(16px, 3vw, 32px) 40px; max-width: 760px; height: 100%; overflow-y: auto; }
+.info-pane-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.info-pane-head h2 { font-family: var(--serif); font-style: italic; font-size: 24px; font-weight: 600; margin: 0; }
+.info-pane-updates { margin-bottom: 28px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-paper); }
+.info-pane-updates h3, .info-section h3 { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-mute); }
+.info-update { display: flex; gap: 12px; padding: 6px 0; }
+.info-update + .info-update { border-top: 1px solid var(--line); }
+.info-update-date { font-family: var(--mono); font-size: 10px; color: var(--ink-mute); flex: none; width: 72px; padding-top: 2px; }
+.info-update-title { font-weight: 600; font-size: 13px; color: var(--ink); }
+.info-update-body { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; }
+.info-pane-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; }
+.info-section dl { margin: 0; }
+.info-row { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; border-top: 1px solid var(--line); }
+.info-row:first-child { border-top: 0; }
+.info-row dt { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--pop); }
+.info-row dd { margin: 0; font-size: 12px; color: var(--ink-soft); line-height: 1.35; }
+
+/* Basics block — required reading, always unfolded, visually first. */
+.info-basics { display: flex; flex-direction: column; gap: 22px; }
+.info-basic h3 { margin: 0 0 6px; font-family: var(--serif); font-style: italic; font-size: 17px; font-weight: 600; color: var(--ink); }
+.info-basic p { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; }
+.info-basic p + p { margin-top: 6px; }
+.info-basic ol { margin: 4px 0 0; padding-left: 20px; font-size: 13.5px; color: var(--ink-soft); line-height: 1.7; }
+.info-basic ol li::marker { color: var(--pop); font-weight: 700; }
+.info-basic code, .info-detail code { font-family: var(--mono); font-size: 12px; background: var(--bg-paper); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--ink); }
+.info-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 8px; }
+.info-detail { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-paper); }
+.info-detail-title { font-weight: 700; font-size: 12.5px; color: var(--pop); margin-bottom: 4px; }
+.info-detail p { margin: 0; font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; }
+
+/* Go-faster block — the old shortcut reference, collapsed by default so it never competes with
+   the basics above it. Native <details> keeps this a CSS-only affordance, no state to wire up. */
+.info-go-faster { margin: 28px 0 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.info-go-faster summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-mute); }
+.info-go-faster summary::-webkit-details-marker { display: none; }
+.info-go-faster summary::before { content: '▸'; display: inline-block; font-size: 10px; color: var(--ink-mute); transition: transform 0.15s ease; }
+.info-go-faster[open] summary::before { transform: rotate(90deg); }
+.info-go-faster summary span { text-transform: none; font-weight: 500; letter-spacing: 0; opacity: 0.7; }
+.info-go-faster .info-pane-sections { margin-top: 18px; }
+
+/* What's new — demoted below Go-faster: quieter treatment, last thing on the page. */
+.info-pane-updates.info-pane-updates-demoted { margin: 0; opacity: 0.82; border-style: dashed; }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px; background: var(--bg-paper); }
+.seg button { padding: 5px 15px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--ink-mute); border: 0; background: none; cursor: pointer; }
+.seg button.on { background: var(--ink); color: var(--bg); }
 
 .board-canvas { display: grid; grid-template-columns: minmax(0, 1fr) 320px; flex: 1; min-height: 0; }
 .board-canvas.no-panel { grid-template-columns: minmax(0, 1fr); }
@@ -2311,10 +2421,12 @@ input, select, textarea { font: inherit; color: inherit; }
    template (a fixed time gutter + one 1fr per day) so columns line up. */
 .calendar { display: flex; flex-direction: column; min-height: 0; height: 100%; padding: 16px clamp(12px, 3vw, 28px) 0; }
 .calendar-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
-.calendar-nav { display: inline-flex; align-items: center; gap: 6px; }
-.calendar-modes { display: inline-flex; gap: 4px; margin-left: auto; }
-.calendar-modes .btn.ghost.is-active,
-.calendar-nav .btn.ghost.is-active { color: var(--ink); border-color: var(--pop); }
+.calendar-nav { display: inline-flex; align-items: center; gap: 10px; }
+/* Groups prev/today/next into one visually distinct pill instead of three loose buttons. */
+.calendar-datenav { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px; background: var(--bg-paper); }
+.calendar-datenav .icon-btn { border-radius: 999px; }
+.calendar-datenav .btn.ghost { border: 0; background: none; height: 26px; padding: 0 10px; }
+.calendar-modes { margin-left: auto; }
 .calendar-date-input { height: 30px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-paper); color: var(--ink-soft); font: inherit; font-size: 12px; padding: 0 8px; }
 .calendar-error { font-size: 12px; color: var(--pop); margin-bottom: 8px; }
 
@@ -2323,8 +2435,10 @@ input, select, textarea { font: inherit; color: inherit; }
 .cal-gutter { width: var(--cal-gutter); }
 
 .cal-heads { border-bottom: 1px solid var(--line); }
-.cal-head { padding: 8px 6px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-mute); border-left: 1px solid var(--line); }
-.cal-head.is-today { color: var(--pop); }
+.cal-head { padding: 6px 6px; text-align: center; border-left: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.cal-head-weekday { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--ink-mute); }
+.cal-head-date { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-soft); }
+.cal-head.is-today .cal-head-weekday, .cal-head.is-today .cal-head-date { color: var(--pop); }
 
 .cal-allday { border-bottom: 1px solid var(--line); min-height: 30px; align-items: stretch; }
 .cal-allday-label { display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-family: var(--mono); font-size: 9.5px; color: var(--ink-mute); }
@@ -2385,11 +2499,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .cal-agenda { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px; }
 .cal-agenda-empty, .cal-agenda-more { font-size: 12px; padding: 4px 6px; }
 .cal-agenda-more { border-top: 1px dashed var(--line); margin-top: 2px; }
-
-/* Sidebar agenda header is now the calendar opener. */
-.agenda-head { width: 100%; border: 0; background: none; cursor: pointer; }
-.agenda-head:hover .agenda-open { opacity: 1; }
-.agenda-open { margin-left: auto; color: var(--ink-mute); opacity: 0; transition: opacity 0.12s; }
 
 /* ── Notifications (bell + feed panel) ────────────────────────────────────── */
 .notif-bell { position: relative; }

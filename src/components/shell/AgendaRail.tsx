@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store';
 import { useSession } from '../../session/useSession';
 import { api, drain } from '../../api/client';
-import { toISO, formatDateChip } from '../../util/dates';
+import { toISO } from '../../util/dates';
 import { EventEditor } from '../calendar/EventEditor';
 import { minsOfClock, dayOf, layoutDay } from '../calendar/geometry';
 import type { CalendarEvent } from '../../types';
@@ -98,9 +98,10 @@ export function AgendaRail() {
   return (
     <div className="agenda-rail">
       <button className="agenda-head" onClick={() => setPlannerOpen(true)} title="Open full calendar">
-        <span className="agenda-title">Today</span>
-        <span className="agenda-date">{formatDateChip(today)}</span>
-        <span className="agenda-open" aria-hidden>→</span>
+        <span className="agenda-title">Calendar</span>
+        <svg className="agenda-open" viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+          <path d="M6 3l6 5-6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </svg>
       </button>
       <div className="agenda-sub">{list.length ? `${list.length} scheduled` : 'Nothing scheduled'}</div>
 
@@ -142,7 +143,8 @@ export function AgendaRail() {
       </div>
 
       <button className="agenda-add" onClick={() => setEditor({ seedStartMin: Math.min(Math.ceil(now / 30) * 30, 22 * 60) })}>
-        + event
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden><path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+        <span>New event</span>
       </button>
 
       {editor && <EventEditor day={today} event={editor.event} seedStartMin={editor.seedStartMin} onClose={closeEditor} />}

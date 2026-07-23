@@ -8,6 +8,8 @@ import { BoardPanel } from './BoardPanel';
 import { BoardList } from './BoardList';
 import { BoardKanban } from './BoardKanban';
 import { BoardCalendar } from './BoardCalendar';
+import { InfoPane } from './InfoPane';
+import { useHelpBadge } from '../help/useHelpBadge';
 import type { BoardView } from '../types';
 
 const VIEW_LABEL: Record<BoardView, string> = { doc: 'Doc', list: 'List', kanban: 'Kanban', calendar: 'Calendar' };
@@ -37,6 +39,10 @@ export function TabView({ tabId }: { tabId: string }) {
   const boardView = useStore((s) => s.boardView);
   const setBoardView = useStore((s) => s.setBoardView);
   const [panelOpen, setPanelOpen] = useState(true);
+  // Not part of `boardView`/global store on purpose — it's an auxiliary pane, not a view of the
+  // board's task data, and must never persist as "the" view a board reopens into.
+  const [pane, setPane] = useState<'help' | null>(null);
+  const { hasNew: hasNewHelp } = useHelpBadge();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -96,12 +102,23 @@ export function TabView({ tabId }: { tabId: string }) {
               <button key={v} className={view === v ? 'on' : ''} onClick={() => setBoardView(v)}>{VIEW_LABEL[v]}</button>
             ))}
           </div>
+          <button
+            className={`icon-btn help-btn ${pane === 'help' ? 'on' : ''}`}
+            onClick={() => setPane((p) => (p === 'help' ? null : 'help'))}
+            aria-label="how to use Tagwerke"
+            title="How to use Tagwerke"
+          >
+            ?
+            {hasNewHelp && pane !== 'help' && <span className="help-btn-dot" aria-label="new" />}
+          </button>
         </div>
       )}
 
       <div className={`board-canvas ${isBoard && panelOpen ? '' : 'no-panel'}`}>
         <div className="board-content">
-          {view === 'doc' ? (
+          {pane === 'help' ? (
+            <InfoPane kind="help" onClose={() => setPane(null)} />
+          ) : view === 'doc' ? (
             <div className="tab-view-body"><TabEditor tabId={tab.id} autoFocus /></div>
           ) : view === 'list' ? (
             <BoardList tabId={tab.id} />

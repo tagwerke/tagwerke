@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import { TabCard } from './TabCard';
 import { Masonry } from './Masonry';
 import { matchesTaskFacets } from '../util/filter';
+import { extractDocText } from '../util/docText';
 
 export function Board() {
   const tabs = useStore((s) => s.tabs);
@@ -24,8 +25,11 @@ export function Board() {
       const tabTasks = Object.values(tasks).filter((t) => t.homeTabId === tabId);
 
       const q = filter.query.trim().toLowerCase();
-      if (q && !tab.name.toLowerCase().includes(q) && !tabTasks.some((t) => t.text.toLowerCase().includes(q))) {
-        return false;
+      if (q) {
+        const matchesName = tab.name.toLowerCase().includes(q);
+        const matchesTask = tabTasks.some((t) => t.text.toLowerCase().includes(q));
+        const matchesDoc = !matchesName && !matchesTask && extractDocText(tab.docJSON).toLowerCase().includes(q);
+        if (!matchesName && !matchesTask && !matchesDoc) return false;
       }
 
       if (filter.owners.length || filter.priorities.length || filter.hasDate || filter.dueSoon) {

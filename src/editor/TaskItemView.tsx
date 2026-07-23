@@ -12,11 +12,13 @@ import { TextSelection } from '@tiptap/pm/state';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { nanoid } from 'nanoid';
 import { useStore } from '../store';
+import { useSession } from '../session/useSession';
 import { TaskMeta } from '../components/TaskMeta';
 import { StatusControl } from '../components/StatusControl';
 import { HistoryDrawer } from '../components/HistoryDrawer';
 import { consumeTaskFocus, focusEnd, focusTaskWidget, peekTaskFocus, requestTaskFocus } from './taskFocus';
 import { TaskTitleSuggest } from './TaskTitleSuggest';
+import { parseEmbeddedCommands } from './embeddedCommands';
 import type { ID, Task, TaskStatus } from '../types';
 
 interface KeyCtx {
@@ -191,6 +193,25 @@ function escapeToParagraph(ctx: KeyCtx): void {
   editor.view.focus();
 }
 
+/** Runs on losing focus: strips any embedded `/command`/`@mention` tokens out of the title and
+ *  applies them as real fields, so writing "Fix login bug /p1 /due tomorrow" and clicking away
+ *  works the same as picking each one from the interactive popup while typing. */
+function commitEmbeddedCommands(id: ID, tabId: ID): void {
+  const s = useStore.getState();
+  const task = s.tasks[id];
+  if (!task) return;
+  const members = s.membersByBoard[tabId] ?? [];
+  const meId = useSession.getState().user?.id;
+  const { cleanText, fields } = parseEmbeddedCommands(task.text, members, meId);
+  if (cleanText === task.text && !fields.status && fields.date === undefined && fields.priority === undefined && fields.assigneeId === undefined) return;
+
+  if (fields.status) s.setTaskStatus(id, fields.status);
+  if (fields.date !== undefined) s.setTaskMeta(id, { date: fields.date });
+  if (fields.priority !== undefined) s.setTaskMeta(id, { priority: fields.priority ?? undefined });
+  if (fields.assigneeId !== undefined) s.setTaskAssignee(id, fields.assigneeId ?? undefined);
+  if (cleanText !== task.text) s.setTaskText(id, cleanText);
+}
+
 /** True when the (collapsed) caret sits at the very start of the title widget. */
 function caretAtStart(el: HTMLElement): boolean {
   const sel = window.getSelection();
@@ -331,9 +352,10 @@ export function TaskItemView({ node, editor, getPos, extension }: NodeViewProps)
         contentEditable={editable}
         suppressContentEditableWarning
         role="textbox"
-        data-placeholder="Task"
+        data-placeholder="Task — try / or @"
         onInput={(e) => useStore.getState().setTaskText(id, e.currentTarget.textContent ?? '')}
         onKeyDown={(e) => onTitleKeyDown(e, { editor, getPos, id, tabId, task, el: e.currentTarget })}
+        onBlur={() => commitEmbeddedCommands(id, tabId)}
       />
       {editable ? <TaskTitleSuggest inputRef={titleRef} taskId={id} tabId={tabId} /> : null}
       <TaskMeta taskId={id} />

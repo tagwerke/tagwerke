@@ -10,67 +10,28 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
-import { resolveDateKeyword, formatDateChip, toISO, todayISO } from '../util/dates';
-import type { ID, Member, TaskStatus } from '../types';
+import { useSession } from '../session/useSession';
+import { matchCommands, rankMembers, categoryOf, type CommandPatch } from './suggestEngine';
+import type { ID, Member } from '../types';
 
-const MAX = 8;
-
-interface CommandItem { key: string; label: string; run: () => void }
+interface CommandItem { key: string; label: string; category: string; run: () => void }
 type Mode =
   | { kind: 'mention'; matches: Member[]; x: number; y: number; strip: () => void; onPick: (m: Member) => void }
   | { kind: 'command'; matches: CommandItem[]; x: number; y: number; strip: () => void; onPick: (m: CommandItem) => void };
 
-function rankMembers(members: Member[], query: string): Member[] {
-  const q = query.toLowerCase();
-  if (!q) return members.slice(0, MAX);
-  const scored: { m: Member; score: number }[] = [];
-  for (const m of members) {
-    const n = m.name.toLowerCase();
-    const e = m.email.toLowerCase();
-    let score = -1;
-    if (n === q) score = 200;
-    else if (n.startsWith(q)) score = 100;
-    else if (n.includes(q)) score = 50;
-    else if (e.includes(q)) score = 30;
-    if (score >= 0) scored.push({ m, score });
-  }
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, MAX).map((s) => s.m);
+function applyCommandPatch(id: ID, patch: CommandPatch): void {
+  const s = useStore.getState();
+  if (patch.kind === 'status') s.setTaskStatus(id, patch.status);
+  else if (patch.kind === 'date') s.setTaskMeta(id, { date: patch.date ?? undefined });
+  else if (patch.kind === 'priority') s.setTaskMeta(id, { priority: patch.priority ?? undefined });
+  else s.setTaskAssignee(id, patch.assigneeId ?? undefined);
 }
 
-const STATUS_DEFS: { s: TaskStatus; label: string; aliases: string[] }[] = [
-  { s: 'todo', label: 'Todo', aliases: ['status', 'todo'] },
-  { s: 'in_progress', label: 'In progress', aliases: ['status', 'doing', 'wip', 'inprogress'] },
-  { s: 'in_review', label: 'In review', aliases: ['status', 'review', 'inreview'] },
-  { s: 'done', label: 'Done', aliases: ['status', 'done'] },
-  { s: 'cancelled', label: 'Cancelled', aliases: ['status', 'cancel', 'cancelled'] },
-];
-
 function buildCommands(cmd: string, arg: string, id: ID): CommandItem[] {
-  const items: CommandItem[] = [];
-  const matches = (kw: string) => cmd === '' || kw.startsWith(cmd) || cmd.startsWith(kw);
-  const setMeta = (patch: Parameters<ReturnType<typeof useStore.getState>['setTaskMeta']>[1]) =>
-    useStore.getState().setTaskMeta(id, patch);
-
-  if (matches('due') || matches('date') || matches('today') || matches('tomorrow')) {
-    if (arg) {
-      const r = resolveDateKeyword(arg);
-      if (r) items.push({ key: 'due-arg', label: `Due · ${formatDateChip(r)}`, run: () => setMeta({ date: r }) });
-    }
-    const tm = new Date();
-    tm.setDate(tm.getDate() + 1);
-    items.push({ key: 'due-today', label: 'Due · today', run: () => setMeta({ date: todayISO() }) });
-    items.push({ key: 'due-tomorrow', label: 'Due · tomorrow', run: () => setMeta({ date: toISO(tm) }) });
-  }
-  for (const st of STATUS_DEFS) {
-    if (st.aliases.some(matches))
-      items.push({ key: `st-${st.s}`, label: `Status · ${st.label}`, run: () => useStore.getState().setTaskStatus(id, st.s) });
-  }
-  if (matches('priority') || cmd === 'p' || ['p1', 'p2', 'p3'].some(matches)) {
-    for (const p of [1, 2, 3] as const)
-      items.push({ key: `p${p}`, label: `Priority · ${'!'.repeat(p)}`, run: () => setMeta({ priority: p }) });
-  }
-  return items.slice(0, MAX);
+  const meId = useSession.getState().user?.id;
+  return matchCommands(cmd, arg, meId).map((d) => ({
+    key: d.key, label: d.label, category: categoryOf(d.patch), run: () => applyCommandPatch(id, d.patch),
+  }));
 }
 
 /** Text of the widget from its start up to the caret (null if the caret isn't inside `el`). */
@@ -148,7 +109,10 @@ export function TaskTitleSuggest({ inputRef, taskId, tabId }: { inputRef: React.
         return setMode(null);
       }
 
-      const cm = before.match(/(?:^|\s)\/(\w*)(?:\s+(\S+))?$/);
+      // The trailing arg slot must not itself look like the start of a new token — otherwise an
+      // earlier, still-unconfirmed "/cmd" absorbs a second "/cmd"/"@mention" typed right after it
+      // as if it were plain argument text, and the popup gets stuck on the stale first match.
+      const cm = before.match(/(?:^|\s)\/(\w*)(?:\s+(?![/@])(\S+))?$/);
       if (cm) {
         const cmd = (cm[1] ?? '').toLowerCase();
         const arg = (cm[2] ?? '').trim();
@@ -176,6 +140,7 @@ export function TaskTitleSuggest({ inputRef, taskId, tabId }: { inputRef: React.
         const items: CommandItem[] = [1, 2, 3].map((pp) => ({
           key: `pri-${pp}`,
           label: `Priority · ${'!'.repeat(pp)}`,
+          category: 'Priority',
           run: () => useStore.getState().setTaskMeta(taskId, { priority: pp as 1 | 2 | 3 }),
         }));
         const pos = caretRect();
@@ -232,34 +197,48 @@ export function TaskTitleSuggest({ inputRef, taskId, tabId }: { inputRef: React.
 
   return (
     <ul className={`today-suggest ${mode.kind}`} style={{ position: 'fixed', top: mode.y, left: mode.x, zIndex: 50 }} contentEditable={false}>
-      {mode.matches.map((m, i) => {
+      {(() => {
         const isMention = mode.kind === 'mention';
-        const key = isMention ? (m as Member).id : (m as CommandItem).key;
-        return (
-          <li
-            key={key}
-            className={`today-suggest-item ${i === highlight ? 'active' : ''}`}
-            onMouseEnter={() => setHighlight(i)}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              mode.strip();
-              if (mode.kind === 'mention') mode.onPick(m as Member);
-              else mode.onPick(m as CommandItem);
-              setMode(null);
-            }}
-          >
-            {isMention ? (
-              <>
-                <span className="today-suggest-avatar">{(m as Member).name.charAt(0).toUpperCase()}</span>
-                <span className="today-suggest-name">{(m as Member).name}</span>
-                <span className="today-suggest-sub">{(m as Member).email}</span>
-              </>
-            ) : (
-              <span className="today-suggest-name">{(m as CommandItem).label}</span>
-            )}
-          </li>
-        );
-      })}
+        const nodes: React.ReactNode[] = [];
+        let prevCategory: string | null = null;
+        mode.matches.forEach((m, i) => {
+          // A header whenever the (already relevance-sorted) list crosses into a new category —
+          // never reorders anything, just annotates transitions as they occur.
+          if (!isMention) {
+            const category = (m as CommandItem).category;
+            if (category !== prevCategory) {
+              nodes.push(<li key={`cat-${category}`} className="today-suggest-cat" aria-hidden>{category}</li>);
+              prevCategory = category;
+            }
+          }
+          const key = isMention ? (m as Member).id : (m as CommandItem).key;
+          nodes.push(
+            <li
+              key={key}
+              className={`today-suggest-item ${i === highlight ? 'active' : ''}`}
+              onMouseEnter={() => setHighlight(i)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                mode.strip();
+                if (mode.kind === 'mention') mode.onPick(m as Member);
+                else mode.onPick(m as CommandItem);
+                setMode(null);
+              }}
+            >
+              {isMention ? (
+                <>
+                  <span className="today-suggest-avatar">{(m as Member).name.charAt(0).toUpperCase()}</span>
+                  <span className="today-suggest-name">{(m as Member).name}</span>
+                  <span className="today-suggest-sub">{(m as Member).email}</span>
+                </>
+              ) : (
+                <span className="today-suggest-name">{(m as CommandItem).label}</span>
+              )}
+            </li>,
+          );
+        });
+        return nodes;
+      })()}
     </ul>
   );
 }

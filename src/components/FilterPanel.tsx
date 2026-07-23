@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useStore } from '../store';
+import { PRIORITY_LABELS } from '../util/filter';
 
 export function FilterPanel({ onClose }: { onClose: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -115,7 +116,7 @@ export function FilterPanel({ onClose }: { onClose: () => void }) {
         <strong>priority</strong>
         <div className="chip-row">
           {([1, 2, 3] as const).map((p) => (
-            <button key={p} className={`chip chip-priority p${p} ${filter.priorities.includes(p) ? 'active' : ''}`} onClick={() => togglePriority(p)}>{'!'.repeat(p)}</button>
+            <button key={p} className={`chip chip-priority p${p} ${filter.priorities.includes(p) ? 'active' : ''}`} onClick={() => togglePriority(p)}>{PRIORITY_LABELS[p]}</button>
           ))}
         </div>
       </div>

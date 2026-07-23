@@ -39,17 +39,6 @@ export function Sidebar() {
       <div className="sidebar-sec">
         <div className="sidebar-sec-head">
           <span className="sidebar-sec-label">Spaces</span>
-          <button
-            className="sidebar-add"
-            title="New space"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={() => setCreating((v) => !v)}
-          >
-            +
-          </button>
-          {creating && (
-            <SpaceForm mode="create" onClose={() => setCreating(false)} onCreated={(id) => selectSpace(id)} />
-          )}
         </div>
         <div className="space-list">
           <div className={`space ${!activeSpace ? 'on' : ''}`}>
@@ -63,6 +52,15 @@ export function Sidebar() {
             if (!p) return null;
             return <SpaceItem key={id} project={p} active={activeSpace === id} onSelect={() => selectSpace(id)} />;
           })}
+          <div className="space-add-wrap">
+            <button className="space-add-row" onClick={() => setCreating((v) => !v)}>
+              <span className="space-add-icon" aria-hidden>+</span>
+              <span>New space</span>
+            </button>
+            {creating && (
+              <SpaceForm mode="create" onClose={() => setCreating(false)} onCreated={(id) => selectSpace(id)} />
+            )}
+          </div>
         </div>
       </div>
 

@@ -5,6 +5,9 @@
 import type { Task, BlockFilter } from '../types';
 import { isDueSoon } from './dates';
 
+/** Plain-language priority names for filter UI — no "!"/"P1" abbreviations to decode. */
+export const PRIORITY_LABELS: Record<1 | 2 | 3, string> = { 1: 'Low', 2: 'Medium', 3: 'High' };
+
 /**
  * The task-level facets shared by {@link Filter} and {@link BlockFilter}:
  * owner / priority / has-date / due-soon. (project/query are handled by callers since

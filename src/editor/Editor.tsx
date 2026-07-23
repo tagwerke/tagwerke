@@ -7,6 +7,7 @@ import { TaskItem } from './extensions/TaskItem';
 import { TaskList } from './extensions/TaskList';
 import { SyncPlugin } from './extensions/SyncPlugin';
 import { TaskNav } from './extensions/TaskNav';
+import { EmptyLineAdd } from './extensions/EmptyLineAdd';
 import { TaskItemView } from './TaskItemView';
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
@@ -81,6 +82,7 @@ export function TabEditor({ tabId, autoFocus }: Props) {
         }).configure({ tabId }),
         SyncPlugin.configure({ tabId }),
         TaskNav,
+        EmptyLineAdd,
         Collaboration.configure({ document: doc, field: 'default' }),
         CollaborationCaret.configure({
           provider,

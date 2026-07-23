@@ -7,7 +7,7 @@
 // (gutter + one 1fr per day) so day columns line up top-to-bottom.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { formatDateChip } from '../../util/dates';
+import { formatDateChip, formatWeekday } from '../../util/dates';
 import { EventCard } from './EventCard';
 import { HOUR_PX, DAY_MINUTES, PX_PER_MIN, dayOf, minsOfClock, layoutDay } from './geometry';
 import type { CalendarEvent } from '../../types';
@@ -77,16 +77,15 @@ export function TimeGrid({
 
   return (
     <div className="cal-grid" style={template}>
-      {isWeek && (
-        <div className="cal-row cal-heads">
-          <div className="cal-gutter" />
-          {days.map((day) => (
-            <div className={`cal-head ${day === today ? 'is-today' : ''}`} key={day}>
-              {formatDateChip(day)}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="cal-row cal-heads">
+        <div className="cal-gutter" />
+        {days.map((day) => (
+          <div className={`cal-head ${day === today ? 'is-today' : ''}`} key={day}>
+            <span className="cal-head-weekday">{formatWeekday(day)}</span>
+            <span className="cal-head-date">{formatDateChip(day)}</span>
+          </div>
+        ))}
+      </div>
 
       <div className="cal-row cal-allday">
         <div className="cal-gutter cal-allday-label">all-day</div>

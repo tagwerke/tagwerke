@@ -1,11 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
+import { extractDocText } from '../util/docText';
 
 interface Hit {
-  kind: 'tab' | 'task';
+  kind: 'tab' | 'task' | 'note';
   tabId: string;
   text: string;
   context?: string;
+}
+
+/** A short excerpt around the match, so a hit against a long prose blob isn't the whole blob. */
+function snippet(text: string, query: string): string {
+  const idx = text.toLowerCase().indexOf(query);
+  if (idx === -1) return text.slice(0, 90);
+  const start = Math.max(0, idx - 30);
+  const end = Math.min(text.length, idx + query.length + 60);
+  return (start > 0 ? '…' : '') + text.slice(start, end).trim() + (end < text.length ? '…' : '');
 }
 
 export function SearchPalette({ onClose }: { onClose: () => void }) {
@@ -35,6 +45,12 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
     for (const t of Object.values(tasks)) {
       if (t.text.toLowerCase().includes(query)) {
         out.push({ kind: 'task', tabId: t.homeTabId, text: t.text, context: tabs[t.homeTabId]?.name });
+      }
+    }
+    for (const tab of Object.values(tabs)) {
+      const docText = extractDocText(tab.docJSON);
+      if (docText.toLowerCase().includes(query)) {
+        out.push({ kind: 'note', tabId: tab.id, text: snippet(docText, query), context: tab.name });
       }
     }
     return out.slice(0, 50);

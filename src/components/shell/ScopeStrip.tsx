@@ -4,6 +4,7 @@
 // as a persistent strip instead of a dropdown. (The mobile MoreSheet still opens FilterPanel.)
 
 import { useStore } from '../../store';
+import { PRIORITY_LABELS } from '../../util/filter';
 
 export function ScopeStrip() {
   const projects = useStore((s) => s.projects);
@@ -27,6 +28,16 @@ export function ScopeStrip() {
 
   return (
     <div className="scope-strip">
+      <label className="scope-search" title="Filter this list — press Ctrl+K to search everywhere">
+        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        <input
+          type="text"
+          value={filter.query}
+          onChange={(e) => setFilter({ query: e.target.value })}
+          placeholder="Filter boards & tasks…"
+        />
+      </label>
+
       <div className="scope-facets">
         {/* The space scope is a pill inline with the filter pills — it's the single place the name
             is shown on the grid (the board group header is suppressed when scoped to one space).
@@ -47,9 +58,9 @@ export function ScopeStrip() {
             key={p}
             className={`chip chip-priority p${p} ${filter.priorities.includes(p) ? 'active' : ''}`}
             onClick={() => togglePriority(p)}
-            title={`priority ${p}`}
+            title={`${PRIORITY_LABELS[p]} priority`}
           >
-            {'!'.repeat(p)}
+            {PRIORITY_LABELS[p]}
           </button>
         ))}
         <button className={`chip ${filter.hasDate ? 'active' : ''}`} onClick={() => setFilter({ hasDate: !filter.hasDate })}>has date</button>
