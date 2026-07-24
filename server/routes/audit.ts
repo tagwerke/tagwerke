@@ -64,8 +64,18 @@ function readFilters(q: Record<string, string | undefined>): Filters {
 }
 
 /** One condition → SQL. `status` is an integer column, so its value is cast. is-not uses IS
- *  DISTINCT FROM so excluding a value keeps rows where the field is null (system events). */
+ *  DISTINCT FROM so excluding a value keeps rows where the field is null (system events).
+ *
+ *  `actor` is special: the "+ filter" builder takes free-typed text, and a user has no way to
+ *  know (or paste) the actor's raw UUID — they type the account's email. So match against either
+ *  the actor_id (the row-click "show matching" path, which does pass the real id) or the joined
+ *  user's email, case-insensitively. */
 function condToSql({ field, op, value }: Condition): SQL | null {
+  if (field === 'actor') {
+    const idMatch = sql`${schema.auditLog.actorId} IS NOT DISTINCT FROM ${value}`;
+    const emailMatch = sql`lower(${schema.users.email}) IS NOT DISTINCT FROM lower(${value})`;
+    return op === 'isnot' ? sql`(NOT ${idMatch}) AND (NOT ${emailMatch})` : sql`${idMatch} OR ${emailMatch}`;
+  }
   const col = FIELD_COLS[field];
   if (!col) return null;
   const val: string | number = field === 'status' ? Number(value) : value;
