@@ -71,6 +71,32 @@ function fullBody(t: Task) {
   };
 }
 
+/**
+ * Order new-task ids so an ancestor is always emitted before its descendants. The server
+ * rejects a `parentTaskId` whose row doesn't exist yet (400 → the outbox drops the op as poison
+ * and fires a blunt repull, silently losing the nesting), so a subtree created in one pass must
+ * reach it parent-first. Only ids in `creates` constrain the order — a parent that already
+ * exists server-side is no constraint at all. Re-entering a node still on the stack is a cycle;
+ * we bail rather than hang and let the outer frame emit it (the server rejects cycles anyway).
+ */
+function topoOrderCreates(creates: ID[], tasks: Record<ID, Task>): ID[] {
+  const pending = new Set(creates);
+  const emitted = new Set<ID>();
+  const visiting = new Set<ID>();
+  const out: ID[] = [];
+  const visit = (id: ID): void => {
+    if (emitted.has(id) || visiting.has(id) || !pending.has(id)) return;
+    visiting.add(id);
+    const parent = tasks[id]?.parentTaskId;
+    if (parent) visit(parent);
+    visiting.delete(id);
+    emitted.add(id);
+    out.push(id);
+  };
+  for (const id of creates) visit(id);
+  return out;
+}
+
 function diff(): void {
   if (suspended) return;
   const next = snapshot(useStore.getState());
@@ -80,17 +106,30 @@ function diff(): void {
   }
   const prev = last;
 
+  // Partition before emitting: a create can be the parent of another create, or of an existing
+  // task that a patch is re-parenting onto it. Creates go first (ancestors first), then patches,
+  // so every parent reference resolves server-side. Within-pass ordering is enough — a parent
+  // created in an earlier pass is already ahead of us in the FIFO outbox.
+  const creates: ID[] = [];
+  const patches: [ID, TaskPatch][] = [];
   for (const id in next.tasks) {
     const t = next.tasks[id];
     const p = prev.tasks[id];
     if (!p || p.homeTabId !== t.homeTabId) {
       // New task, or one that changed home board → full upsert (PATCH carries no homeTabId).
-      enqueue(() => api.tasks.upsert(id, fullBody(t)));
+      creates.push(id);
       continue;
     }
     const patch = changedFields(p, t);
-    if (patch) enqueue(() => api.tasks.patch(id, patch));
+    if (patch) patches.push([id, patch]);
   }
+
+  for (const id of topoOrderCreates(creates, next.tasks)) {
+    const body = fullBody(next.tasks[id]);
+    enqueue(() => api.tasks.upsert(id, body));
+  }
+  for (const [id, patch] of patches) enqueue(() => api.tasks.patch(id, patch));
+
   for (const id in prev.tasks) {
     if (!next.tasks[id]) enqueue(() => api.tasks.remove(id));
   }

@@ -28,9 +28,11 @@ function notifyAssigneeChange(
   notify(nextAssignee, { type: 'task_assigned', title: 'Assigned to you', body: taskLabel(text), tabId, actorId });
 }
 
-// Fields whose changes are worth an accountability trail. `position` is excluded (reorder
-// noise); `done`/`owner` are derived/legacy. See AUDIT_IMPLEMENTATION_PLAN §B2.
-const AUDITED_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority'] as const;
+// Fields whose changes are worth an accountability trail. `position`/`rank` are excluded (reorder
+// noise); `done`/`owner` are derived/legacy. `parentTaskId` IS audited — re-parenting moves a task
+// between deliverables, which is a structural change, not reorder noise (SUBTASKS_PLAN P1.3).
+// See AUDIT_IMPLEMENTATION_PLAN §B2.
+const AUDITED_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'parentTaskId'] as const;
 
 /** Resolve a task's home board (for routes whose body doesn't carry it). */
 async function taskBoard(req: FastifyRequest): Promise<string | undefined> {

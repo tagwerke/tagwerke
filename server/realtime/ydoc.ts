@@ -336,23 +336,30 @@ export async function flushAllYdocRooms(): Promise<number> {
 // restore work — clearing deletedAt on a row is not enough; the doc must regain its ref. It also
 // self-heals dropped creates / stale refs on board load.
 
-/** Every taskItem id present in the board's Y.Doc. */
-function collectDocRefIds(doc: Y.Doc): Set<string> {
-  const ids = new Set<string>();
+/**
+ * Every taskItem in the board's Y.Doc, as id → occurrence count. Idless nodes are counted
+ * separately: they are unrepairable strays (no id means nothing to look up, so no row can ever be
+ * made for them and no id can ever match them) and the walkers that used to `if (id)` past them
+ * left them in the doc forever as blank rows. They get pruned.
+ */
+function collectDocRefs(doc: Y.Doc): { counts: Map<string, number>; nullIds: number } {
+  const counts = new Map<string, number>();
+  let nullIds = 0;
   const walk = (node: Y.XmlElement | Y.XmlFragment): void => {
     for (let i = 0; i < node.length; i++) {
       const child = node.get(i);
       if (!(child instanceof Y.XmlElement)) continue;
       if (child.nodeName === 'taskItem') {
         const id = child.getAttribute('id');
-        if (id) ids.add(id);
+        if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+        else nullIds++;
       } else {
         walk(child);
       }
     }
   };
   walk(doc.getXmlFragment(FRAGMENT));
-  return ids;
+  return { counts, nullIds };
 }
 
 /** Append id-only task-ref atoms at the end of the doc (into the trailing taskList, or a new one). */
@@ -373,15 +380,38 @@ function appendRefs(doc: Y.Doc, ids: string[]): void {
   }
 }
 
-/** Remove task-ref atoms with the given ids, and any taskList left empty by the removal. */
-function pruneRefs(doc: Y.Doc, orphanIds: Set<string>): void {
+/**
+ * Remove task-ref atoms the invariant says shouldn't be there, plus any taskList the removal
+ * empties. Three classes:
+ *   - no id           — an unrepairable stray (see collectDocRefs);
+ *   - id in `orphans` — the backing row is gone or trashed;
+ *   - a DUPLICATE id  — keep the earliest occurrence, drop the rest.
+ * The de-dup belongs HERE and not in SyncPlugin, which resolves a duplicate id by minting a fresh
+ * one — that turns one task moved by two people into a phantom second task. Yjs has no atomic
+ * move (a move is delete+insert), so concurrent drags produce exactly this duplicate.
+ * Walks in reverse so deletions don't shift indices still to be visited; since reverse order meets
+ * the LAST occurrence first, decrementing `remaining` leaves the earliest one standing.
+ */
+function pruneRefs(doc: Y.Doc, orphans: Set<string>, remaining: Map<string, number>): void {
   const frag = doc.getXmlFragment(FRAGMENT);
   const walk = (node: Y.XmlElement | Y.XmlFragment): void => {
     for (let i = node.length - 1; i >= 0; i--) {
       const child = node.get(i);
       if (!(child instanceof Y.XmlElement)) continue;
-      if (child.nodeName === 'taskItem' && orphanIds.has(child.getAttribute('id') ?? '')) node.delete(i, 1);
-      else walk(child);
+      if (child.nodeName !== 'taskItem') {
+        walk(child);
+        continue;
+      }
+      const id = child.getAttribute('id');
+      if (!id || orphans.has(id)) {
+        node.delete(i, 1);
+        continue;
+      }
+      const n = remaining.get(id) ?? 1;
+      if (n > 1) {
+        remaining.set(id, n - 1);
+        node.delete(i, 1);
+      }
     }
   };
   walk(frag);
@@ -404,15 +434,18 @@ export async function reconcileBoard(tabId: string): Promise<void> {
     .from(schema.tasks)
     .where(and(eq(schema.tasks.homeTabId, tabId), isNull(schema.tasks.deletedAt)));
   const liveIds = new Set(liveRows.map((r) => r.id));
-  const docIds = collectDocRefIds(room.doc);
+  const { counts, nullIds } = collectDocRefs(room.doc);
 
-  const missing = [...liveIds].filter((id) => !docIds.has(id));
-  const orphans = new Set([...docIds].filter((id) => !liveIds.has(id)));
+  const missing = [...liveIds].filter((id) => !counts.has(id));
+  const orphans = new Set([...counts.keys()].filter((id) => !liveIds.has(id)));
+  // Ids appearing more than once; pruneRefs drops all but the earliest of each.
+  const remaining = new Map([...counts].filter(([, n]) => n > 1));
+  const strays = nullIds > 0 || remaining.size > 0;
 
-  if (missing.length || orphans.size) {
+  if (missing.length || orphans.size || strays) {
     Y.transact(room.doc, () => {
       if (missing.length) appendRefs(room.doc, missing);
-      if (orphans.size) pruneRefs(room.doc, orphans);
+      if (orphans.size || strays) pruneRefs(room.doc, orphans, remaining);
     });
     // doc.on('update') already fanned the change to connected editors; make sure it's durable now.
     await persist(room);
