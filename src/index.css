@@ -2710,3 +2710,54 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* Outline mode indents by real tree depth; the rule is the same containment cue the doc uses. */
 .list-outline .task-row.is-sub { border-left: 1.5px solid var(--rule, rgba(0, 0, 0, 0.09)); }
+
+/* Kanban scope switch (SUBTASKS_PLAN D10) — "All work" vs "Commitments". Reuses the List mode pill. */
+.kb-scope { display: flex; align-items: center; gap: 2px; margin: 0 0 10px; }
+.kb-scope-note { margin-left: 8px; font-size: 0.78rem; }
+
+/* The cascade offer. Bottom-centre, above the mobile nav; quiet enough to ignore, specific enough
+   to act on. Never a modal — the parent's status change already went through (SUBTASKS_PLAN D5). */
+.cascade-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 12px 10px 16px;
+  border-radius: var(--r-md, 10px);
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+  font-size: 0.88rem;
+}
+.cascade-toast-text { min-width: 0; }
+.cascade-toast-text strong { font-weight: 600; }
+.cascade-toast-actions { display: flex; gap: 6px; flex: none; }
+.cascade-toast .btn-quiet,
+.cascade-toast .btn-solid {
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cascade-toast .btn-quiet { background: transparent; color: var(--bg); opacity: 0.7; }
+.cascade-toast .btn-quiet:hover { opacity: 1; }
+.cascade-toast .btn-solid { background: var(--bg); color: var(--ink); font-weight: 500; }
+@media (max-width: 640px) {
+  .cascade-toast { bottom: 72px; flex-direction: column; align-items: stretch; gap: 8px; }
+}
+
+/* Inline sub-task list on a Kanban card. Only reachable in the Commitments scope — in "All work"
+   the children already have cards of their own and this would duplicate them (SUBTASKS_PLAN P6). */
+.task-card-expand { background: none; border: 0; padding: 0; cursor: pointer; display: block; text-align: left; }
+.task-card-subs { list-style: none; margin: 6px 0 2px; padding: 0 0 0 2px; display: grid; gap: 3px; }
+.task-card-sub { display: flex; align-items: center; gap: 6px; font-size: 0.82em; color: var(--ink-mute); min-width: 0; }
+.task-card-sub-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-card-sub.status-done .task-card-sub-text,
+.task-card-sub.status-cancelled .task-card-sub-text { text-decoration: line-through; opacity: 0.7; }

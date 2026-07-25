@@ -163,6 +163,10 @@ interface Actions {
   /** Reorder and/or re-parent by dropping between two known neighbours. One row changes. */
   moveTask(id: ID, to: { parentTaskId?: ID | undefined; before?: ID; after?: ID }): void;
   setTaskStatus(id: ID, status: TaskStatus): void;
+  /** Accept the offer to mark a completed parent's open sub-tasks done too (SUBTASKS_PLAN D5). */
+  applyCascadeDone(): void;
+  /** Decline it — the parent stays done and its sub-tasks stay as they are. */
+  dismissCascade(): void;
   setTaskAssignee(id: ID, assigneeId: ID | undefined): void;
   toggleTaskDone(id: ID): void;
   deleteTask(id: ID): void;
@@ -246,6 +250,7 @@ function makeInitial(): RootState {
     starredRowOrder: [sampleTabId],
     activeTabId: null,
     boardView: 'doc',
+    pendingCascade: null,
     plannerOpen: false,
     plannerDate: todayISO(),
     plannerMode: 'day',
@@ -257,6 +262,24 @@ export const useStore = create<RootState & Actions>()((set, get) => {
   // Patch one task in place, no-op if it no longer exists.
   const patchTask = (id: ID, patch: Partial<Task>) =>
     set((s) => (s.tasks[id] ? { tasks: { ...s.tasks, [id]: { ...s.tasks[id], ...patch } } } : s));
+
+  /**
+   * Completing a parent that still has open sub-tasks: warn, never block (SUBTASKS_PLAN D5).
+   *
+   * The parent's status is NOT derived from its children — a deliverable can legitimately be done
+   * while a follow-up sits open beneath it, and deriving it would also route around the
+   * requireReview approval gate. So the parent's own status is already applied by the time this
+   * runs; all this does is offer to sweep the rest, which is the thing everyone wants and almost
+   * nobody implements. Declining is a real answer, not a nag to be repeated.
+   */
+  const offerCascade = (id: ID, next: TaskStatus): void => {
+    if (next !== 'done') return;
+    const open = descendantsOf(get().tasks, id).filter((t) => {
+      const st = t.status ?? 'todo';
+      return st !== 'done' && st !== 'cancelled';
+    });
+    if (open.length) set({ pendingCascade: { taskId: id, count: open.length } });
+  };
 
   // On a board with requireReview set, `done` is reachable only via the in_review → done approval —
   // the server rejects a direct jump (auth/boards.ts). Mirror that here so "mark done" instead
@@ -401,6 +424,21 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         // space / home selection also leaves the calendar (they share the main content area).
         set({ activeTabId: id, boardView: 'doc', plannerOpen: false });
       },
+      applyCascadeDone() {
+        const pending = get().pendingCascade;
+        if (!pending) return;
+        // Only the OPEN ones — a cancelled sub-task was deliberately taken off the table, and
+        // sweeping it to done would rewrite that decision.
+        for (const t of descendantsOf(get().tasks, pending.taskId)) {
+          const st = t.status ?? 'todo';
+          if (st === 'done' || st === 'cancelled') continue;
+          patchTask(t.id, { status: 'done', done: true });
+        }
+        set({ pendingCascade: null });
+      },
+      dismissCascade() {
+        set({ pendingCascade: null });
+      },
       setBoardView(view) {
         set({ boardView: view });
       },
@@ -474,6 +512,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       setTaskStatus(id, status) {
         const next = reviewGate(id, status);
         patchTask(id, { status: next, done: next === 'done' });
+        offerCascade(id, next);
       },
       setTaskAssignee(id, assigneeId) {
         patchTask(id, { assigneeId });
@@ -484,6 +523,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         const target: TaskStatus = (t.status ?? 'todo') === 'done' ? 'todo' : 'done';
         const next = reviewGate(id, target);
         patchTask(id, { status: next, done: next === 'done' });
+        offerCascade(id, next);
       },
       deleteTask(id) {
         // The SUBTREE goes with it (SUBTASKS_PLAN D7) — a parent is a commitment and its sub-tasks

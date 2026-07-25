@@ -163,6 +163,12 @@ export interface RootState {
   activeTabId: ID | null;
   /** Which view the open board renders (doc/list/kanban/calendar). */
   boardView: BoardView;
+  /**
+   * A parent was just marked done while sub-tasks were still open. Holds the offer to sweep them
+   * too (SUBTASKS_PLAN D5) until the user accepts or declines. Never blocks the parent's own status
+   * change — that has already been applied by the time this is set.
+   */
+  pendingCascade: { taskId: ID; count: number } | null;
   /** Planner UI state. */
   plannerOpen: boolean;
   plannerDate: string; // 'YYYY-MM-DD' cursor
