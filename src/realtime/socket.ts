@@ -145,7 +145,7 @@ function applyRemote(mutate: () => void): void {
   }
 }
 
-const TASK_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'position', 'parentTaskId', 'homeTabId', 'owner'] as const;
+const TASK_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'rank', 'parentTaskId', 'homeTabId', 'owner'] as const;
 
 /** Pick known Task fields from a wire patch; null → undefined (a cleared optional field). */
 function normalizeTaskPatch(raw: unknown): Partial<Task> | null {

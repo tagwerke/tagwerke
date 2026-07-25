@@ -45,9 +45,9 @@ export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancel
 export interface Task {
   id: ID;
   homeTabId: ID;
-  // Sub-task nesting (TASKS_AS_ENTITIES.md, P2 node model): the parent task id, or undefined for a
-  // top-level task. Same-board only. Set directly by Tab/Shift-Tab in the editor; the doc renders
-  // indentation from it (the doc itself is a flat sequence of id-only task refs).
+  // Sub-task nesting (SUBTASKS_PLAN D1): the parent task id, or undefined for a top-level task.
+  // Same-board only. The ROW owns the tree — the document references root tasks only, and a
+  // parent's node view renders its subtree from these rows.
   parentTaskId?: ID;
   text: string;
   // P0: status is authoritative. Optional during the transition; slice 2 makes it required
@@ -62,6 +62,11 @@ export interface Task {
   approvedAt?: number;
   date?: string;
   priority?: 1 | 2 | 3;
+  // Sibling order within `parentTaskId` — a fractional index key compared lexicographically
+  // (shared/rank.ts). ONE order for every view (SUBTASKS_PLAN D4). Absent only for a row written
+  // before the backfill; `compareRank` sorts those last.
+  rank?: string;
+  /** @deprecated Superseded by `rank`. No longer written; removed in SUBTASKS_PLAN P7. */
   position?: number;
   owner?: string; // legacy display fallback; superseded by assigneeId
   done?: boolean; // deprecated mirror of status==='done'; kept for one release

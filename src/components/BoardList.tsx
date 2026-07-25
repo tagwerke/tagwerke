@@ -3,20 +3,19 @@
 // write straight through the store (and sync back into the doc). No new data.
 
 import { useMemo, useState } from 'react';
-import { useTasksForTab } from '../store';
+import { useBoardOutline } from '../store';
 import { STATUS_ORDER, STATUS_LABEL } from './StatusControl';
 import { TaskRow } from './common/TaskRow';
 import type { Task, TaskStatus } from '../types';
 
 export function BoardList({ tabId }: { tabId: string }) {
-  const tasks = useTasksForTab(tabId);
+  const { list: tasks } = useBoardOutline(tabId);
   const [collapsed, setCollapsed] = useState<Set<TaskStatus>>(new Set());
 
   const byStatus = useMemo(() => {
     const m = new Map<TaskStatus, Task[]>();
     for (const s of STATUS_ORDER) m.set(s, []);
     for (const t of tasks) m.get(t.status ?? 'todo')!.push(t);
-    for (const s of STATUS_ORDER) m.get(s)!.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     return m;
   }, [tasks]);
 

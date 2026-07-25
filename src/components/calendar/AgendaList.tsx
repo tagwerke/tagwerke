@@ -3,7 +3,7 @@
 // here (full task editing happens on the board).
 
 import { useMemo } from 'react';
-import { useTasksForTab } from '../../store';
+import { useBoardOutline } from '../../store';
 import { matchesBlockFilter } from '../../util/filter';
 import { PlannerTaskLine } from '../planner/PlannerTaskLine';
 import type { BlockFilter, ID } from '../../types';
@@ -11,11 +11,9 @@ import type { BlockFilter, ID } from '../../types';
 const MAX_LINES = 8;
 
 export function AgendaList({ tabId, filter }: { tabId: ID; filter?: BlockFilter | null }) {
-  const allTasks = useTasksForTab(tabId);
-  const tasks = useMemo(
-    () => allTasks.filter((t) => matchesBlockFilter(t, filter)).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
-    [allTasks, filter],
-  );
+  // Already in the board's outline order, so filtering preserves it — no sort needed.
+  const { list: allTasks } = useBoardOutline(tabId);
+  const tasks = useMemo(() => allTasks.filter((t) => matchesBlockFilter(t, filter)), [allTasks, filter]);
 
   return (
     <ul className="cal-agenda">

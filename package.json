@@ -23,6 +23,8 @@
     "seed-users": "tsx server/scripts/seed-users.ts",
     "reset-pw": "tsx server/scripts/reset-password.ts",
     "prune-audit": "tsx server/scripts/prune-audit.ts",
+    "verify:rank": "tsx server/scripts/verify-rank.ts",
+    "backfill:task-rank": "tsx server/scripts/backfill-task-rank.ts",
     "erase-user": "tsx server/scripts/erase-user.ts",
     "export-user": "tsx server/scripts/export-user.ts"
   },

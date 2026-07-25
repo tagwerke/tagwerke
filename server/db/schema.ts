@@ -17,6 +17,8 @@ import {
   jsonb,
   timestamp,
   primaryKey,
+  foreignKey,
+  unique,
   index,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
@@ -137,9 +139,11 @@ export const tasks = pgTable(
     homeTabId: text('home_tab_id')
       .notNull()
       .references(() => tabs.id, { onDelete: 'cascade' }),
-    // Sub-task nesting (see internal/planning/TASKS_AS_ENTITIES.md D6): the parent task, or null
-    // for a top-level task. Same-board only — enforced in app logic, like assigneeId. DERIVED
-    // from doc taskList nesting during the server reconcile pass; other views group by it.
+    // Sub-task nesting (SUBTASKS_PLAN D1): the parent task, or null for a top-level task. The ROW
+    // is authoritative for the tree — this is NOT derived from the document. Under D2 the doc
+    // references root tasks only; a child has no node in the document at all, and the parent's
+    // node view renders its subtree from these rows. Same-board nesting is enforced by the
+    // composite FK below, cycles + depth by parentAllowed() in routes/tasks.ts.
     // Self-FK set-null so hard-deleting a parent (retention prune) orphans children to top-level
     // rather than cascading them away.
     parentTaskId: text('parent_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
@@ -157,7 +161,16 @@ export const tasks = pgTable(
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     date: text('date'),
     priority: smallint('priority'),
-    // P0: explicit order — doc order ≠ Kanban/My-Tasks order. Backfilled 0; editor assigns.
+    // Sibling order within `parent_task_id` — a fractional index key (see shared/rank.ts), compared
+    // lexicographically. ONE order for every view (SUBTASKS_PLAN D4): the doc, the outline, and each
+    // Kanban column all read it, the last via a materialized path built client-side from the
+    // ancestors' ranks. Declared COLLATE "C" in the migration so the DB's idea of string order
+    // matches the client's exactly — a locale collation folds case and would disagree.
+    // Nullable only until the backfill has run; treat a missing rank as "sorts last".
+    rank: text('rank'),
+    // DEPRECATED (SUBTASKS_PLAN D4): superseded by `rank`. No longer written; the column survives
+    // one release so a rolled-back client keeps working, then P7 drops it. It was only ever a
+    // Kanban column-append counter — there has never been manual within-column ordering to lose.
     position: integer('position').notNull().default(0),
     // owner: legacy free-text display fallback ([Name] token); superseded by assigneeId.
     owner: text('owner'),
@@ -179,6 +192,23 @@ export const tasks = pgTable(
   (t) => [
     index('tasks_home_tab_idx').on(t.homeTabId),
     index('tasks_assignee_idx').on(t.assigneeId),
+    // "does this task have children" / "children of X" — asked once per task by every tree render,
+    // and by the subtree walks in delete/restore. Was a seq scan before SUBTASKS_PLAN.
+    index('tasks_parent_idx').on(t.parentTaskId),
+    // The ordered sibling read: children of X on board B, in rank order, straight off the index.
+    index('tasks_tree_idx').on(t.homeTabId, t.parentTaskId, t.rank),
+    // Target for the composite FK below. Trivially satisfied (id is already the PK) — it exists
+    // only so Postgres will accept (parent_task_id, home_tab_id) as a foreign key.
+    unique('tasks_id_home_uniq').on(t.id, t.homeTabId),
+    // SUBTASKS_PLAN D8: a parent must live on the SAME board. Under MATCH SIMPLE (the default) a
+    // composite FK is not enforced when any of its columns is null, so a root task — with a null
+    // parent_task_id — passes freely. That is exactly the semantics we want, and it moves the
+    // same-board rule out of app logic and into the database.
+    foreignKey({
+      name: 'tasks_parent_same_board',
+      columns: [t.parentTaskId, t.homeTabId],
+      foreignColumns: [t.id, t.homeTabId],
+    }),
   ],
 );
 

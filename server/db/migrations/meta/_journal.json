@@ -183,6 +183,13 @@
       "when": 1784652994201,
       "tag": "0025_drop_doc_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785009653082,
+      "tag": "0026_task_rank_and_tree",
+      "breakpoints": true
     }
   ]
 }

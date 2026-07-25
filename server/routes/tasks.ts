@@ -7,6 +7,11 @@ import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, boar
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
 import { notify } from '../lib/notify.ts';
 import { reconcileBoard } from '../realtime/ydoc.ts';
+import { isValidRank, rankAfter } from '../../shared/rank.ts';
+
+/** Sibling order key. Validated on the way in — a malformed rank would corrupt every view's order
+ *  silently, and it costs nothing to reject it at the edge. See shared/rank.ts. */
+const rankField = z.string().refine(isValidRank, 'malformed rank').nullable().optional();
 
 /** Short, single-line label of a task for a notification body. */
 function taskLabel(text: string | null | undefined): string {
@@ -56,7 +61,8 @@ const upsertBody = z.object({
   reviewerId: z.string().nullable().optional(),
   date: z.string().nullable().optional(),
   priority: priority.nullable().optional(),
-  position: z.number().int().optional(),
+  position: z.number().int().optional(), // DEPRECATED: superseded by `rank`; accepted for older clients
+  rank: rankField,
   parentTaskId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
   done: z.boolean().optional(),
@@ -69,7 +75,8 @@ const patchBody = z.object({
   reviewerId: z.string().nullable().optional(),
   date: z.string().nullable().optional(),
   priority: priority.nullable().optional(),
-  position: z.number().int().optional(),
+  position: z.number().int().optional(), // DEPRECATED: superseded by `rank`; accepted for older clients
+  rank: rankField,
   parentTaskId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
   done: z.boolean().optional(),
@@ -88,6 +95,29 @@ const orphanBody = z.object({
 async function assigneeAllowed(homeTabId: string, assigneeId: string | null | undefined): Promise<boolean> {
   if (assigneeId == null) return true;
   return (await boardRole(assigneeId, homeTabId)) != null;
+}
+
+/**
+ * The rank a new task should get when the client didn't supply one: after the current last sibling.
+ * Keeps the invariant "every row has a rank" true without a repair pass, so an older client, the
+ * server-side doc backfill, or an import can all create tasks that still land in a sensible place.
+ * The ORDER BY is safe because the column is COLLATE "C" — the DB's string order is byte order,
+ * the same order shared/rank.ts assumes.
+ */
+async function nextSiblingRank(homeTabId: string, parentTaskId: string | null): Promise<string> {
+  const rows = await db
+    .select({ rank: schema.tasks.rank })
+    .from(schema.tasks)
+    .where(
+      and(
+        eq(schema.tasks.homeTabId, homeTabId),
+        parentTaskId == null ? isNull(schema.tasks.parentTaskId) : eq(schema.tasks.parentTaskId, parentTaskId),
+        isNotNull(schema.tasks.rank),
+      ),
+    )
+    .orderBy(desc(schema.tasks.rank))
+    .limit(1);
+  return rankAfter(rows[0]?.rank ?? null);
 }
 
 /** True when `parentTaskId` is null/undefined, or names a DIFFERENT task on the same board.
@@ -142,6 +172,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           && (await boardRequiresReview(b.data.homeTabId)))
         return reply.code(403).send({ error: 'this board requires review before a task can be marked done' });
       const hasTitle = b.data.text.trim().length > 0;
+      // Sibling order: an explicit rank wins; otherwise KEEP the existing one (a PUT that omits it
+      // must never wipe the ordering — the resurrect path and older clients both do that); and only
+      // if there is none at all do we assign an append-position key.
+      const rank = b.data.rank ?? before?.rank ?? (await nextSiblingRank(b.data.homeTabId, b.data.parentTaskId ?? null));
       const values = {
         id,
         createdBy: userId,
@@ -153,6 +187,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         date: b.data.date ?? null,
         priority: b.data.priority ?? null,
         position: b.data.position ?? 0,
+        rank,
         parentTaskId: b.data.parentTaskId ?? null,
         owner: b.data.owner ?? null,
         done: status === 'done',
@@ -168,6 +203,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         date: values.date,
         priority: values.priority,
         position: values.position,
+        rank: values.rank,
         parentTaskId: values.parentTaskId,
         owner: values.owner,
         done: values.done,
@@ -233,6 +269,11 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       if (approving) {
         set.approvedBy = req.user!.id;
         set.approvedAt = new Date();
+      }
+      // Re-parented without a new rank: the old key was ordered against a DIFFERENT set of
+      // siblings, so it means nothing under the new parent. Give it an append position there.
+      if (b.data.parentTaskId !== undefined && b.data.rank === undefined && b.data.parentTaskId !== before.parentTaskId) {
+        set.rank = await nextSiblingRank(homeTabId, b.data.parentTaskId ?? null);
       }
       await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
 

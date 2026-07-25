@@ -6,9 +6,121 @@ import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { dlog, sid } from './util/dlog';
 import { api, enqueue } from './api/client';
+import { compareRank, rankAfter, rankBetween } from '../shared/rank';
+import { MAX_TASK_DEPTH } from '../shared/tree';
 
 export function nextPosition(orders: number[]): number {
   return orders.length ? Math.max(...orders) + 1 : 0;
+}
+
+/** A task's siblings — same board, same parent — in rank order. The unit every reorder works over. */
+export function siblingsOf(tasks: Record<ID, Task>, homeTabId: ID, parentTaskId: ID | undefined): Task[] {
+  const key = parentTaskId ?? null;
+  return Object.values(tasks)
+    .filter((t) => t.homeTabId === homeTabId && (t.parentTaskId ?? null) === key)
+    .sort(compareRank);
+}
+
+/** Append-position rank for a new task among its siblings (SUBTASKS_PLAN D4). */
+function nextRank(tasks: Record<ID, Task>, homeTabId: ID, parentTaskId: ID | undefined): string {
+  const ranked = siblingsOf(tasks, homeTabId, parentTaskId).filter((t) => t.rank);
+  return rankAfter(ranked.length ? ranked[ranked.length - 1].rank : null);
+}
+
+/**
+ * A board's tasks in depth-first OUTLINE order: parents before their children, siblings by rank.
+ *
+ * This is the board's one true order (SUBTASKS_PLAN D4). The doc renders it, List's outline mode
+ * renders it, and each Kanban column sorts its own subset by it — which is what makes a family
+ * cluster inside a column instead of scattering, without the column needing to know anything about
+ * the tree. Returns an index map alongside the list so a filtered view can sort by `order.get(id)`.
+ *
+ * A child whose parent is missing from the board (trashed, or a dropped write) is treated as a
+ * root rather than dropped — an orphan must still render somewhere. Genuine cycles are caught by
+ * the `seen` guard and appended at the end.
+ */
+export function outlineOrder(tasks: Record<ID, Task>, tabId: ID): { list: Task[]; order: Map<ID, number> } {
+  const mine = Object.values(tasks).filter((t) => t.homeTabId === tabId);
+  const present = new Set(mine.map((t) => t.id));
+  const byParent = new Map<ID | null, Task[]>();
+  for (const t of mine) {
+    // An unknown parent means "no parent here" — bucket the task as a root so it stays visible.
+    const key = t.parentTaskId && present.has(t.parentTaskId) ? t.parentTaskId : null;
+    const list = byParent.get(key) ?? [];
+    list.push(t);
+    byParent.set(key, list);
+  }
+  for (const list of byParent.values()) list.sort(compareRank);
+
+  const out: Task[] = [];
+  const seen = new Set<ID>();
+  const walk = (parent: ID | null, depth: number): void => {
+    if (depth > MAX_TASK_DEPTH + 1) return; // corruption guard; the server bounds real depth
+    for (const t of byParent.get(parent) ?? []) {
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      out.push(t);
+      walk(t.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  for (const t of mine) if (!seen.has(t.id)) out.push(t); // cycle survivors
+
+  const order = new Map<ID, number>();
+  out.forEach((t, i) => order.set(t.id, i));
+  return { list: out, order };
+}
+
+/** How deeply `id` is nested (0 = a root). Walks ancestors; bounded, so a cycle can't hang it. */
+export function taskDepth(tasks: Record<ID, Task>, id: ID): number {
+  let depth = 0;
+  let cur = tasks[id]?.parentTaskId;
+  const seen = new Set<ID>([id]);
+  while (cur && !seen.has(cur) && depth <= MAX_TASK_DEPTH + 1) {
+    seen.add(cur);
+    depth++;
+    cur = tasks[cur]?.parentTaskId;
+  }
+  return depth;
+}
+
+/** Ancestors of `id`, nearest parent first. Powers the `Parent › Child` breadcrumb. */
+export function ancestorsOf(tasks: Record<ID, Task>, id: ID): Task[] {
+  const out: Task[] = [];
+  const seen = new Set<ID>([id]);
+  let cur = tasks[id]?.parentTaskId;
+  while (cur && !seen.has(cur) && out.length <= MAX_TASK_DEPTH + 1) {
+    seen.add(cur);
+    const parent = tasks[cur];
+    if (!parent) break;
+    out.push(parent);
+    cur = parent.parentTaskId;
+  }
+  return out;
+}
+
+/** Direct children of `id`, in rank order. */
+export function childrenOf(tasks: Record<ID, Task>, id: ID): Task[] {
+  return Object.values(tasks)
+    .filter((t) => t.parentTaskId === id)
+    .sort(compareRank);
+}
+
+/** Every descendant of `id` (children, grandchildren, …) in outline order. */
+export function descendantsOf(tasks: Record<ID, Task>, id: ID): Task[] {
+  const out: Task[] = [];
+  const seen = new Set<ID>([id]);
+  const walk = (parentId: ID, depth: number): void => {
+    if (depth > MAX_TASK_DEPTH + 1) return;
+    for (const child of childrenOf(tasks, parentId)) {
+      if (seen.has(child.id)) continue;
+      seen.add(child.id);
+      out.push(child);
+      walk(child.id, depth + 1);
+    }
+  };
+  walk(id, 0);
+  return out;
 }
 
 interface Actions {
@@ -28,9 +140,12 @@ interface Actions {
   setBoardView(view: BoardView): void;
 
   upsertTask(t: Partial<Task> & { id: ID; homeTabId: ID; text: string }): Task;
-  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'reviewerId' | 'position'>>): void;
+  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'reviewerId' | 'position' | 'rank'>>): void;
   setTaskText(id: ID, text: string): void;
-  setTaskParent(id: ID, parentTaskId: ID | undefined): void;
+  /** Re-parent a task. Always assigns a rank in the new sibling group (append unless given). */
+  setTaskParent(id: ID, parentTaskId: ID | undefined, rank?: string): void;
+  /** Reorder and/or re-parent by dropping between two known neighbours. One row changes. */
+  moveTask(id: ID, to: { parentTaskId?: ID | undefined; before?: ID; after?: ID }): void;
   setTaskStatus(id: ID, status: TaskStatus): void;
   setTaskAssignee(id: ID, assigneeId: ID | undefined): void;
   toggleTaskDone(id: ID): void;
@@ -293,6 +408,12 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           owner: meta.owner ?? existing?.owner,
           position: meta.position ?? existing?.position ?? 0,
           done: status === 'done',
+          // Every task gets a sibling rank at birth, so nothing ever renders in an undefined
+          // order. An explicit rank wins; an existing one is preserved; otherwise append.
+          rank:
+            meta.rank ??
+            existing?.rank ??
+            nextRank(get().tasks, homeTabId, meta.parentTaskId ?? existing?.parentTaskId),
         };
         set((s) => ({ tasks: { ...s.tasks, [id]: merged } }));
         return merged;
@@ -305,9 +426,34 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       setTaskText(id, text) {
         patchTask(id, { text });
       },
-      setTaskParent(id, parentTaskId) {
-        // parentTaskId is a normal Task field; persist.ts diffs it and emits the PATCH.
-        patchTask(id, { parentTaskId });
+      setTaskParent(id, parentTaskId, rank) {
+        // Both fields move together: a rank is only meaningful against ONE set of siblings, so
+        // carrying the old key across a re-parent would place the task arbitrarily under its new
+        // parent. Caller may pass an explicit rank (a drop between two known neighbours); with none
+        // we append. persist.ts diffs both and emits a single PATCH.
+        const t = get().tasks[id];
+        if (!t) return;
+        patchTask(id, { parentTaskId, rank: rank ?? nextRank(get().tasks, t.homeTabId, parentTaskId) });
+      },
+      moveTask(id, { parentTaskId, before, after }) {
+        // Reorder / re-parent in one write. `before`/`after` are the ids this task is being dropped
+        // between; the new key is computed strictly between their ranks, so ONE row changes no
+        // matter how long the list is — that is the whole point of fractional keys (D4).
+        const tasks = get().tasks;
+        const t = tasks[id];
+        if (!t) return;
+        const parent = parentTaskId === undefined ? t.parentTaskId : parentTaskId;
+        const lo = before ? tasks[before]?.rank ?? null : null;
+        const hi = after ? tasks[after]?.rank ?? null : null;
+        let rank: string;
+        try {
+          rank = rankBetween(lo, hi);
+        } catch {
+          // Neighbours out of order or unranked (a pre-backfill row) — fall back to appending
+          // rather than writing a key that would sort somewhere unpredictable.
+          rank = nextRank(tasks, t.homeTabId, parent);
+        }
+        patchTask(id, { parentTaskId: parent, rank });
       },
       setTaskStatus(id, status) {
         const next = reviewGate(id, status);
@@ -506,6 +652,16 @@ export function useTasksForTab(tabId: ID): Task[] {
   // update loop).
   const tasks = useStore((s) => s.tasks);
   return useMemo(() => Object.values(tasks).filter((t) => t.homeTabId === tabId), [tasks, tabId]);
+}
+
+/**
+ * A board's tasks in outline order (SUBTASKS_PLAN D4), plus the id→index map a filtered view sorts
+ * its own subset by. Any view that shows a slice of a board — a Kanban column, a status section, a
+ * filtered agenda — should read `order` rather than inventing an ordering of its own.
+ */
+export function useBoardOutline(tabId: ID): { list: Task[]; order: Map<ID, number> } {
+  const tasks = useStore((s) => s.tasks);
+  return useMemo(() => outlineOrder(tasks, tabId), [tasks, tabId]);
 }
 
 export function getTask(id: ID): Task | undefined {

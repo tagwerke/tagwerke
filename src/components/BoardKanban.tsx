@@ -1,10 +1,11 @@
-// Kanban view: status columns over the same task entities. Drag a card to another column to
-// change its status (it appends to the end via `position`, which is already modeled + persisted).
-// Fine-grained within-column reordering is a later refinement. The "In review" column is
-// highlighted to surface the accountability sign-off step.
+// Kanban view: status columns over the same task entities. Drag a card to another column to change
+// its status. Cards within a column sit in OUTLINE order (SUBTASKS_PLAN D4) — the board's one true
+// order, so a family clusters together inside a column instead of scattering. There is deliberately
+// no within-column reordering: position in a column is a property of the tree, not of the column.
+// The "In review" column is highlighted to surface the accountability sign-off step.
 
 import { useMemo, useState } from 'react';
-import { useTasksForTab, useStore } from '../store';
+import { useBoardOutline, useStore } from '../store';
 import { STATUS_LABEL } from './StatusControl';
 import { TaskCard } from './common/TaskCard';
 import type { Task, TaskStatus } from '../types';
@@ -12,7 +13,9 @@ import type { Task, TaskStatus } from '../types';
 const COLUMNS: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done'];
 
 export function BoardKanban({ tabId }: { tabId: string }) {
-  const tasks = useTasksForTab(tabId);
+  // Outline order in, outline order out: bucketing preserves it, so each column shows its cards
+  // in the board's one true order and families stay adjacent.
+  const { list: tasks } = useBoardOutline(tabId);
   const setTaskMeta = useStore((s) => s.setTaskMeta);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
 
@@ -23,7 +26,6 @@ export function BoardKanban({ tabId }: { tabId: string }) {
       const s = (t.status ?? 'todo') as TaskStatus;
       if (m.has(s)) m.get(s)!.push(t);
     }
-    for (const c of COLUMNS) m.get(c)!.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     return m;
   }, [tasks]);
 
@@ -32,9 +34,9 @@ export function BoardKanban({ tabId }: { tabId: string }) {
     setDragOver(null);
     const id = e.dataTransfer.getData('text/task');
     if (!id) return;
-    const col = byStatus.get(status)!;
-    const maxPos = col.reduce((mx, t) => Math.max(mx, t.position ?? 0), -1);
-    setTaskMeta(id, { status, position: maxPos + 1 });
+    // Status only. A card's place in a column comes from its position in the tree (SUBTASKS_PLAN
+    // D4) — there is one order across every view, and dropping into a column doesn't reorder it.
+    setTaskMeta(id, { status });
   };
 
   return (

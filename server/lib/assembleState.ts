@@ -82,7 +82,8 @@ export async function assembleState(userId: string) {
       text: t.text,
       status: t.status,
       done: t.done, // back-compat mirror during the transition
-      position: t.position,
+      position: t.position, // DEPRECATED: superseded by `rank` (SUBTASKS_PLAN D4)
+      ...(t.rank != null ? { rank: t.rank } : {}),
       createdAt: t.createdAt instanceof Date ? t.createdAt.getTime() : undefined,
       updatedAt: t.updatedAt instanceof Date ? t.updatedAt.getTime() : undefined,
       ...(t.assigneeId != null ? { assigneeId: t.assigneeId } : {}),
