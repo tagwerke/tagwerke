@@ -235,6 +235,29 @@ export const api = {
     list: (tabId: ID) => req<{ tasks: TrashedTask[] }>(`/api/tabs/${tabId}/trash`),
     restore: (id: ID) => req(`/api/tasks/${id}/restore`, { method: 'POST' }),
   },
+  // A CSV import is a batch, blocking operation with a real result to show — direct fetch,
+  // like admin.* below, not the optimistic-outbox path tasks/tabs use for single-entity edits.
+  imports: {
+    csv: (b: {
+      boardId: ID;
+      projectId: ID;
+      boardName: string;
+      position: number;
+      rows: Array<{
+        id: ID;
+        title: string;
+        status: TaskStatus;
+        assigneeEmail?: string | null;
+        assigneeRaw?: string | null;
+        priority?: 1 | 2 | 3 | null;
+        date?: string | null;
+      }>;
+    }) =>
+      req<{ ok: boolean; tabId: ID; created: number; matchedAssignees: number; unmatchedAssignees: number }>(
+        '/api/imports/csv',
+        { method: 'POST', body: JSON.stringify(b) },
+      ),
+  },
   admin: {
     users: () => req<{ users: AdminUser[] }>('/api/admin/users'),
     invites: () => req<{ invites: AdminInvite[] }>('/api/admin/invites'),

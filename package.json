@@ -51,6 +51,7 @@
     "nodemailer": "^9.0.2",
     "openid-client": "^6.8.4",
     "otpauth": "^9.5.1",
+    "papaparse": "^5.5.4",
     "pg": "^8.21.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.6",
@@ -67,6 +68,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.12.3",
+    "@types/papaparse": "^5.5.2",
     "@types/pg": "^8.20.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

@@ -34,6 +34,10 @@ export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
           </button>
         </div>
         <span className="topbar-divider" aria-hidden />
+        <button className="btn ghost" onClick={() => onOpen('import')} title="Import CSV">
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden><path d="M8 10V2m0 0L5 5m3-3l3 3M3 11v2a1 1 0 001 1h8a1 1 0 001-1v-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+          <span>Import CSV</span>
+        </button>
         <button className="btn primary btn-new-tab" onClick={() => onOpen('new')}>
           <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden><path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
           <span>New tab</span>

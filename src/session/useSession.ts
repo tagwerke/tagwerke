@@ -89,7 +89,7 @@ function drainForRead(): Promise<void> {
  *  A late edit made DURING the read is still covered: the post-fetch flush + hydrate + baseline run
  *  as one synchronous block (no `await`) so nothing interleaves, and any task with an un-acked write
  *  is preserved rather than reverted — the same belt-and-suspenders `applyRemote` (socket.ts) has. */
-async function repull(): Promise<void> {
+export async function repull(): Promise<void> {
   flush(); // debounced edits → durable outbox, so the drain below actually waits for them
   await drainForRead(); // read-your-writes: let our own writes commit before we read
 

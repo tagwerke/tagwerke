@@ -10,6 +10,7 @@ import { Board } from './components/Board';
 import { TabView } from './components/TabView';
 import { CalendarView } from './components/calendar/CalendarView';
 import { NewTabDialog } from './components/NewTabDialog';
+import { ImportCsvSheet } from './components/ImportCsvSheet';
 import { FilterPanel } from './components/FilterPanel';
 import { SearchPalette } from './components/SearchPalette';
 import { AdminPage } from './components/AdminPage';
@@ -19,7 +20,7 @@ import { NotificationsPanel } from './components/NotificationsPanel';
 import { InfoPane } from './components/InfoPane';
 import { usePath, boardPath, parseBoardId, isCalendarPath, CALENDAR_PATH } from './util/router';
 
-export type Panel = 'new' | 'filter' | 'search' | 'security' | 'more' | 'notifications' | 'help';
+export type Panel = 'new' | 'import' | 'filter' | 'search' | 'security' | 'more' | 'notifications' | 'help';
 
 export default function App() {
   const status = useSession((s) => s.status);
@@ -123,6 +124,7 @@ function Workspace() {
       <MobileNav onOpen={setPanel} />
 
       {panel === 'new' && <NewTabDialog onClose={closePanel} />}
+      {panel === 'import' && <ImportCsvSheet onClose={closePanel} />}
       {panel === 'filter' && <FilterPanel onClose={closePanel} />}
       {panel === 'search' && <SearchPalette onClose={closePanel} />}
       {panel === 'security' && <SecurityPanel onClose={closePanel} />}

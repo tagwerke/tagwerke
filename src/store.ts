@@ -7,7 +7,7 @@ import { todayISO } from './util/dates';
 import { dlog, sid } from './util/dlog';
 import { api, enqueue } from './api/client';
 
-function nextPosition(orders: number[]): number {
+export function nextPosition(orders: number[]): number {
   return orders.length ? Math.max(...orders) + 1 : 0;
 }
 

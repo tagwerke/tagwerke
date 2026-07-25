@@ -43,8 +43,8 @@ async function taskBoard(req: FastifyRequest): Promise<string | undefined> {
   return rows[0]?.homeTabId;
 }
 
-const priority = z.union([z.literal(1), z.literal(2), z.literal(3)]);
-const statusEnum = z.enum(['todo', 'in_progress', 'in_review', 'done', 'cancelled']);
+export const priority = z.union([z.literal(1), z.literal(2), z.literal(3)]);
+export const statusEnum = z.enum(['todo', 'in_progress', 'in_review', 'done', 'cancelled']);
 
 const upsertBody = z.object({
   homeTabId: z.string().min(1),
