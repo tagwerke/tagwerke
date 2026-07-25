@@ -131,8 +131,15 @@ function diff(): void {
   }
   for (const [id, patch] of patches) enqueue(() => api.tasks.patch(id, patch));
 
-  for (const id in prev.tasks) {
-    if (!next.tasks[id]) enqueue(() => api.tasks.remove(id));
+  // Deletes cascade to the subtree server-side (SUBTASKS_PLAN D7), so send only the TOPMOST removed
+  // task of each removed subtree. Emitting one per descendant would be redundant round trips and,
+  // worse, N audit rows for what the user experienced as deleting one thing.
+  const removed = new Set<ID>();
+  for (const id in prev.tasks) if (!next.tasks[id]) removed.add(id);
+  for (const id of removed) {
+    const parent = prev.tasks[id]?.parentTaskId;
+    if (parent && removed.has(parent)) continue; // covered by an ancestor's delete
+    enqueue(() => api.tasks.remove(id));
   }
 
   last = next;

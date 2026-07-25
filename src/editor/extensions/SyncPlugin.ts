@@ -14,6 +14,10 @@ import type { ID } from '../../types';
 //   - GC: soft-delete a row whose ref atom we've SEEN in this doc but that is now gone.
 // The full row↔ref invariant is enforced server-side in the P4 reconcile engine; this keeps the
 // open editor's local store consistent so all views render coherently.
+//
+// SUBTASKS_PLAN D2 narrows all of this to ROOT tasks. A sub-task deliberately has no ref, so the GC
+// must skip anything with a parent — otherwise pressing Tab (which removes the ref of a task that
+// just became a child) would read as "its ref vanished" and delete the task the user was nesting.
 
 export interface SyncPluginOptions {
   tabId: ID;
@@ -82,9 +86,10 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
             if (!remote) {
               const present = new Set(refIds);
               for (const t of Object.values(store.tasks)) {
-                if (t.homeTabId === tabId && everSeen.has(t.id) && !present.has(t.id)) {
-                  store.deleteTask(t.id); // ref removed from the doc → soft-delete the row
-                }
+                if (t.homeTabId !== tabId) continue;
+                if (t.parentTaskId) continue; // a sub-task has no ref by design (D2)
+                if (!everSeen.has(t.id) || present.has(t.id)) continue;
+                store.deleteTask(t.id); // ref removed from the doc → soft-delete the row (+ subtree)
               }
             }
           });

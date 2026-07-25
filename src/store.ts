@@ -470,11 +470,16 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         patchTask(id, { status: next, done: next === 'done' });
       },
       deleteTask(id) {
+        // The SUBTREE goes with it (SUBTASKS_PLAN D7) — a parent is a commitment and its sub-tasks
+        // are the work under it. The server cascades the same way, so dropping only this row here
+        // would leave the children rendering locally until the next full state pull.
         set((s) => {
-          const tasks = { ...s.tasks };
-          delete tasks[id];
+          const doomed = new Set<ID>([id, ...descendantsOf(s.tasks, id).map((t) => t.id)]);
+          const tasks: Record<ID, Task> = {};
+          for (const t of Object.values(s.tasks)) if (!doomed.has(t.id)) tasks[t.id] = t;
           return { tasks };
         });
+        // persist.ts sends ONE delete for the topmost removed task; the server walks the subtree.
       },
       deleteOrphanTasks(homeTabId, keepIds) {
         set((s) => {

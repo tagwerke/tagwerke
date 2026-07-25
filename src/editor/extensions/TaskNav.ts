@@ -2,6 +2,7 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, NodeSelection } from '@tiptap/pm/state';
 import type { EditorState } from '@tiptap/pm/state';
 import { focusTaskWidget } from '../taskFocus';
+import { lastRenderedOf } from '../taskNav';
 
 // Prose ↔ task cursor bridge (TASKS_AS_ENTITIES.md P2, the boundary R1). A task is an id-only atom
 // whose title lives in a contentEditable widget, NOT in ProseMirror. So when the PM caret leaves a
@@ -37,9 +38,13 @@ export const TaskNav = Extension.create({
             // Only act on a collapsed caret that is on the exiting edge of its textblock, so
             // intra-paragraph line navigation is untouched.
             if (!selection.empty || !view.endOfTextblock(dir)) return false;
-            const id = adjacentTaskItemId(view.state, dir);
-            if (!id) return false;
-            if (focusTaskWidget(view.dom as HTMLElement, id, dir === 'down' ? 'start' : 'end')) {
+            const rootId = adjacentTaskItemId(view.state, dir);
+            if (!rootId) return false;
+            // A ref is a whole TREE (SUBTASKS_PLAN D2). Coming from below, the row the eye expects
+            // is the tree's deepest last sub-task, not the root's title several rows above it.
+            const dom = view.dom as HTMLElement;
+            const id = dir === 'up' ? lastRenderedOf(dom, rootId) : rootId;
+            if (focusTaskWidget(dom, id, dir === 'down' ? 'start' : 'end')) {
               event.preventDefault();
               return true;
             }

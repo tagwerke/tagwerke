@@ -429,23 +429,47 @@ input, select, textarea { font: inherit; color: inherit; }
   pointer-events: none;
 }
 
-/* Task item (rendered via React node view). Title on row 1; the metadata caption
-   line sits on row 2, indented under the text (the empty cell under the indicator). */
+/* The node view's wrapper is layout-invisible so the <li> it renders is the direct child of the
+   enclosing taskList <ul> — and the sub-task <ul> nested inside that <li> stays valid HTML.
+   TipTap always renders a wrapper element; `display: contents` takes it out of the box model
+   without ProseMirror losing the DOM node it needs. See TaskItemView. */
+.task-root { display: contents; }
+
+/* Task item (rendered via React node view). Title on row 1; the metadata caption line sits on
+   row 2, indented under the text (the empty cell under the indicator); sub-tasks occupy row 3 in
+   the same column as the content, so nesting indents itself with no magic numbers. */
 .task-item {
   display: grid;
   grid-template-columns: 24px 1fr;
   grid-template-areas:
     "indicator content"
-    ".         meta";
+    ".         meta"
+    ".         children";
   align-items: start;
   gap: 1px 8px;
   padding: 3px 0;
   position: relative;
 }
-/* Scope done/cancelled styling to the item's OWN text, never nested sub-tasks. A child task-item
-   lives inside the parent's `.task-content`, so styling `.task-content` (line-through/opacity even
-   propagate to descendant text) would paint an in-review/todo child as completed. Target the own
-   paragraph instead — the nested sub-list is a SIBLING of it inside `.task-content`. */
+
+/* A task's sub-tasks (SUBTASKS_PLAN D2 — rows, not document nodes). The rule down the left edge is
+   the containment cue: it makes a family read as one block even when a child's status differs from
+   its parent's, which is the whole point of sub-tasks being real entities. */
+.task-children {
+  grid-area: children;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 12px;
+  border-left: 1.5px solid var(--rule, rgba(0, 0, 0, 0.09));
+}
+.task-item:focus-within > .task-children { border-left-color: rgba(0, 0, 0, 0.16); }
+/* Sub-task rows sit a touch tighter and quieter than a top-level task: the root is the commitment,
+   these are the work under it, and the type should say so without a second font. */
+.task-item.is-subtask { padding: 1px 0; }
+.task-item.is-subtask > .task-title { font-size: 0.95em; }
+
+/* Scope done/cancelled styling to the item's OWN text, never nested sub-tasks — line-through and
+   opacity both inherit, so styling a container would paint an in-review or todo child as completed.
+   Target the row's own title/paragraph; the sub-list is a separate grid area. */
 .task-item.is-done > .task-content > p { text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.25); }
 .task-content { grid-area: content; min-width: 0; }
 .task-content p { margin: 0; color: var(--ink); }
