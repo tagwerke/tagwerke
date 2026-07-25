@@ -54,6 +54,7 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
   const activeSpace = filter.projectIds.length === 1 ? filter.projectIds[0] : null;
 
   const [step, setStep] = useState<Step>('upload');
+  const [dragging, setDragging] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
@@ -72,9 +73,7 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
   const columnOptions: DropdownOption[] = headers.map((h) => ({ value: h, label: h }));
   const optionalColumnOptions: DropdownOption[] = [{ value: '', label: '(none)' }, ...columnOptions];
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const processFile = (file: File) => {
     setParseError(null);
     Papa.parse<Record<string, string>>(file, {
       header: true,
@@ -99,6 +98,19 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
       },
       error: (err) => setParseError(err.message),
     });
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+    e.target.value = ''; // allow re-picking the same file name after an error
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
   };
 
   const goToStatusStep = () => {
@@ -164,7 +176,20 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
       {step === 'upload' && (
         <div>
           <p>Import tasks from a CSV export (Trello, Asana, a spreadsheet, …). Every import creates a new board.</p>
-          <input type="file" accept=".csv,text/csv" onChange={handleFile} />
+          <label
+            className={`file-drop ${dragging ? 'is-dragging' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+          >
+            <svg className="file-drop-icon" viewBox="0 0 24 24" width="28" height="28" aria-hidden>
+              <path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="file-drop-title">Drag a CSV file here, or <em>browse</em></span>
+            <span className="file-drop-hint">.csv up to a few thousand rows</span>
+            <input type="file" accept=".csv,text/csv" onChange={handleFile} />
+          </label>
           {parseError && <div className="share-error">{parseError}</div>}
         </div>
       )}
