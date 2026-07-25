@@ -7,18 +7,27 @@
 import { useStore } from '../../store';
 import { StatusControl } from '../StatusControl';
 import { TaskMeta } from '../TaskMeta';
+import { SubtaskProgress } from './SubtaskProgress';
+import { TaskParentPath } from './TaskParentPath';
 import type { ID, TaskStatus } from '../../types';
 
 export function TaskRow({
   taskId,
   editable = true,
   indent = 0,
+  showParent = false,
   onOpen,
 }: {
   taskId: ID;
   editable?: boolean;
-  /** Sub-task nesting depth (renders a left indent + connector). */
+  /** Sub-task nesting depth (renders a left indent + connector). Outline mode only. */
   indent?: number;
+  /**
+   * Show the `Parent ›` crumb before the title. For groupings that split a family apart (status,
+   * assignee, date) this is what tells you what a sub-task belongs to; in outline mode the
+   * indentation already says it, so it is off.
+   */
+  showParent?: boolean;
   /** Click the text to jump to the task in its board's doc. */
   onOpen?: () => void;
 }) {
@@ -41,15 +50,19 @@ export function TaskRow({
         onToggle={() => toggleTaskDone(task.id)}
         onPick={(s) => setTaskStatus(task.id, s)}
       />
-      <button
-        type="button"
-        className="task-text"
-        onClick={onOpen}
-        disabled={!onOpen}
-        title={onOpen ? 'Open in board' : undefined}
-      >
-        {task.text || <em className="muted">(empty)</em>}
-      </button>
+      <span className="task-text-wrap">
+        {showParent ? <TaskParentPath taskId={task.id} variant="inline" /> : null}
+        <button
+          type="button"
+          className="task-text"
+          onClick={onOpen}
+          disabled={!onOpen}
+          title={onOpen ? 'Open in board' : undefined}
+        >
+          {task.text || <em className="muted">(empty)</em>}
+        </button>
+        <SubtaskProgress taskId={task.id} />
+      </span>
       <TaskMeta taskId={task.id} editable={editable} />
     </div>
   );

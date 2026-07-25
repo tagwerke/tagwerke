@@ -106,6 +106,22 @@ export function childrenOf(tasks: Record<ID, Task>, id: ID): Task[] {
     .sort(compareRank);
 }
 
+/** Roll-up of a task's sub-tasks, for the progress strip (SUBTASKS_PLAN D6 — derived, never stored).
+ *  Counts EVERY descendant, not just direct children: the question a parent row answers is "is this
+ *  deliverable moving", and work two levels down still counts as work on it. */
+export interface SubtaskStats {
+  total: number;
+  done: number;
+  byStatus: Record<TaskStatus, number>;
+}
+
+export function subtaskStats(tasks: Record<ID, Task>, id: ID): SubtaskStats {
+  const byStatus: Record<TaskStatus, number> = { todo: 0, in_progress: 0, in_review: 0, done: 0, cancelled: 0 };
+  const kids = descendantsOf(tasks, id);
+  for (const k of kids) byStatus[k.status ?? 'todo']++;
+  return { total: kids.length, done: byStatus.done, byStatus };
+}
+
 /** Every descendant of `id` (children, grandchildren, …) in outline order. */
 export function descendantsOf(tasks: Record<ID, Task>, id: ID): Task[] {
   const out: Task[] = [];

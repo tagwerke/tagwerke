@@ -2636,3 +2636,77 @@ input, select, textarea { font: inherit; color: inherit; }
 .notif-push { color: var(--ink-mute); font-size: 13px; padding: 2px 2px 8px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
 .notif-push-on { color: var(--ink-soft); }
 .notif-push-btn { width: 100%; justify-content: center; margin-bottom: 8px; }
+
+/* ── Sub-tasks outside the document (SUBTASKS_PLAN P5) ──────────────────────────────────────
+   Kanban and status-grouped List cut ACROSS a family — a parent and its child land in different
+   columns or sections — so indentation is not available to express the relationship. These two
+   affordances carry it instead: a crumb naming the parent, and a roll-up strip on the parent. */
+
+/* The `Parent ›` crumb, inline on a List row's title line. Dimmed and lighter than the title so a
+   scan reads the task first and its context second. */
+.task-text-wrap { grid-column: 2; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
+.task-parent-inline,
+.task-parent-caption {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--ink-mute);
+  cursor: pointer;
+  max-width: 100%;
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.task-parent-inline { font-size: 0.92em; }
+.task-parent-inline:hover .task-parent-name,
+.task-parent-caption:hover .task-parent-name { text-decoration: underline; }
+.task-parent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-parent-sep { opacity: 0.6; }
+
+/* On a Kanban card the crumb gets its own line above the title — cards have the vertical room, and
+   a caption reads faster than a prefix when you are scanning a column. */
+.task-parent-caption { font-size: 0.82em; margin-bottom: 2px; display: flex; }
+.task-parent-arrow { opacity: 0.7; flex: none; }
+
+/* Roll-up strip. Segmented by status rather than a done/total fraction: with five states, "0/3" on
+   a deliverable where two people are mid-flight reads as "nothing is happening", which is exactly
+   the lie a parent row must not tell. */
+.subtask-progress { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.subtask-bar {
+  display: inline-flex;
+  width: 46px;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--rule, rgba(0, 0, 0, 0.08));
+}
+.subtask-seg { display: block; min-width: 2px; }
+.subtask-seg.status-todo { background: rgba(0, 0, 0, 0.16); }
+.subtask-seg.status-in_progress { background: #2d8fce; }
+.subtask-seg.status-in_review { background: #7c3aed; }
+.subtask-seg.status-done { background: #16a34a; }
+.subtask-seg.status-cancelled { background: rgba(0, 0, 0, 0.10); }
+.subtask-count { font-size: 0.78em; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
+.subtask-progress.on-card { margin: 4px 0 2px; }
+
+/* A sub-task card is visually quieter than a commitment card — same information, less weight. */
+.task-card.is-subtask .task-card-text { font-size: 0.95em; }
+
+/* List: the Status / Outline switch. */
+.list-modes { display: flex; gap: 2px; margin: 0 0 10px; }
+.list-mode {
+  background: none;
+  border: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+.list-mode:hover { background: var(--bg-paper); }
+.list-mode.is-on { background: var(--ink); color: var(--bg); }
+
+/* Outline mode indents by real tree depth; the rule is the same containment cue the doc uses. */
+.list-outline .task-row.is-sub { border-left: 1.5px solid var(--rule, rgba(0, 0, 0, 0.09)); }
