@@ -251,6 +251,7 @@ export const api = {
         assigneeRaw?: string | null;
         priority?: 1 | 2 | 3 | null;
         date?: string | null;
+        parentId?: ID | null;
       }>;
     }) =>
       req<{ ok: boolean; tabId: ID; created: number; matchedAssignees: number; unmatchedAssignees: number }>(

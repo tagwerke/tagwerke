@@ -156,7 +156,7 @@ interface Actions {
   setBoardView(view: BoardView): void;
 
   upsertTask(t: Partial<Task> & { id: ID; homeTabId: ID; text: string }): Task;
-  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'reviewerId' | 'position' | 'rank'>>): void;
+  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'reviewerId' | 'rank'>>): void;
   setTaskText(id: ID, text: string): void;
   /** Re-parent a task. Always assigns a rank in the new sibling group (append unless given). */
   setTaskParent(id: ID, parentTaskId: ID | undefined, rank?: string): void;
@@ -445,7 +445,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
 
       upsertTask({ id, homeTabId, text, ...meta }) {
         const existing = get().tasks[id];
-        // Spread existing first so entity-only fields (status/assigneeId/position/timestamps)
+        // Spread existing first so entity-only fields (status/assigneeId/rank/timestamps)
         // are preserved — this is the intra-session clobber fix (SPEC §8). `done` is a derived
         // mirror of status, never an independent field.
         const status = meta.status ?? existing?.status ?? 'todo';
@@ -460,7 +460,6 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           priority: meta.priority ?? existing?.priority,
           parentTaskId: meta.parentTaskId ?? existing?.parentTaskId,
           owner: meta.owner ?? existing?.owner,
-          position: meta.position ?? existing?.position ?? 0,
           done: status === 'done',
           // Every task gets a sibling rank at birth, so nothing ever renders in an undefined
           // order. An explicit rank wins; an existing one is preserved; otherwise append.

@@ -8,8 +8,8 @@
 //
 // Rows are grouped by parent and ranked in the order their ref appears in the doc. Rows with no
 // ref at all — soft-deleted tasks (whose refs were pruned), and any row whose create was dropped —
-// are appended after the ranked ones, ordered by the legacy `position` then `created_at`.
-// Soft-deleted rows ARE ranked, so restoring one later doesn't produce an unranked task.
+// are appended after the ranked ones in creation order. Soft-deleted rows ARE ranked, so restoring
+// one later doesn't produce an unranked task.
 //
 // Usage:
 //   tsx server/scripts/backfill-task-rank.ts            # dry run: report only, writes nothing
@@ -31,7 +31,6 @@ interface TaskRow {
   homeTabId: string;
   parentTaskId: string | null;
   rank: string | null;
-  position: number;
   text: string;
   deletedAt: Date | null;
 }
@@ -44,7 +43,7 @@ function docRefOrder(ydocState: string | null): string[] {
     Y.applyUpdate(doc, new Uint8Array(Buffer.from(ydocState, 'base64')));
   } catch {
     doc.destroy();
-    return []; // unreadable state → fall back to position/created_at ordering
+    return []; // unreadable state → fall back to creation order
   }
   const seen = new Set<string>();
   const out: string[] = [];
@@ -70,7 +69,7 @@ function docRefOrder(ydocState: string | null): string[] {
 
 /**
  * The order tasks should be ranked in, per parent group. Doc order first (that is the order a user
- * has actually arranged), then everything without a ref, by legacy position then creation time.
+ * has actually arranged), then everything without a ref, in creation order.
  */
 function orderedGroups(rows: TaskRow[], docOrder: string[]): Map<string | null, TaskRow[]> {
   const docRank = new Map(docOrder.map((id, i) => [id, i]));
@@ -80,8 +79,7 @@ function orderedGroups(rows: TaskRow[], docOrder: string[]): Map<string | null, 
     if (da != null && db_ != null) return da - db_;
     if (da != null) return -1; // in the doc beats not in the doc
     if (db_ != null) return 1;
-    if (a.position !== b.position) return a.position - b.position;
-    return a.id < b.id ? -1 : 1; // rows arrive in created_at order; id is the stable tiebreak
+    return 0; // neither is in the doc — a stable sort keeps the created_at order they arrived in
   });
 
   const groups = new Map<string | null, TaskRow[]>();
@@ -123,7 +121,6 @@ async function main(): Promise<void> {
         homeTabId: schema.tasks.homeTabId,
         parentTaskId: schema.tasks.parentTaskId,
         rank: schema.tasks.rank,
-        position: schema.tasks.position,
         text: schema.tasks.text,
         deletedAt: schema.tasks.deletedAt,
       })

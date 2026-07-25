@@ -18,6 +18,7 @@ import {
   ASSIGNEE_CANDIDATES,
   PRIORITY_CANDIDATES,
   DATE_CANDIDATES,
+  PARENT_CANDIDATES,
   suggestColumn,
   suggestStatus,
   looksLikeEmail,
@@ -34,6 +35,9 @@ interface ColumnMap {
   assignee: string | null;
   priority: string | null;
   date: string | null;
+  /** Names the PARENT task by title (SUBTASKS_PLAN P7) — an exported CSV knows the parent's name,
+   *  never Tagwerke's ids, so the cell is matched against the other rows' titles. */
+  parent: string | null;
 }
 
 const STATUS_OPTIONS: DropdownOption[] = [
@@ -59,7 +63,7 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
   const [columnMap, setColumnMap] = useState<ColumnMap>({
-    title: null, status: null, assignee: null, priority: null, date: null,
+    title: null, status: null, assignee: null, priority: null, date: null, parent: null,
   });
   const [boardName, setBoardName] = useState('');
   const [projectId, setProjectId] = useState(activeSpace ?? projectOrder[0] ?? '');
@@ -92,6 +96,7 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
           assignee: suggestColumn(fields, ASSIGNEE_CANDIDATES),
           priority: suggestColumn(fields, PRIORITY_CANDIDATES),
           date: suggestColumn(fields, DATE_CANDIDATES),
+          parent: suggestColumn(fields, PARENT_CANDIDATES),
         });
         setBoardName(file.name.replace(/\.csv$/i, ''));
         setStep('map');
@@ -122,18 +127,35 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
   };
 
   const normalizedRows = useMemo(() => {
-    return rawRows
-      .map((row) => {
-        const title = (columnMap.title ? row[columnMap.title] : '')?.trim() ?? '';
-        if (!title) return null;
+    // First pass: title -> id, so a row may name a parent that appears LATER in the file. A title
+    // used twice is ambiguous, so it is dropped from the lookup rather than resolved arbitrarily —
+    // silently nesting under whichever duplicate won would be worse than leaving both top-level.
+    const idByTitle = new Map<string, string | null>();
+    const seed = rawRows.map((row) => {
+      const title = (columnMap.title ? row[columnMap.title] : '')?.trim() ?? '';
+      if (!title) return null;
+      const id = nanoid();
+      const key = title.toLowerCase();
+      idByTitle.set(key, idByTitle.has(key) ? null : id);
+      return { row, title, id };
+    });
+
+    return seed
+      .map((entry) => {
+        if (!entry) return null;
+        const { row, title, id } = entry;
         const rawStatus = columnMap.status ? (row[columnMap.status] ?? '').trim() : '';
         const status = statusMap[rawStatus] ?? 'todo';
         const rawAssignee = (columnMap.assignee ? row[columnMap.assignee] : '')?.trim() ?? '';
         const assigneeEmail = looksLikeEmail(rawAssignee) ? rawAssignee : null;
+        const rawParent = (columnMap.parent ? row[columnMap.parent] : '')?.trim() ?? '';
+        // Never let a row parent ITSELF (a self-referencing cell is a common export artefact).
+        const parentId = rawParent ? idByTitle.get(rawParent.toLowerCase()) ?? null : null;
         return {
-          id: nanoid(),
+          id,
           title,
           status,
+          parentId: parentId && parentId !== id ? parentId : null,
           assigneeEmail,
           assigneeRaw: rawAssignee || null,
           priority: parsePriorityRaw(columnMap.priority ? row[columnMap.priority] : undefined),
@@ -142,6 +164,8 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
       })
       .filter((r): r is NonNullable<typeof r> => r !== null);
   }, [rawRows, columnMap, statusMap]);
+
+  const nestedCount = normalizedRows.filter((r) => r.parentId).length;
 
   const skipped = rawRows.length - normalizedRows.length;
   // Advisory only — not an authoritative lookup, just "this cell isn't even email-shaped".
@@ -238,6 +262,10 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
             <span>due date (optional)</span>
             <Dropdown value={columnMap.date ?? ''} onChange={(v) => setColumnMap((m) => ({ ...m, date: v || null }))} options={optionalColumnOptions} />
           </label>
+          <label className="field">
+            <span>parent task (optional)</span>
+            <Dropdown value={columnMap.parent ?? ''} onChange={(v) => setColumnMap((m) => ({ ...m, parent: v || null }))} options={optionalColumnOptions} />
+          </label>
 
           <div className="modal-actions">
             <button className="btn ghost" onClick={onClose}>cancel</button>
@@ -271,6 +299,7 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
       {step === 'preview' && (
         <div>
           <p>{normalizedRows.length} task(s) → 1 new board ("{boardName.trim()}")</p>
+          {nestedCount > 0 && <p>{nestedCount} will be nested as sub-tasks.</p>}
           {unmatchedHeuristic > 0 && (
             <p>{unmatchedHeuristic} assignee(s) won't match a real user — kept as a display label instead.</p>
           )}

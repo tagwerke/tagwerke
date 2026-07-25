@@ -168,10 +168,6 @@ export const tasks = pgTable(
     // matches the client's exactly — a locale collation folds case and would disagree.
     // Nullable only until the backfill has run; treat a missing rank as "sorts last".
     rank: text('rank'),
-    // DEPRECATED (SUBTASKS_PLAN D4): superseded by `rank`. No longer written; the column survives
-    // one release so a rolled-back client keeps working, then P7 drops it. It was only ever a
-    // Kanban column-append counter — there has never been manual within-column ordering to lose.
-    position: integer('position').notNull().default(0),
     // owner: legacy free-text display fallback ([Name] token); superseded by assigneeId.
     owner: text('owner'),
     done: boolean('done').notNull().default(false),

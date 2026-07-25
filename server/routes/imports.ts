@@ -15,6 +15,8 @@ import { requireAuth } from '../auth/guard.ts';
 import { recordAudit } from '../lib/audit.ts';
 import { reconcileBoard } from '../realtime/ydoc.ts';
 import { priority, statusEnum } from './tasks.ts';
+import { rankAfter } from '../../shared/rank.ts';
+import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
 
 const importRow = z.object({
   id: z.string().min(1),
@@ -26,6 +28,10 @@ const importRow = z.object({
   assigneeRaw: z.string().trim().max(200).nullable().optional(),
   priority: priority.nullable().optional(),
   date: z.string().nullable().optional(),
+  // Sub-task nesting (SUBTASKS_PLAN P7). References another row's `id` WITHIN THIS IMPORT — the
+  // client resolves the CSV's parent-by-title cell into an id. Anything not naming a row in the
+  // same payload is dropped to null below, which also makes cross-board nesting unreachable here.
+  parentId: z.string().nullable().optional(),
 });
 
 const importBody = z.object({
@@ -87,8 +93,42 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
             position: Number(posRows[0]?.next ?? 0), starred: false,
           });
         }
+        // Resolve the hierarchy before inserting. A parent must be another row in this same
+        // payload; a cycle or an over-deep chain is flattened to a root rather than rejecting the
+        // whole upload, because one malformed cell in a 2000-row export should not cost the user
+        // the import. `parentOf` is the sanitized map everything below reads.
+        const byId = new Map(rows.map((r) => [r.id, r]));
+        const parentOf = new Map<string, string | null>();
+        for (const r of rows) {
+          let candidate = r.parentId && r.parentId !== r.id && byId.has(r.parentId) ? r.parentId : null;
+          if (candidate) {
+            // Walk up: reject if we come back to this row (cycle) or run past the depth limit.
+            const seen = new Set<string>([r.id]);
+            let cursor: string | null = candidate;
+            let depth = 1;
+            while (cursor) {
+              if (seen.has(cursor) || depth > MAX_TASK_DEPTH) { candidate = null; break; }
+              seen.add(cursor);
+              cursor = byId.get(cursor)?.parentId ?? null;
+              if (cursor && !byId.has(cursor)) cursor = null;
+              depth++;
+            }
+          }
+          parentOf.set(r.id, candidate);
+        }
+
+        // One rank sequence per sibling group, in file order — the order the user arranged.
+        const rankOf = new Map<string, string>();
+        const counters = new Map<string, string | null>();
+        for (const r of rows) {
+          const key = parentOf.get(r.id) ?? '';
+          const next = rankAfter(counters.get(key) ?? null);
+          counters.set(key, next);
+          rankOf.set(r.id, next);
+        }
+
         await tx.insert(schema.tasks).values(
-          rows.map((r, i) => {
+          rows.map((r) => {
             const assigneeId = r.assigneeEmail ? byEmail.get(r.assigneeEmail.toLowerCase()) ?? null : null;
             return {
               id: r.id,
@@ -98,7 +138,8 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
               assigneeId,
               date: r.date ?? null,
               priority: r.priority ?? null,
-              position: i,
+              parentTaskId: parentOf.get(r.id) ?? null,
+              rank: rankOf.get(r.id) ?? null,
               owner: assigneeId ? null : r.assigneeRaw ?? null,
               done: r.status === 'done',
               createdBy: userId,

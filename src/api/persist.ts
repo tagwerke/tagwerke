@@ -37,7 +37,6 @@ type TaskPatch = {
   reviewerId?: ID | null;
   date?: string | null;
   priority?: 1 | 2 | 3 | null;
-  position?: number;
   rank?: string;
   parentTaskId?: ID | null;
 };

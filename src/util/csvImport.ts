@@ -9,6 +9,9 @@ export const STATUS_CANDIDATES = ['status', 'state'];
 export const ASSIGNEE_CANDIDATES = ['assignee', 'owner', 'email'];
 export const PRIORITY_CANDIDATES = ['priority', 'pri'];
 export const DATE_CANDIDATES = ['date', 'due', 'due date'];
+// Sub-task nesting (SUBTASKS_PLAN P7). The cell names the PARENT by title — an exported CSV from
+// another tool has no idea what Tagwerke's ids are, but it does know what the parent was called.
+export const PARENT_CANDIDATES = ['parent', 'parent task', 'parent title', 'subtask of', 'epic'];
 
 /** First header whose name matches one of `candidates` (case-insensitive), or null. */
 export function suggestColumn(headers: string[], candidates: string[]): string | null {

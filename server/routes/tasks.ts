@@ -34,7 +34,7 @@ function notifyAssigneeChange(
   notify(nextAssignee, { type: 'task_assigned', title: 'Assigned to you', body: taskLabel(text), tabId, actorId });
 }
 
-// Fields whose changes are worth an accountability trail. `position`/`rank` are excluded (reorder
+// Fields whose changes are worth an accountability trail. `rank` is excluded (reorder
 // noise); `done`/`owner` are derived/legacy. `parentTaskId` IS audited — re-parenting moves a task
 // between deliverables, which is a structural change, not reorder noise (SUBTASKS_PLAN P1.3).
 // See AUDIT_IMPLEMENTATION_PLAN §B2.
@@ -62,7 +62,6 @@ const upsertBody = z.object({
   reviewerId: z.string().nullable().optional(),
   date: z.string().nullable().optional(),
   priority: priority.nullable().optional(),
-  position: z.number().int().optional(), // DEPRECATED: superseded by `rank`; accepted for older clients
   rank: rankField,
   parentTaskId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
@@ -76,7 +75,6 @@ const patchBody = z.object({
   reviewerId: z.string().nullable().optional(),
   date: z.string().nullable().optional(),
   priority: priority.nullable().optional(),
-  position: z.number().int().optional(), // DEPRECATED: superseded by `rank`; accepted for older clients
   rank: rankField,
   parentTaskId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
@@ -286,7 +284,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         reviewerId: b.data.reviewerId ?? null,
         date: b.data.date ?? null,
         priority: b.data.priority ?? null,
-        position: b.data.position ?? 0,
         rank,
         parentTaskId: b.data.parentTaskId ?? null,
         owner: b.data.owner ?? null,
@@ -302,7 +299,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         reviewerId: values.reviewerId,
         date: values.date,
         priority: values.priority,
-        position: values.position,
         rank: values.rank,
         parentTaskId: values.parentTaskId,
         owner: values.owner,

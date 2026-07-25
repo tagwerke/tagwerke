@@ -66,8 +66,6 @@ export interface Task {
   // (shared/rank.ts). ONE order for every view (SUBTASKS_PLAN D4). Absent only for a row written
   // before the backfill; `compareRank` sorts those last.
   rank?: string;
-  /** @deprecated Superseded by `rank`. No longer written; removed in SUBTASKS_PLAN P7. */
-  position?: number;
   owner?: string; // legacy display fallback; superseded by assigneeId
   done?: boolean; // deprecated mirror of status==='done'; kept for one release
   createdAt?: number; // DB-managed; read-only on the client
