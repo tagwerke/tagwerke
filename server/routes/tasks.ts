@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { and, desc, eq, isNotNull, isNull, notInArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, notInArray, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, boardRequiresReview, paramTabId } from '../auth/boards.ts';
@@ -8,6 +8,7 @@ import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
 import { notify } from '../lib/notify.ts';
 import { reconcileBoard } from '../realtime/ydoc.ts';
 import { isValidRank, rankAfter } from '../../shared/rank.ts';
+import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
 
 /** Sibling order key. Validated on the way in — a malformed rank would corrupt every view's order
  *  silently, and it costs nothing to reject it at the edge. See shared/rank.ts. */
@@ -120,18 +121,117 @@ async function nextSiblingRank(homeTabId: string, parentTaskId: string | null): 
   return rankAfter(rows[0]?.rank ?? null);
 }
 
-/** True when `parentTaskId` is null/undefined, or names a DIFFERENT task on the same board.
- *  Same-board sub-task nesting only (TASKS_AS_ENTITIES.md P2). Deeper cycle prevention is a
- *  client concern — Tab only nests under an existing sibling — and can be hardened here later. */
-async function parentAllowed(homeTabId: string, id: string, parentTaskId: string | null | undefined): Promise<boolean> {
-  if (parentTaskId == null) return true;
-  if (parentTaskId === id) return false; // a task can't be its own parent
-  const rows = await db
-    .select({ homeTabId: schema.tasks.homeTabId })
-    .from(schema.tasks)
-    .where(eq(schema.tasks.id, parentTaskId))
-    .limit(1);
-  return rows[0]?.homeTabId === homeTabId;
+/**
+ * Every LIVE descendant of `id`, deepest-last. The unit that delete and restore operate on
+ * (SUBTASKS_PLAN D7): a parent is a commitment and its sub-tasks are the work under it, so
+ * trashing the commitment has to take the work with it — otherwise the children survive pointing
+ * at a row that no longer renders, which is how you get tasks nobody can reach.
+ * Bounded by the depth limit so a pre-existing cycle can't spin.
+ */
+async function liveDescendantIds(id: string): Promise<string[]> {
+  const res = await db.execute(sql`
+    WITH RECURSIVE descn AS (
+      SELECT id, 0 AS d FROM tasks WHERE id = ${id}
+      UNION ALL
+      SELECT t.id, descn.d + 1
+        FROM tasks t JOIN descn ON t.parent_task_id = descn.id
+       WHERE descn.d < ${MAX_TASK_DEPTH + 1} AND t.deleted_at IS NULL
+    )
+    SELECT id FROM descn WHERE d > 0
+  `);
+  return ((res.rows ?? res) as { id: string }[]).map((r) => r.id);
+}
+
+/**
+ * Descendants of `id` that were trashed in the SAME sweep — i.e. share its `deleted_at`. Restore
+ * uses this rather than "all trashed descendants" so it undoes exactly the delete it is reversing:
+ * a child trashed separately, earlier, stays in the Trash where its owner put it.
+ */
+async function coDeletedDescendantIds(id: string, deletedAt: Date): Promise<string[]> {
+  const res = await db.execute(sql`
+    WITH RECURSIVE descn AS (
+      SELECT id, 0 AS d FROM tasks WHERE id = ${id}
+      UNION ALL
+      SELECT t.id, descn.d + 1
+        FROM tasks t JOIN descn ON t.parent_task_id = descn.id
+       WHERE descn.d < ${MAX_TASK_DEPTH + 1} AND t.deleted_at = ${deletedAt}
+    )
+    SELECT id FROM descn WHERE d > 0
+  `);
+  return ((res.rows ?? res) as { id: string }[]).map((r) => r.id);
+}
+
+/** Why a proposed re-parent was refused — turned into a specific 400 so the client can say which. */
+type ParentRefusal = 'not-found' | 'other-board' | 'cycle' | 'too-deep';
+
+const PARENT_REFUSAL_MESSAGE: Record<ParentRefusal, string> = {
+  'not-found': 'parent task does not exist',
+  'other-board': 'parent task is not on the home board',
+  cycle: 'a task cannot be nested under its own descendant',
+  'too-deep': `sub-tasks may not nest more than ${MAX_TASK_DEPTH} levels deep`,
+};
+
+/**
+ * Validate a proposed parent for task `id`, in ONE round trip (SUBTASKS_PLAN D9).
+ *
+ * Three things have to hold and all three are answered by the same pair of recursive walks:
+ *   - the parent is on the same board (also a DB constraint since 0026, but a friendly 400 beats
+ *     a constraint violation surfacing as a 500);
+ *   - the parent is not `id` itself nor any of `id`'s own descendants — otherwise the two form a
+ *     cycle that no tree walk can terminate on. The previous check only caught direct
+ *     self-parenting, so A→B→A was reachable in two PATCHes;
+ *   - the deepest leaf of the moved subtree still fits under MAX_TASK_DEPTH. Checking the moved
+ *     task alone is not enough: nesting a task that already has two levels beneath it is what
+ *     actually busts the limit.
+ *
+ * Both walks are bounded by the depth limit, so they terminate even on data that is already
+ * cyclic (an old row written before this check existed).
+ */
+async function parentRefusal(
+  homeTabId: string,
+  id: string,
+  parentTaskId: string | null | undefined,
+): Promise<ParentRefusal | null> {
+  if (parentTaskId == null) return null;
+  if (parentTaskId === id) return 'cycle';
+
+  // `anc`   — the parent and its ancestors, nearest first (d = 1 is the parent itself).
+  // `descn` — the moved task and everything under it (d = 0 is the task itself).
+  const bound = MAX_TASK_DEPTH + 2; // walk one past the limit so "too deep" is detectable
+  const res = await db.execute(sql`
+    WITH RECURSIVE anc AS (
+      SELECT id, parent_task_id, home_tab_id, 1 AS d
+        FROM tasks WHERE id = ${parentTaskId}
+      UNION ALL
+      SELECT t.id, t.parent_task_id, t.home_tab_id, anc.d + 1
+        FROM tasks t JOIN anc ON t.id = anc.parent_task_id
+       WHERE anc.d < ${bound}
+    ),
+    descn AS (
+      SELECT id, 0 AS d FROM tasks WHERE id = ${id}
+      UNION ALL
+      SELECT t.id, descn.d + 1
+        FROM tasks t JOIN descn ON t.parent_task_id = descn.id
+       WHERE descn.d < ${bound} AND t.deleted_at IS NULL
+    )
+    SELECT
+      (SELECT home_tab_id FROM anc WHERE d = 1)        AS parent_board,
+      (SELECT max(d) FROM anc)                          AS parent_chain,
+      (SELECT bool_or(id = ${id}) FROM anc)             AS creates_cycle,
+      (SELECT coalesce(max(d), 0) FROM descn)           AS subtree_height
+  `);
+  const row = (res.rows ?? res)[0] as
+    | { parent_board: string | null; parent_chain: number | null; creates_cycle: boolean | null; subtree_height: number | null }
+    | undefined;
+
+  if (!row || row.parent_board == null) return 'not-found';
+  if (row.parent_board !== homeTabId) return 'other-board';
+  if (row.creates_cycle) return 'cycle';
+  // parent_chain is the parent's own 1-based chain length, which is exactly the depth the child
+  // would land at; add the height of the subtree travelling with it.
+  const deepest = Number(row.parent_chain ?? 1) + Number(row.subtree_height ?? 0);
+  if (deepest > MAX_TASK_DEPTH) return 'too-deep';
+  return null;
 }
 
 export async function taskRoutes(app: FastifyInstance): Promise<void> {
@@ -150,8 +250,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'assignee is not a member of the home board' });
       if (!(await assigneeAllowed(b.data.homeTabId, b.data.reviewerId)))
         return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
-      if (!(await parentAllowed(b.data.homeTabId, id, b.data.parentTaskId)))
-        return reply.code(400).send({ error: 'parent task is not on the home board' });
+      const putRefusal = await parentRefusal(b.data.homeTabId, id, b.data.parentTaskId);
+      if (putRefusal) return reply.code(400).send({ error: PARENT_REFUSAL_MESSAGE[putRefusal] });
       const userId = req.user!.id;
       // status is authoritative; `done` is the derived back-compat mirror.
       const status = b.data.status ?? (b.data.done ? 'done' : 'todo');
@@ -250,8 +350,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'assignee is not a member of the home board' });
       if (b.data.reviewerId != null && !(await assigneeAllowed(homeTabId, b.data.reviewerId)))
         return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
-      if (b.data.parentTaskId !== undefined && !(await parentAllowed(homeTabId, id, b.data.parentTaskId)))
-        return reply.code(400).send({ error: 'parent task is not on the home board' });
+      if (b.data.parentTaskId !== undefined) {
+        const refusal = await parentRefusal(homeTabId, id, b.data.parentTaskId);
+        if (refusal) return reply.code(400).send({ error: PARENT_REFUSAL_MESSAGE[refusal] });
+      }
       // requireReview guardrail (§F): on a review-required board, `done` is reachable only via the
       // in_review → done approval (the `approving` capture below). Reject a direct jump; an already-
       // done task (idempotent re-write) still passes.
@@ -326,18 +428,23 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send({ error: 'only admins may delete on this board' });
 
       // Soft delete: trash the row (recoverable) instead of destroying it (§G). Idempotent.
+      // The whole SUBTREE goes together (D7) and shares one deleted_at timestamp, which is what
+      // lets restore put back exactly this delete and nothing else.
+      const kids = await liveDescendantIds(id);
+      const deletedAt = new Date();
       await db
         .update(schema.tasks)
-        .set({ deletedAt: new Date(), deletedBy: userId })
-        .where(and(eq(schema.tasks.id, id), isNull(schema.tasks.deletedAt)));
-      // Snapshot the title so the trail reads "deleted 'Buy milk'".
+        .set({ deletedAt, deletedBy: userId })
+        .where(and(inArray(schema.tasks.id, [id, ...kids]), isNull(schema.tasks.deletedAt)));
+      // Snapshot the title so the trail reads "deleted 'Buy milk'". One row for the whole subtree,
+      // carrying the descendant count — deleting a deliverable is one act, not N.
       req.auditHandled = true;
       recordAudit({
         actorId: userId, action: 'DELETE /api/tasks/:id', targetType: 'task', targetId: id,
         scopeId: t.homeTabId, method: 'DELETE', status: 200,
-        payload: { snapshot: { text: t.text, status: t.status } },
+        payload: { snapshot: { text: t.text, status: t.status }, ...(kids.length ? { subtaskCount: kids.length } : {}) },
       });
-      return reply.send({ ok: true });
+      return reply.send({ ok: true, subtaskCount: kids.length });
     },
   );
 
@@ -366,10 +473,42 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireBoardRole('editor', taskBoard) },
     async (req, reply) => {
       const { id } = req.params as { id: string };
-      await db.update(schema.tasks).set({ deletedAt: null, deletedBy: null }).where(eq(schema.tasks.id, id));
+      const trashed = (await db
+        .select({ deletedAt: schema.tasks.deletedAt, parentTaskId: schema.tasks.parentTaskId })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, id))
+        .limit(1))[0];
+      if (!trashed) return reply.code(404).send({ error: 'not found' });
+
+      // Bring back the subtree this delete took, and nothing else: only descendants that share
+      // this row's deleted_at were trashed by the same act (D7). A child someone trashed
+      // separately, earlier, stays in the Trash where they left it.
+      const kids = trashed.deletedAt ? await coDeletedDescendantIds(id, trashed.deletedAt) : [];
+
+      // If the parent is itself still trashed, restoring under it would put the task somewhere
+      // invisible. Promote it to a root instead, with an append rank among the existing roots —
+      // the same rule the retention prune's ON DELETE SET NULL follows.
+      const set: Record<string, unknown> = { deletedAt: null, deletedBy: null };
+      if (trashed.parentTaskId) {
+        const parent = (await db
+          .select({ deletedAt: schema.tasks.deletedAt })
+          .from(schema.tasks)
+          .where(eq(schema.tasks.id, trashed.parentTaskId))
+          .limit(1))[0];
+        if (!parent || parent.deletedAt) {
+          set.parentTaskId = null;
+          if (req.boardScope) set.rank = await nextSiblingRank(req.boardScope, null);
+        }
+      }
+      await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
+      if (kids.length) {
+        await db.update(schema.tasks).set({ deletedAt: null, deletedBy: null }).where(inArray(schema.tasks.id, kids));
+      }
       // The row is live again, but the doc lost its ref when the task was deleted. Reconcile
-      // re-appends the id-only ref so the task reappears on the board (TASKS_AS_ENTITIES.md P4 —
-      // this is THE restore fix). Best-effort: if it fails, a later board-open reconcile heals it.
+      // re-adds the id-only ref so the task reappears on the board (TASKS_AS_ENTITIES.md P4 —
+      // this is THE restore fix). Only roots get a ref now (D2), so a restored SUB-task reappears
+      // by virtue of its parent's node view rendering it, not by regaining a node of its own.
+      // Best-effort: if it fails, a later board-open reconcile heals it.
       if (req.boardScope) {
         try {
           await reconcileBoard(req.boardScope);
@@ -381,8 +520,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       recordAudit({
         actorId: req.user!.id, action: 'task_restore', targetType: 'task', targetId: id,
         scopeId: req.boardScope ?? null, method: 'POST', status: 200,
+        payload: {
+          ...(kids.length ? { subtaskCount: kids.length } : {}),
+          ...(set.parentTaskId === null ? { promotedToRoot: true } : {}),
+        },
       });
-      return reply.send({ ok: true });
+      return reply.send({ ok: true, subtaskCount: kids.length });
     },
   );
 

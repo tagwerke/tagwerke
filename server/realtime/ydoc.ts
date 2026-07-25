@@ -21,9 +21,10 @@ import * as awarenessProtocol from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { yDocToProsemirrorJSON } from 'y-prosemirror';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { dlog, sid } from '../lib/dlog.ts';
+import { rankAfter } from '../../shared/rank.ts';
 
 const PROTOCOL_VERSION = 1;
 const messageSync = 0;
@@ -265,12 +266,25 @@ function collectTaskNodes(node: unknown, out: { id: string; text: string }[] = [
 }
 
 /** Insert a row for any doc task node that lacks one. Non-empty titles only (transient empty task
- *  lines aren't real tasks yet); the client creates those once typed. Idempotent + additive. */
+ *  lines aren't real tasks yet); the client creates those once typed. Idempotent + additive.
+ *  Every doc node is a ROOT now (D2), so a null parent is right, and each gets an append rank so
+ *  a row rescued here still lands in a defined place rather than sorting last forever. */
 async function backfillRowsForDoc(tabId: string, docJSON: unknown): Promise<void> {
-  const values = collectTaskNodes(docJSON)
-    .filter((t) => t.text.trim().length > 0)
-    .map((t) => ({ id: t.id, homeTabId: tabId, text: t.text }));
-  if (!values.length) return;
+  const nodes = collectTaskNodes(docJSON).filter((t) => t.text.trim().length > 0);
+  if (!nodes.length) return;
+  const lastRoot = (
+    await db
+      .select({ rank: schema.tasks.rank })
+      .from(schema.tasks)
+      .where(and(eq(schema.tasks.homeTabId, tabId), isNull(schema.tasks.parentTaskId), isNotNull(schema.tasks.rank)))
+      .orderBy(desc(schema.tasks.rank))
+      .limit(1)
+  )[0];
+  let rank = lastRoot?.rank ?? null;
+  const values = nodes.map((t) => {
+    rank = rankAfter(rank);
+    return { id: t.id, homeTabId: tabId, text: t.text, rank };
+  });
   await db.insert(schema.tasks).values(values).onConflictDoNothing({ target: schema.tasks.id });
 }
 
@@ -330,11 +344,16 @@ export async function flushAllYdocRooms(): Promise<number> {
   return flushed;
 }
 
-// ── Reconcile engine (TASKS_AS_ENTITIES.md P4) ─────────────────────────────────────────────
-// The invariant: for a board, exactly one task-ref atom in the doc IFF a live row homed to it.
+// ── Reconcile engine (TASKS_AS_ENTITIES.md P4, narrowed by SUBTASKS_PLAN D3) ───────────────
+// The invariant: for a board, exactly one task-ref atom in the doc IFF a live ROOT row homed to it.
 // Because a ref is only an id (no content), both repairs are content-safe. This is what makes
 // restore work — clearing deletedAt on a row is not enough; the doc must regain its ref. It also
 // self-heals dropped creates / stale refs on board load.
+//
+// "ROOT" is the whole of the subtasks migration. A child task has no node in the document at all;
+// its parent's node view renders it from the rows. So the same sweep that has always pruned stale
+// refs now also prunes the child refs left over from the old flat model — every board migrates
+// itself the first time someone opens it, with no script and no rewrite of the Yjs bytes.
 
 /**
  * Every taskItem in the board's Y.Doc, as id → occurrence count. Idless nodes are counted
@@ -362,22 +381,61 @@ function collectDocRefs(doc: Y.Doc): { counts: Map<string, number>; nullIds: num
   return { counts, nullIds };
 }
 
+function makeRef(id: string): Y.XmlElement {
+  const el = new Y.XmlElement('taskItem');
+  el.setAttribute('id', id);
+  return el;
+}
+
 /** Append id-only task-ref atoms at the end of the doc (into the trailing taskList, or a new one). */
 function appendRefs(doc: Y.Doc, ids: string[]): void {
   const frag = doc.getXmlFragment(FRAGMENT);
-  const mk = (id: string): Y.XmlElement => {
-    const el = new Y.XmlElement('taskItem');
-    el.setAttribute('id', id);
-    return el;
-  };
   const last = frag.length ? frag.get(frag.length - 1) : null;
   if (last instanceof Y.XmlElement && last.nodeName === 'taskList') {
-    last.push(ids.map(mk));
+    last.push(ids.map(makeRef));
   } else {
     const list = new Y.XmlElement('taskList');
-    list.push(ids.map(mk));
+    list.push(ids.map(makeRef));
     frag.push([list]);
   }
+}
+
+/** Every taskItem in the doc, in document order, with the container and index it sits at. */
+function locateRefs(doc: Y.Doc): { container: Y.XmlElement | Y.XmlFragment; index: number; id: string }[] {
+  const out: { container: Y.XmlElement | Y.XmlFragment; index: number; id: string }[] = [];
+  const walk = (node: Y.XmlElement | Y.XmlFragment): void => {
+    for (let i = 0; i < node.length; i++) {
+      const child = node.get(i);
+      if (!(child instanceof Y.XmlElement)) continue;
+      if (child.nodeName === 'taskItem') {
+        const id = child.getAttribute('id');
+        if (id) out.push({ container: node, index: i, id });
+      } else {
+        walk(child);
+      }
+    }
+  };
+  walk(doc.getXmlFragment(FRAGMENT));
+  return out;
+}
+
+/**
+ * Put a missing root ref back at its RANK position among the refs already in the doc, instead of at
+ * the end. Restoring a task from the Trash used to drop it at the bottom of the board no matter
+ * where it had been; with an order that actually exists in the data we can put it back properly.
+ * Falls back to appending when nothing sorts after it (it belongs last) or when ranks are missing.
+ */
+function insertRefByRank(doc: Y.Doc, id: string, rank: string | null, rankById: Map<string, string | null>): void {
+  if (rank) {
+    for (const ref of locateRefs(doc)) {
+      const other = rankById.get(ref.id);
+      if (other != null && other > rank) {
+        ref.container.insert(ref.index, [makeRef(id)]);
+        return;
+      }
+    }
+  }
+  appendRefs(doc, [id]);
 }
 
 /**
@@ -429,14 +487,27 @@ function pruneRefs(doc: Y.Doc, orphans: Set<string>, remaining: Map<string, numb
  */
 export async function reconcileBoard(tabId: string): Promise<void> {
   const room = await getRoom(tabId);
+  // Live ROOTS only (D3). A child ref found in the doc is now an orphan by definition and gets
+  // pruned below — that is the lazy migration off the old flat model.
   const liveRows = await db
-    .select({ id: schema.tasks.id })
+    .select({ id: schema.tasks.id, rank: schema.tasks.rank })
     .from(schema.tasks)
-    .where(and(eq(schema.tasks.homeTabId, tabId), isNull(schema.tasks.deletedAt)));
+    .where(
+      and(
+        eq(schema.tasks.homeTabId, tabId),
+        isNull(schema.tasks.deletedAt),
+        isNull(schema.tasks.parentTaskId),
+      ),
+    );
   const liveIds = new Set(liveRows.map((r) => r.id));
+  const rankById = new Map(liveRows.map((r) => [r.id, r.rank]));
   const { counts, nullIds } = collectDocRefs(room.doc);
 
-  const missing = [...liveIds].filter((id) => !counts.has(id));
+  // Sorted so a batch of restores lands in the right order relative to each other, not just
+  // relative to what was already there.
+  const missing = liveRows
+    .filter((r) => !counts.has(r.id))
+    .sort((a, b) => (a.rank && b.rank ? (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0) : a.rank ? -1 : b.rank ? 1 : 0));
   const orphans = new Set([...counts.keys()].filter((id) => !liveIds.has(id)));
   // Ids appearing more than once; pruneRefs drops all but the earliest of each.
   const remaining = new Map([...counts].filter(([, n]) => n > 1));
@@ -444,7 +515,7 @@ export async function reconcileBoard(tabId: string): Promise<void> {
 
   if (missing.length || orphans.size || strays) {
     Y.transact(room.doc, () => {
-      if (missing.length) appendRefs(room.doc, missing);
+      for (const m of missing) insertRefByRank(room.doc, m.id, m.rank, rankById);
       if (orphans.size || strays) pruneRefs(room.doc, orphans, remaining);
     });
     // doc.on('update') already fanned the change to connected editors; make sure it's durable now.

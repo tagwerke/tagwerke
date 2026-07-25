@@ -1,8 +1,9 @@
 // Task-tree constants shared by client and server (SUBTASKS_PLAN D9).
 
 /**
- * How deep nesting may go, counting the root as depth 0 — so a root may have children,
- * grandchildren, great-grandchildren and no further.
+ * The deepest nesting level allowed, counting a top-level task as depth 0. So a root may have
+ * children (1), grandchildren (2), great-grandchildren (3) and one level below that (4) — five
+ * levels in total, and no further.
  *
  * A limit exists for two reasons. Practically, a task tree deeper than this stops being a
  * deliverable broken into work and becomes an outline nobody can hold in their head; every tool
