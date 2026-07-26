@@ -7,6 +7,7 @@ import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { db, pool, schema } from './db/client.ts';
+import { ensureTaskRanks } from './db/ensure-rank.ts';
 import { authRoutes } from './auth/routes.ts';
 import { oidcRoutes } from './auth/oidc.ts';
 import { passkeyRoutes } from './auth/webauthn.ts';
@@ -44,6 +45,10 @@ const app = Fastify({ logger: true, trustProxy: true });
 // Apply pending migrations before serving. Idempotent; safe to run each boot.
 try {
   const migrationsFolder = fileURLToPath(new URL('./db/migrations', import.meta.url));
+  // Must precede migrate(): 0027 refuses to drop `tasks.position` while any task is unranked, and
+  // the whole pending batch applies in one transaction, so this is the only slot an upgrading
+  // instance has to fill them in. No-op on a fresh database and after 0027 has run.
+  await ensureTaskRanks(app.log);
   await migrate(db, { migrationsFolder });
   app.log.info('migrations up to date');
 } catch (err) {

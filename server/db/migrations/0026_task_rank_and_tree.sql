@@ -8,11 +8,15 @@
 --      collation Postgres folds case, so 'a' and 'A' would compare differently on the two sides
 --      and the DB's order would silently diverge from the UI's. "C" is byte order — the same
 --      order the client uses. See shared/rank.ts.
--- Neither edit is modelled in the drizzle snapshot (it tracks neither statement order nor
--- collations), so this file will not drift on the next generate.
+--   3. IF NOT EXISTS on the column. The boot sequence adds `rank` itself when it has to backfill an
+--      upgrading instance (server/db/ensure-rank.ts) — it cannot wait for this migration, because
+--      0027 needs the column FILLED and both apply in one transaction. On every other path this
+--      statement is the one that creates it.
+-- None of the three is modelled in the drizzle snapshot (it tracks neither statement order,
+-- collations, nor IF NOT EXISTS), so this file will not drift on the next generate.
 
--- Sibling order within a parent. Nullable until backfill-task-rank.ts has run.
-ALTER TABLE "tasks" ADD COLUMN "rank" text COLLATE "C";--> statement-breakpoint
+-- Sibling order within a parent. Nullable until the backfill has run.
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "rank" text COLLATE "C";--> statement-breakpoint
 
 -- "children of X, in order" — the read every tree render performs, and the subtree walks in
 -- delete/restore. Previously a sequential scan.
