@@ -37,6 +37,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Built client + server source (server/db/migrations is applied on boot).
 COPY --from=builder /app/dist ./dist
 COPY server ./server
+# shared/ is imported by the server at runtime (e.g. shared/rank.ts from
+# server/routes/tasks.ts) — tsx resolves it from source, so it must ship too.
+COPY shared ./shared
 EXPOSE 5174
 # Runs `tsx server/index.ts` (see package.json "start"): migrates, then serves.
 CMD ["npm", "run", "start"]
