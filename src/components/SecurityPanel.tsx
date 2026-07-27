@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { useSession } from '../session/useSession';
+import { askConfirm } from '../confirm/useConfirm';
 import { auth, type PasskeyInfo } from '../api/client';
 import { timeAgo } from '../util/dates';
 
@@ -57,7 +58,21 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
       setBusy(false);
     }
   };
-  const removePasskey = (id: string) => run(async () => { await auth.passkey.remove(id); await loadPasskeys(); });
+  const removePasskey = async (id: string, nickname: string) => {
+    const last = passkeys.length === 1;
+    const ok = await askConfirm({
+      title: `Remove “${nickname}”?`,
+      body: (
+        <p>
+          That device can no longer sign you in.
+          {last ? ' It’s your only passkey — you’ll be back to password sign-in until you add another.' : ''}
+        </p>
+      ),
+      confirmLabel: 'Remove passkey',
+    });
+    if (!ok) return;
+    await run(async () => { await auth.passkey.remove(id); await loadPasskeys(); });
+  };
   const renamePasskey = (id: string, current: string) => {
     const name = window.prompt('Rename passkey', current);
     if (name && name.trim()) run(async () => { await auth.passkey.rename(id, name.trim()); await loadPasskeys(); });
@@ -165,7 +180,7 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
                   <span className="passkey-name">{p.nickname}</span>
                   <span className="passkey-meta">added {timeAgo(p.createdAt)}{p.lastUsedAt ? ` · used ${timeAgo(p.lastUsedAt)}` : ''}</span>
                   <button className="link-btn" disabled={busy} onClick={() => renamePasskey(p.id, p.nickname)}>rename</button>
-                  <button className="icon-btn" disabled={busy} title="remove passkey" onClick={() => removePasskey(p.id)}>✕</button>
+                  <button className="icon-btn" disabled={busy} title="remove passkey" onClick={() => void removePasskey(p.id, p.nickname)}>✕</button>
                 </li>
               ))}
               {!passkeys.length && <li className="share-empty">No passkeys yet.</li>}

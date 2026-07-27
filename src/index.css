@@ -1162,6 +1162,27 @@ input, select, textarea { font: inherit; color: inherit; }
 .field input:focus, .field select:focus { border-color: var(--pop); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
+/* Confirm dialog (src/components/common/ConfirmDialog.tsx). Sits ABOVE every other surface —
+   panels at z-index 50 (share, security, trash, sheets) are what open it. Centered rather than
+   top-anchored: it's short, and it should land where the eye already is. */
+.confirm-backdrop { z-index: 200; align-items: center; padding: 16px; }
+.confirm-dialog {
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 22px 24px 18px;
+  width: min(420px, calc(100vw - 32px));
+  box-shadow: var(--shadow-pop);
+}
+.confirm-title { font-family: var(--serif); font-style: italic; font-size: 21px; margin: 0 0 10px; }
+.confirm-body { font-size: 14px; color: var(--ink-soft); }
+.confirm-body p { margin: 0 0 8px; }
+.confirm-body p:last-child { margin-bottom: 0; }
+.confirm-body strong { color: var(--ink); font-weight: 600; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.btn.danger { background: var(--pop); color: #fff; border-color: var(--pop); font-weight: 600; }
+.btn.danger:hover { background: color-mix(in srgb, var(--pop) 86%, #000); }
+
 /* CSV import: file picker / drop zone */
 .file-drop {
   position: relative;
@@ -1890,7 +1911,7 @@ input, select, textarea { font: inherit; color: inherit; }
 
   /* Sheet-ify the centered modals so they meet the thumb. */
   .modal-backdrop { align-items: flex-end; padding: 0; }
-  .modal, .picker, .search-palette, .share-panel {
+  .modal, .picker, .search-palette, .share-panel, .confirm-dialog {
     width: 100%;
     max-width: none;
     border-radius: var(--r-lg) var(--r-lg) 0 0;

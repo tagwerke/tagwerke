@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useStore } from '../store';
 import { TabCard } from './TabCard';
 import { Masonry } from './Masonry';
+import { confirmDeleteSpace } from '../confirm/prompts';
 import { matchesTaskFacets } from '../util/filter';
 import { extractDocText } from '../util/docText';
 
@@ -109,9 +110,9 @@ export function Board() {
               <button
                 className="icon-btn delete board-group-delete"
                 onClick={() => {
-                  if (confirm(`Delete project "${project?.name}" and all its tabs?`)) {
-                    deleteProject(projectId);
-                  }
+                  void confirmDeleteSpace(project?.name ?? 'this space', tabIds.length).then((ok) => {
+                    if (ok) deleteProject(projectId);
+                  });
                 }}
                 aria-label="delete project"
                 title="delete project"

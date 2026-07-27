@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, drain, ApiError, type BoardMember, type BoardRole } from '../api/client';
+import { askConfirm } from '../confirm/useConfirm';
 import { useSession } from '../session/useSession';
 import { useStore } from '../store';
 import { EmailLookup } from './EmailLookup';
@@ -14,6 +15,7 @@ import { HistoryDrawer } from './HistoryDrawer';
 import { TrashPanel } from './TrashPanel';
 
 const ROLES: BoardRole[] = ['viewer', 'editor', 'admin'];
+const RANK: Record<BoardRole, number> = { viewer: 0, editor: 1, admin: 2 };
 
 export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: string; tabName: string; onClose: () => void; embedded?: boolean }) {
   const me = useSession((s) => s.user);
@@ -52,6 +54,67 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
   // People already on this board — hidden from the lookup (adding them would 409 anyway).
   const currentEmails = new Set((members ?? []).map((m) => m.email.toLowerCase()));
 
+  // A role change takes effect on the target's LIVE sockets (see applyBoardAccessChange), so the
+  // two directions that actually move power get a confirm: losing access, and gaining admin.
+  // Lateral/expected changes (viewer → editor) go straight through.
+  async function changeRole(m: BoardMember, next: BoardRole) {
+    if (next === m.role) return;
+    const demotion = RANK[next] < RANK[m.role];
+    const ok =
+      !demotion && next !== 'admin'
+        ? true
+        : await askConfirm(
+            demotion
+              ? {
+                  title: `Change ${m.email} to ${next}?`,
+                  body: (
+                    <p>
+                      They lose <strong>{m.role}</strong> access to this board right away, including in any
+                      session they already have open.
+                    </p>
+                  ),
+                  confirmLabel: `Make ${next}`,
+                }
+              : {
+                  title: `Make ${m.email} an admin?`,
+                  body: <p>Admins can add and remove members, change roles, and delete this board.</p>,
+                  confirmLabel: 'Make admin',
+                  danger: false,
+                },
+          );
+    if (!ok) {
+      // The <select> is controlled by `members`, which a cancel leaves untouched — so nothing would
+      // re-render and the dropdown would keep showing the role we didn't apply. Nudge state to make
+      // React reconcile it back to the real value.
+      setMembers((prev) => (prev ? [...prev] : prev));
+      return;
+    }
+    await run(() => api.members.setRole(tabId, m.userId, next));
+  }
+
+  async function removeMember(m: BoardMember, self: boolean) {
+    const ok = await askConfirm(
+      self
+        ? {
+            title: `Leave “${tabName}”?`,
+            body: <p>You lose access immediately. An admin has to add you back to return.</p>,
+            confirmLabel: 'Leave board',
+          }
+        : {
+            title: 'Remove this member?',
+            body: (
+              <p>
+                <strong>{m.email}</strong> loses access to “{tabName}” immediately, and is disconnected from
+                any session they have open on it.
+              </p>
+            ),
+            confirmLabel: 'Remove',
+          },
+    );
+    if (!ok) return;
+    await run(() => api.members.remove(tabId, m.userId), self ? () => window.location.reload() : undefined);
+  }
+
   async function run(fn: () => Promise<unknown>, after?: () => void) {
     setBusy(true);
     setError(null);
@@ -80,7 +143,7 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
                   <select
                     value={m.role}
                     disabled={busy}
-                    onChange={(e) => run(() => api.members.setRole(tabId, m.userId, e.target.value as BoardRole))}
+                    onChange={(e) => void changeRole(m, e.target.value as BoardRole)}
                   >
                     {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
@@ -92,12 +155,7 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
                     className="icon-btn"
                     disabled={busy}
                     title={self ? 'leave board' : 'remove'}
-                    onClick={() =>
-                      run(
-                        () => api.members.remove(tabId, m.userId),
-                        self ? () => window.location.reload() : undefined,
-                      )
-                    }
+                    onClick={() => void removeMember(m, self)}
                   >
                     {self ? 'Leave' : '✕'}
                   </button>

@@ -18,6 +18,7 @@ import { SecurityPanel } from './components/SecurityPanel';
 import { MoreSheet } from './components/MoreSheet';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { CascadeToast } from './components/common/CascadeToast';
+import { ConfirmDialog } from './components/common/ConfirmDialog';
 import { InfoPane } from './components/InfoPane';
 import { usePath, boardPath, parseBoardId, isCalendarPath, CALENDAR_PATH } from './util/router';
 
@@ -38,11 +39,23 @@ export default function App() {
   if (status === 'unauthenticated') {
     return <AuthScreen />;
   }
+  // ConfirmDialog is mounted alongside BOTH authenticated trees, not inside Workspace: /admin is a
+  // separate top-level page and its console has destructive actions of its own.
   // /admin is its own page (no link to it — type the URL). It self-bounces non-admins.
   if (path === '/admin') {
-    return <AdminPage />;
+    return (
+      <>
+        <AdminPage />
+        <ConfirmDialog />
+      </>
+    );
   }
-  return <Workspace />;
+  return (
+    <>
+      <Workspace />
+      <ConfirmDialog />
+    </>
+  );
 }
 
 function Workspace() {

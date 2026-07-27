@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../../store';
 import { useSession } from '../../session/useSession';
+import { confirmDeleteEvent } from '../../confirm/prompts';
 import { rankTabs } from '../../util/header';
 import { Dropdown, type DropdownOption } from '../Dropdown';
 import { STATUS_ORDER, STATUS_LABEL } from '../StatusControl';
@@ -106,8 +107,12 @@ export function EventEditor({
   };
 
   const remove = () => {
-    if (event) deleteEvent(event.id);
-    onClose();
+    if (!event) return void onClose();
+    void confirmDeleteEvent({ title: event.title, recurring: !!event.rrule, shared: !!event.tabId }).then((ok) => {
+      if (!ok) return;
+      deleteEvent(event.id);
+      onClose();
+    });
   };
 
   return createPortal(

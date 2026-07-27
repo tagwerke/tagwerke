@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useStore } from '../store';
+import { confirmDeleteSpace } from '../confirm/prompts';
 import { PRIORITY_LABELS } from '../util/filter';
 
 export function FilterPanel({ onClose }: { onClose: () => void }) {
@@ -83,15 +84,13 @@ export function FilterPanel({ onClose }: { onClose: () => void }) {
                     aria-label={`delete project ${p.name}`}
                     title="delete project"
                     onClick={() => {
-                      const msg = tabCount
-                        ? `Delete project "${p.name}" and its ${tabCount} tab${tabCount === 1 ? '' : 's'}?`
-                        : `Delete project "${p.name}"?`;
-                      if (confirm(msg)) {
+                      void confirmDeleteSpace(p.name, tabCount).then((ok) => {
+                        if (!ok) return;
                         deleteProject(pid);
                         if (filter.projectIds.includes(pid)) {
                           setFilter({ projectIds: filter.projectIds.filter((x) => x !== pid) });
                         }
-                      }
+                      });
                     }}
                   >
                     <svg viewBox="0 0 16 16" width="10" height="10"><path d="M4 4l8 8M12 4L4 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>

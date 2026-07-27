@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, ApiError, type AdminInvite, type AdminUser, type OidcConfig } from '../api/client';
+import { askConfirm, type ConfirmRequest } from '../confirm/useConfirm';
 import { useSession } from '../session/useSession';
 
 export function AdminConsole() {
@@ -52,6 +53,15 @@ export function AdminConsole() {
     }
   }
 
+  /** Ask first, then run. Every action in this console acts on someone else's account. */
+  async function confirmRun(req: ConfirmRequest, fn: () => Promise<unknown>, onCancel?: () => void) {
+    if (!(await askConfirm(req))) {
+      onCancel?.();
+      return;
+    }
+    await run(fn);
+  }
+
   return (
     <div className="admin-console">
       {error && <div className="share-error">{error}</div>}
@@ -87,7 +97,28 @@ export function AdminConsole() {
           {invites?.map((inv) => (
             <li key={inv.code} className="share-member">
               <span className="share-email"><code>{inv.code}</code> <em>{inv.usedCount ?? 0}/{inv.maxUses} used{inv.note ? ` · ${inv.note}` : ''}{inv.expiresAt ? ` · exp ${inv.expiresAt.slice(0, 10)}` : ''}</em></span>
-              <button className="icon-btn" disabled={busy} title="revoke" onClick={() => run(() => api.admin.revokeInvite(inv.code))}>✕</button>
+              <button
+                className="icon-btn"
+                disabled={busy}
+                title="revoke"
+                onClick={() =>
+                  void confirmRun(
+                    {
+                      title: 'Revoke this invite?',
+                      body: (
+                        <p>
+                          The code <strong>{inv.code}</strong> stops working immediately. Anyone still holding it
+                          can no longer sign up. Existing accounts are unaffected.
+                        </p>
+                      ),
+                      confirmLabel: 'Revoke invite',
+                    },
+                    () => api.admin.revokeInvite(inv.code),
+                  )
+                }
+              >
+                ✕
+              </button>
             </li>
           ))}
           {invites && invites.length === 0 && <li className="share-empty">No invites.</li>}
@@ -113,18 +144,87 @@ export function AdminConsole() {
                     <select
                       value={u.role}
                       disabled={busy || deactivated}
-                      onChange={(e) => run(() => api.admin.setRole(u.id, e.target.value as 'admin' | 'member'))}
+                      onChange={(e) => {
+                        const next = e.target.value as 'admin' | 'member';
+                        if (next === u.role) return;
+                        void confirmRun(
+                          next === 'admin'
+                            ? {
+                                title: `Make ${u.email} a workspace admin?`,
+                                body: <p>Workspace admins can manage every user, mint invites, and change SSO settings.</p>,
+                                confirmLabel: 'Make admin',
+                                danger: false,
+                              }
+                            : {
+                                title: `Remove admin from ${u.email}?`,
+                                body: <p>They keep their account and boards, but lose access to this console.</p>,
+                                confirmLabel: 'Make member',
+                              },
+                          () => api.admin.setRole(u.id, next),
+                          // Controlled <select>: a cancel changes no state, so force a re-render to
+                          // put the dropdown back on the role we didn't apply.
+                          () => setUsers((prev) => (prev ? [...prev] : prev)),
+                        );
+                      }}
                     >
                       <option value="member">member</option>
                       <option value="admin">admin</option>
                     </select>
-                    <button className="link-btn" disabled={busy} title="Clear this user's 2FA (lost authenticator)" onClick={() => run(() => api.admin.resetTwoFactor(u.id))}>reset 2FA</button>
-                    <button className="link-btn" disabled={busy} title="Remove this user's passkeys (lost devices)" onClick={() => run(() => api.admin.resetPasskeys(u.id))}>reset passkeys</button>
+                    <button
+                      className="link-btn"
+                      disabled={busy}
+                      title="Clear this user's 2FA (lost authenticator)"
+                      onClick={() =>
+                        void confirmRun(
+                          {
+                            title: `Reset two-factor for ${u.email}?`,
+                            body: (
+                              <p>
+                                Their authenticator and backup codes stop working, and they can sign in with just a
+                                password until they set 2FA up again. Only do this if they've genuinely lost their device.
+                              </p>
+                            ),
+                            confirmLabel: 'Reset 2FA',
+                          },
+                          () => api.admin.resetTwoFactor(u.id),
+                        )
+                      }
+                    >
+                      reset 2FA
+                    </button>
+                    <button
+                      className="link-btn"
+                      disabled={busy}
+                      title="Remove this user's passkeys (lost devices)"
+                      onClick={() =>
+                        void confirmRun(
+                          {
+                            title: `Remove all passkeys for ${u.email}?`,
+                            body: <p>Every device they've registered is unenrolled. They'll need to add a new passkey to use one again.</p>,
+                            confirmLabel: 'Remove passkeys',
+                          },
+                          () => api.admin.resetPasskeys(u.id),
+                        )
+                      }
+                    >
+                      reset passkeys
+                    </button>
                     <button
                       className="icon-btn"
                       disabled={busy}
                       title={deactivated ? 'reactivate' : 'deactivate'}
-                      onClick={() => run(() => api.admin.setActive(u.id, deactivated))}
+                      onClick={() => {
+                        // Reactivating is constructive — no confirm, just do it.
+                        if (deactivated) return void run(() => api.admin.setActive(u.id, true));
+                        void confirmRun(
+                          {
+                            title: `Deactivate ${u.email}?`,
+                            body: <p>They're signed out and can't sign back in. Their boards, tasks and history stay exactly as they are, and you can reactivate them here later.</p>,
+                            confirmLabel: 'Deactivate',
+                          },
+                          () => api.admin.setActive(u.id, false),
+                        );
+                      }}
                     >
                       {deactivated ? '↺' : '⏻'}
                     </button>

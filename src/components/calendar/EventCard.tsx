@@ -8,6 +8,7 @@
 
 import { useRef, useState } from 'react';
 import { useStore } from '../../store';
+import { confirmDeleteEvent } from '../../confirm/prompts';
 import { minsOfClock, fmtMin, dayOf, PX_PER_MIN, MIN_EVENT_MIN, DAY_MINUTES, type LaidOut } from './geometry';
 import type { CalendarEvent } from '../../types';
 
@@ -126,7 +127,9 @@ export function EventCard({
     if (!event.start || !event.end) return;
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
-      deleteEvent(event.id);
+      void confirmDeleteEvent({ title: event.title, recurring: !!event.rrule, shared: !!event.tabId }).then((ok) => {
+        if (ok) deleteEvent(event.id);
+      });
       return;
     }
     const dir = e.key === 'ArrowUp' ? -SNAP : e.key === 'ArrowDown' ? SNAP : 0;

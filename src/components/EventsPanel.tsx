@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError, type AttendanceStatus, type BoardEvent } from '../api/client';
 import { useStore } from '../store';
+import { confirmDeleteEvent } from '../confirm/prompts';
 import { useSession } from '../session/useSession';
 
 // Common recurrence presets → RRULE. Raw entry is also allowed.
@@ -100,7 +101,18 @@ export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: stri
                   {ev.start ? new Date(ev.start).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'no time'}
                   {ev.rrule && <em className="event-recur"> · repeats</em>}
                 </span>
-                <button className="icon-btn" disabled={busy} title="delete event" onClick={() => run(() => api.events.remove(ev.id))}>✕</button>
+                <button
+                  className="icon-btn"
+                  disabled={busy}
+                  title="delete event"
+                  onClick={() =>
+                    void confirmDeleteEvent({ recurring: !!ev.rrule, shared: true }).then((ok) => {
+                      if (ok) void run(() => api.events.remove(ev.id));
+                    })
+                  }
+                >
+                  ✕
+                </button>
               </div>
               <div className="event-occurrences">
                 {ev.occurrences.length === 0 && <span className="share-empty">No upcoming dates in the next 60 days.</span>}

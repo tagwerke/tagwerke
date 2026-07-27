@@ -6,6 +6,8 @@
 
 import { useEffect, useRef } from 'react';
 import { useSession } from '../../session/useSession';
+import { confirmSignOut } from '../../confirm/prompts';
+import { useConfirm } from '../../confirm/useConfirm';
 import type { Panel } from '../../App';
 
 export function ProfileDrawer({ email, onOpen, onClose }: { email: string; onOpen: (panel: Panel) => void; onClose: () => void }) {
@@ -15,6 +17,9 @@ export function ProfileDrawer({ email, onOpen, onClose }: { email: string; onOpe
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
+      // Same guard as SpaceForm: the confirm dialog lives outside this popover, so a click in it
+      // must not read as an outside click and close the drawer under a pending question.
+      if (useConfirm.getState().pending) return;
       if (!ref.current?.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -46,8 +51,11 @@ export function ProfileDrawer({ email, onOpen, onClose }: { email: string; onOpe
       <button
         className="profile-drawer-row danger"
         onClick={() => {
-          onClose();
-          void logout();
+          void confirmSignOut().then((ok) => {
+            if (!ok) return;
+            onClose();
+            void logout();
+          });
         }}
       >
         Sign out

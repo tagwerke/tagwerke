@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../store';
+import { confirmDeleteSpace } from '../../confirm/prompts';
+import { useConfirm } from '../../confirm/useConfirm';
 import type { Project } from '../../types';
 
 // Palette shared by space create + edit (previously duplicated inline in the Sidebar menu).
@@ -26,13 +28,19 @@ export function SpaceForm({ mode, project, onClose, onCreated }: Props) {
   const deleteProject = useStore((s) => s.deleteProject);
   const canDelete = useStore((s) => s.projectOrder.length > 1); // never delete the last space
 
+  const boardCount = useStore(
+    (s) => Object.values(s.tabs).filter((t) => t.projectId === project?.id && t.type !== 'today').length,
+  );
+
   const [name, setName] = useState(project?.name ?? '');
   const [color, setColor] = useState(project?.color ?? SPACE_COLORS[0]);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
+      // The confirm dialog renders at the App root, outside this popover — without this guard,
+      // clicking *Cancel* in it would count as an outside click and close the editor anyway.
+      if (useConfirm.getState().pending) return;
       if (!ref.current?.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -94,15 +102,14 @@ export function SpaceForm({ mode, project, onClose, onCreated }: Props) {
           title={canDelete ? undefined : 'Keep at least one space'}
           onClick={() => {
             if (!canDelete) return;
-            if (confirmDelete) {
+            void confirmDeleteSpace(project!.name, boardCount).then((ok) => {
+              if (!ok) return;
               deleteProject(project!.id);
               onClose();
-            } else {
-              setConfirmDelete(true);
-            }
+            });
           }}
         >
-          {confirmDelete ? 'Click again to delete' : 'Delete space'}
+          Delete space
         </button>
       ) : (
         <button type="button" className="space-form-action" disabled={!name.trim()} onClick={create}>

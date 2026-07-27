@@ -1,6 +1,7 @@
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
 import { useNotifications } from '../notifications/useNotifications';
+import { confirmSignOut } from '../confirm/prompts';
 import type { Panel } from '../App';
 
 // Overflow sheet for the mobile bottom nav: secondary actions that don't earn a
@@ -47,7 +48,10 @@ export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (p
           <span>security</span>
           {needs2fa && <span className="sheet-dot" aria-label="two-factor not set up" />}
         </button>
-        <button className="sheet-row danger" onClick={() => void logout()}>
+        <button
+          className="sheet-row danger"
+          onClick={() => void confirmSignOut().then((ok) => { if (ok) void logout(); })}
+        >
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M10 2H4v12h6M7 8h7m0 0l-2.5-2.5M14 8l-2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
           <span>sign out</span>
         </button>

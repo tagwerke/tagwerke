@@ -4,6 +4,7 @@
 
 import { useStore } from '../store';
 import { useNotifications } from '../notifications/useNotifications';
+import { askConfirm } from '../confirm/useConfirm';
 import { PushOptIn } from './PushOptIn';
 import { timeAgo } from '../util/dates';
 import type { NotificationType } from '../types';
@@ -52,7 +53,25 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
               <button className="link-btn" onClick={markAllRead}>Mark all read</button>
             )}
             {items.length > 0 && (
-              <button className="link-btn" onClick={clearAll}>Clear</button>
+              <button
+                className="link-btn"
+                onClick={() =>
+                  void askConfirm({
+                    title: 'Clear all notifications?',
+                    body: (
+                      <p>
+                        {items.length === 1 ? 'The one notification' : `All ${items.length} notifications`} in your
+                        feed {items.length === 1 ? 'is' : 'are'} deleted. The work they point at is untouched.
+                      </p>
+                    ),
+                    confirmLabel: 'Clear feed',
+                  }).then((ok) => {
+                    if (ok) clearAll();
+                  })
+                }
+              >
+                Clear
+              </button>
             )}
             <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
           </div>
