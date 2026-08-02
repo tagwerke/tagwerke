@@ -160,8 +160,13 @@ interface Actions {
   setTaskText(id: ID, text: string): void;
   /** Re-parent a task. Always assigns a rank in the new sibling group (append unless given). */
   setTaskParent(id: ID, parentTaskId: ID | undefined, rank?: string): void;
-  /** Reorder and/or re-parent by dropping between two known neighbours. One row changes. */
-  moveTask(id: ID, to: { parentTaskId?: ID | undefined; before?: ID; after?: ID }): void;
+  /**
+   * Reorder and/or re-parent by dropping between two known neighbours. One row changes.
+   * `parentTaskId`: an id nests it there, `null` makes it a top-level task, and OMITTING it keeps
+   * the parent it has (a pure reorder). Root-ness is a real destination, so it needs a value of its
+   * own — `undefined` already means "don't touch this".
+   */
+  moveTask(id: ID, to: { parentTaskId?: ID | null; before?: ID; after?: ID }): void;
   setTaskStatus(id: ID, status: TaskStatus): void;
   /** Accept the offer to mark a completed parent's open sub-tasks done too (SUBTASKS_PLAN D5). */
   applyCascadeDone(): void;
@@ -495,7 +500,8 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         const tasks = get().tasks;
         const t = tasks[id];
         if (!t) return;
-        const parent = parentTaskId === undefined ? t.parentTaskId : parentTaskId;
+        // null → become a root; undefined → keep the current parent. See the interface.
+        const parent = parentTaskId === undefined ? t.parentTaskId : parentTaskId ?? undefined;
         const lo = before ? tasks[before]?.rank ?? null : null;
         const hi = after ? tasks[after]?.rank ?? null : null;
         let rank: string;

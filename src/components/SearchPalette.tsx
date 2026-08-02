@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
+import { MoveTaskMenu } from './common/MoveTaskMenu';
 import { extractDocText } from '../util/docText';
 
 interface Hit {
@@ -7,6 +8,8 @@ interface Hit {
   tabId: string;
   text: string;
   context?: string;
+  /** Task hits only — lets the row carry the "move to board" action (see MoveTaskMenu). */
+  taskId?: string;
 }
 
 /** A short excerpt around the match, so a hit against a long prose blob isn't the whole blob. */
@@ -44,7 +47,7 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
     }
     for (const t of Object.values(tasks)) {
       if (t.text.toLowerCase().includes(query)) {
-        out.push({ kind: 'task', tabId: t.homeTabId, text: t.text, context: tabs[t.homeTabId]?.name });
+        out.push({ kind: 'task', tabId: t.homeTabId, text: t.text, context: tabs[t.homeTabId]?.name, taskId: t.id });
       }
     }
     for (const tab of Object.values(tabs)) {
@@ -76,11 +79,17 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
         <div className="search-results">
           {hits.length === 0 && q && <div className="search-empty">no matches</div>}
           {hits.map((h, i) => (
-            <button key={i} className="search-hit" onClick={() => open(h)}>
-              <span className={`search-kind ${h.kind}`}>{h.kind}</span>
-              <span className="search-text">{h.text}</span>
-              {h.context && <span className="search-context">{h.context}</span>}
-            </button>
+            // A row, not a bare button: a task hit carries its own "move to board" action, and a
+            // button cannot legally contain another one. Finding a task by name and sending it
+            // somewhere else without opening either board is the fastest path this app has for it.
+            <div key={i} className="search-hit-row">
+              <button className="search-hit" onClick={() => open(h)}>
+                <span className={`search-kind ${h.kind}`}>{h.kind}</span>
+                <span className="search-text">{h.text}</span>
+                {h.context && <span className="search-context">{h.context}</span>}
+              </button>
+              {h.taskId && <MoveTaskMenu taskId={h.taskId} className="on-row" />}
+            </div>
           ))}
         </div>
       </div>

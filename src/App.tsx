@@ -19,6 +19,7 @@ import { MoreSheet } from './components/MoreSheet';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { CascadeToast } from './components/common/CascadeToast';
 import { ConfirmDialog } from './components/common/ConfirmDialog';
+import { Toast } from './components/common/Toast';
 import { InfoPane } from './components/InfoPane';
 import { usePath, boardPath, parseBoardId, isCalendarPath, CALENDAR_PATH } from './util/router';
 
@@ -137,6 +138,7 @@ function Workspace() {
       </div>
       <MobileNav onOpen={setPanel} />
       <CascadeToast />
+      <Toast />
 
       {panel === 'new' && <NewTabDialog onClose={closePanel} />}
       {panel === 'import' && <ImportCsvSheet onClose={closePanel} />}

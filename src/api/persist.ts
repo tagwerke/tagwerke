@@ -160,6 +160,25 @@ export function setBaseline(s: RootState): void {
   last = snapshot(s);
 }
 
+/**
+ * Apply a store mutation that has ALREADY happened server-side, without the differ sending it
+ * back. Pending local edits are flushed first (so they aren't swallowed), then the baseline is
+ * advanced past the applied change so it reads as already-persisted.
+ *
+ * Used by the realtime layer for a peer's mutation, and by the cross-board move, which applies the
+ * rows the server just returned. Both would otherwise be re-emitted as writes and loop.
+ */
+export function applyServerState(mutate: () => void): void {
+  flush();
+  suspended = true;
+  try {
+    mutate();
+  } finally {
+    setBaseline(useStore.getState());
+    suspended = false;
+  }
+}
+
 /** Run the diff immediately (e.g. before unload) instead of waiting for the debounce. */
 export function flush(): void {
   if (timer) {

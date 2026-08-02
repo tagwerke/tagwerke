@@ -8,7 +8,7 @@
 // stay as direct fetches and simply fail while offline.
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import type { BlockFilter, CalendarEvent, ID, Notification as NotificationDTO, RsvpStatus, TaskStatus } from '../types';
+import type { BlockFilter, CalendarEvent, ID, Notification as NotificationDTO, RsvpStatus, Task, TaskStatus } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
 
@@ -178,6 +178,16 @@ export const api = {
     remove: (id: ID) => submitMutation(M('DELETE', `/api/tasks/${id}`)),
     deleteOrphans: (homeTabId: ID, keepIds: ID[]) =>
       submitMutation(M('POST', '/api/tasks/delete-orphans', { homeTabId, keepIds })),
+    /**
+     * Move a task + its sub-tasks to another board. A DIRECT fetch, deliberately not the optimistic
+     * outbox: the server decides things this client cannot (which assignments survive the
+     * destination's roster, where the task lands among its new siblings) and returns the rewritten
+     * rows, which we apply verbatim. Same reasoning as trash.restore and imports.csv — a structural
+     * batch operation with a real result to show. It therefore fails while offline, which is right:
+     * there is nothing sensible to show for a move whose outcome we'd be guessing at.
+     */
+    move: (id: ID, toTabId: ID) =>
+      req<MoveResult>(`/api/tasks/${id}/move`, { method: 'POST', body: JSON.stringify({ toTabId }) }),
   },
   // ── Calendar (events model) ────────────────────────────────────────────────
   // Reads stay direct (live); writes funnel through the durable outbox so an offline
@@ -362,6 +372,21 @@ export interface HistoryEntry {
   action: string;
   payload: unknown;
   createdAt: string;
+}
+
+/**
+ * The outcome of a cross-board move. `moved` is every row the server rewrote (the task and the
+ * sub-tasks that travelled with it) in its final state — applied to the store verbatim, so the
+ * client never has to reproduce the server's placement or roster rules. The cleared counts are
+ * assignments that did not survive the destination board's roster; the UI reports them because
+ * silently unassigning someone's work is exactly the kind of thing that should be said out loud.
+ */
+export interface MoveResult {
+  ok: true;
+  moved: Task[];
+  subtaskCount: number;
+  clearedAssignees: number;
+  clearedReviewers: number;
 }
 
 /** A trashed (soft-deleted) task shown in the Trash view. */

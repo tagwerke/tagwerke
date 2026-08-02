@@ -2782,3 +2782,115 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-card-sub-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-card-sub.status-done .task-card-sub-text,
 .task-card-sub.status-cancelled .task-card-sub-text { text-decoration: line-through; opacity: 0.7; }
+
+/* ── Moving a task: drag inside the board, menu to leave it ───────────────────
+   Two affordances for one idea. Dragging is the direct one and can only reach places on THIS
+   board (the tree it can see); the menu is the only way to another board, and is also the way in
+   for touch and the keyboard, neither of which gets HTML5 drag events at all. */
+
+/* Grab handle. Sits in the gutter left of the status control — outside the row's grid, so adding
+   it costs the content no width — and stays invisible until the row is hovered. */
+.task-drag-handle {
+  position: absolute;
+  left: -16px;
+  top: 5px;
+  display: inline-flex;
+  padding: 1px;
+  color: var(--ink-mute);
+  fill: currentColor;
+  opacity: 0;
+  cursor: grab;
+  transition: opacity .12s;
+}
+.task-item:hover > .task-drag-handle,
+.task-item:focus-within > .task-drag-handle { opacity: 0.4; }
+.task-drag-handle:hover { opacity: 1 !important; }
+.task-drag-handle:active { cursor: grabbing; }
+
+/* Drop indicator. Drawn against the row's OWN line — `--drop-h`, measured in JS, because a
+   parent's <li> is as tall as its whole family and CSS has no way to ask where the line ends.
+   before/after are a rule at the edge of the line; `into` is a wash over it, since "inside this
+   task" is an area, not a boundary. */
+.task-item[data-drop]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: var(--page-accent, var(--ink));
+}
+.task-item[data-drop="before"]::before { top: -1px; height: 2px; border-radius: 2px; }
+.task-item[data-drop="after"]::before { top: calc(var(--drop-h, 100%) - 1px); height: 2px; border-radius: 2px; }
+.task-item[data-drop="into"]::before {
+  top: 0;
+  height: var(--drop-h, 100%);
+  border-radius: var(--r-sm, 6px);
+  opacity: 0.13;
+}
+
+/* "Move to board" trigger + popover. */
+.move-menu-wrap { position: relative; display: inline-flex; }
+.task-move-btn { width: 22px; height: 20px; padding: 0; }
+/* In the doc, it is a trailing hover action beside the history button (which owns the corner). */
+.task-item .move-menu-wrap { position: absolute; top: 3px; right: 26px; }
+.task-item .task-move-btn { opacity: 0; }
+.task-item:hover .task-move-btn { opacity: 0.45; }
+.task-item .task-move-btn:hover { opacity: 1; }
+/* On a card / list row it sits inline with the other trailing metadata. */
+.task-move-btn.on-card, .task-move-btn.on-row { opacity: 0; }
+.task-card-foot .move-menu-wrap { margin-left: auto; margin-right: 6px; }
+.task-card:hover .task-move-btn.on-card,
+.task-row:hover .task-move-btn.on-row,
+.search-hit-row:hover .task-move-btn.on-row { opacity: 0.5; }
+.task-move-btn.on-card:hover, .task-move-btn.on-row:hover { opacity: 1; }
+
+.move-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  width: 250px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 10px);
+  background: var(--bg-elev, var(--bg));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+  text-align: left;
+  cursor: default;
+}
+.move-menu-head {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 2px 4px 6px;
+  font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase;
+  font-weight: 700; color: var(--ink-mute);
+}
+.move-menu-note { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 11px; }
+.move-menu-search {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  font-size: 13px;
+}
+.move-menu-list { max-height: 220px; overflow-y: auto; margin-top: 6px; }
+.move-menu-empty { padding: 10px 4px; font-size: 12px; }
+.move-menu-item {
+  display: flex; align-items: center; gap: 7px;
+  width: 100%; text-align: left;
+  padding: 6px 6px;
+  border: 0; border-radius: var(--r-sm);
+  background: transparent;
+  font-size: 13px; color: var(--ink);
+  cursor: pointer;
+}
+.move-menu-item.is-active { background: var(--line); }
+.move-menu-item:disabled { opacity: 0.5; cursor: default; }
+.move-menu-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.move-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.move-menu-space { margin-left: auto; font-size: 11px; color: var(--ink-mute); flex: none; }
+
+/* A search hit is a row now (button + move action) rather than one big button. */
+.search-hit-row { display: flex; align-items: center; gap: 4px; }
+.search-hit-row .search-hit { flex: 1; min-width: 0; }

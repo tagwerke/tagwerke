@@ -7,6 +7,7 @@
 import { useStore } from '../../store';
 import { StatusControl } from '../StatusControl';
 import { TaskMeta } from '../TaskMeta';
+import { MoveTaskMenu } from './MoveTaskMenu';
 import { SubtaskProgress } from './SubtaskProgress';
 import { TaskParentPath } from './TaskParentPath';
 import type { ID, TaskStatus } from '../../types';
@@ -64,6 +65,7 @@ export function TaskRow({
         <SubtaskProgress taskId={task.id} />
       </span>
       <TaskMeta taskId={task.id} editable={editable} />
+      {editable ? <MoveTaskMenu taskId={task.id} className="on-row" /> : null}
     </div>
   );
 }

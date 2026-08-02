@@ -12,6 +12,33 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 
+/**
+ * One task row in the shape src/types.ts `Task` expects: absent rather than null for the optional
+ * fields, timestamps as epoch millis. Exported because /api/state is no longer the only thing that
+ * hands a client a whole task — the cross-board move returns the rows it rewrote and broadcasts
+ * them to both boards, and those must be the SAME shape or the store would hold two dialects.
+ */
+export function taskDTO(t: typeof schema.tasks.$inferSelect): Record<string, unknown> {
+  return {
+    id: t.id,
+    homeTabId: t.homeTabId,
+    text: t.text,
+    status: t.status,
+    done: t.done, // back-compat mirror during the transition
+    ...(t.rank != null ? { rank: t.rank } : {}),
+    createdAt: t.createdAt instanceof Date ? t.createdAt.getTime() : undefined,
+    updatedAt: t.updatedAt instanceof Date ? t.updatedAt.getTime() : undefined,
+    ...(t.assigneeId != null ? { assigneeId: t.assigneeId } : {}),
+    ...(t.reviewerId != null ? { reviewerId: t.reviewerId } : {}),
+    ...(t.approvedBy != null ? { approvedBy: t.approvedBy } : {}),
+    ...(t.approvedAt instanceof Date ? { approvedAt: t.approvedAt.getTime() } : {}),
+    ...(t.date != null ? { date: t.date } : {}),
+    ...(t.priority != null ? { priority: t.priority } : {}),
+    ...(t.parentTaskId != null ? { parentTaskId: t.parentTaskId } : {}),
+    ...(t.owner != null ? { owner: t.owner } : {}),
+  };
+}
+
 export async function assembleState(userId: string) {
   // The user's boards (via membership) joined to shared tab content. The membership
   // row carries this user's personal view state for each board.
@@ -75,26 +102,7 @@ export async function assembleState(userId: string) {
   const starredRowOrder = starred.sort((a, b) => a.pos - b.pos).map((s) => s.id);
 
   const tasks: Record<string, unknown> = {};
-  for (const t of taskRows) {
-    tasks[t.id] = {
-      id: t.id,
-      homeTabId: t.homeTabId,
-      text: t.text,
-      status: t.status,
-      done: t.done, // back-compat mirror during the transition
-      ...(t.rank != null ? { rank: t.rank } : {}),
-      createdAt: t.createdAt instanceof Date ? t.createdAt.getTime() : undefined,
-      updatedAt: t.updatedAt instanceof Date ? t.updatedAt.getTime() : undefined,
-      ...(t.assigneeId != null ? { assigneeId: t.assigneeId } : {}),
-      ...(t.reviewerId != null ? { reviewerId: t.reviewerId } : {}),
-      ...(t.approvedBy != null ? { approvedBy: t.approvedBy } : {}),
-      ...(t.approvedAt instanceof Date ? { approvedAt: t.approvedAt.getTime() } : {}),
-      ...(t.date != null ? { date: t.date } : {}),
-      ...(t.priority != null ? { priority: t.priority } : {}),
-      ...(t.parentTaskId != null ? { parentTaskId: t.parentTaskId } : {}),
-      ...(t.owner != null ? { owner: t.owner } : {}),
-    };
-  }
+  for (const t of taskRows) tasks[t.id] = taskDTO(t);
 
   // Per-board member rosters — the source the `@` assignee picker reads (SPEC §5).
   // Keyed by board id; only boards the user can see. No display name in the DB yet,

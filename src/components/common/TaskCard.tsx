@@ -4,6 +4,7 @@
 import { useMemo, useState } from 'react';
 import { childrenOf, useStore } from '../../store';
 import { Avatar } from './Avatar';
+import { MoveTaskMenu } from './MoveTaskMenu';
 import { SubtaskProgress } from './SubtaskProgress';
 import { TaskParentPath } from './TaskParentPath';
 import type { ID } from '../../types';
@@ -76,6 +77,7 @@ export function TaskCard({ taskId, onOpen, draggable, onDragStart, expandable = 
 
       <div className="task-card-foot">
         {task.priority ? <span className={`task-card-prio p${task.priority}`}>{'!'.repeat(task.priority)}</span> : <span />}
+        <MoveTaskMenu taskId={task.id} className="on-card" />
         {name && <Avatar name={name} size={20} />}
       </div>
     </article>

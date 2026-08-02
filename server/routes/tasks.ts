@@ -6,6 +6,8 @@ import { requireAuth } from '../auth/guard.ts';
 import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, boardRequiresReview, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
 import { notify } from '../lib/notify.ts';
+import { boardChannel, publish } from '../lib/bus.ts';
+import { taskDTO } from '../lib/assembleState.ts';
 import { reconcileBoard } from '../realtime/ydoc.ts';
 import { isValidRank, rankAfter } from '../../shared/rank.ts';
 import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
@@ -403,6 +405,145 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         }
       }
       return reply.send({ ok: true });
+    },
+  );
+
+  /**
+   * Move a task — and the work under it — to a different board.
+   *
+   * This is a route rather than a `homeTabId` on PATCH because it is not a field write. Three
+   * things have to happen together or the board is left inconsistent:
+   *
+   *   1. THE SUBTREE TRAVELS. `tasks_parent_same_board` (0026) is a composite FK on
+   *      (parent_task_id, home_tab_id), so a task cannot sit on a different board from its parent.
+   *      Moving a task with sub-tasks therefore has to move them too — which is also the semantics
+   *      we want (a parent is a commitment and its sub-tasks are the work under it, D7), and the
+   *      same unit delete and restore already operate on. The rewrite MUST be a single UPDATE: the
+   *      constraint is ON UPDATE NO ACTION, which defers its check to the end of the statement, so
+   *      parent and children land on the new board together. Two statements would fail whichever
+   *      order they ran in.
+   *   2. THE DOC REFS FOLLOW. The document holds a ref for ROOT tasks only (D2), and the task is
+   *      leaving one document for another. `reconcileBoard` on each side is exactly the repair:
+   *      the source prunes a ref whose row is no longer its own, the target inserts one at the
+   *      task's rank. Same call the Trash restore uses.
+   *   3. ASSIGNMENTS THAT NO LONGER HOLD ARE DROPPED. assignee/reviewer are constrained to members
+   *      of the task's home board (SPEC §5), and the destination has a different roster. Rather
+   *      than refuse the move (the assignment is the incidental detail; the move is the intent) we
+   *      clear the ones that don't survive and SAY SO — in the response, so the mover is told, and
+   *      in the audit row, so it is on the record who lost the task.
+   *
+   * The task lands as a ROOT on the destination, appended: its old rank was ordered against a
+   * different set of siblings and means nothing here.
+   */
+  app.post(
+    '/api/tasks/:id/move',
+    { preHandler: requireBoardRole('editor', taskBoard) },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const b = z.object({ toTabId: z.string().min(1) }).safeParse(req.body);
+      if (!b.success) return reply.code(400).send({ error: 'invalid move' });
+      const userId = req.user!.id;
+      const toTabId = b.data.toTabId;
+
+      const before = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0];
+      if (!before || before.deletedAt) return reply.code(404).send({ error: 'not found' });
+      const fromTabId = before.homeTabId;
+      // Already there: succeed without touching anything, so a retried op (the network dropped the
+      // response) is not an error the client has to distinguish from a real failure.
+      if (toTabId === fromTabId) {
+        return reply.send({ ok: true, moved: [], subtaskCount: 0, clearedAssignees: 0, clearedReviewers: 0 });
+      }
+      // Editor on the destination too — the preHandler only proved it on the board being left.
+      // 404 (not 403) keeps a board the caller can't see non-probeable, matching auth/boards.ts.
+      if (!(await hasBoardRole(userId, toTabId, 'editor'))) return reply.code(404).send({ error: 'not found' });
+      // Opt-in preventive control (F4), mirrored from delete: a board that restricts deletion to
+      // admins is trying to stop work disappearing off it, and moving a task to a board its admins
+      // cannot see does exactly that. Without this the control has a hole shaped like this route.
+      if ((await restrictsDeleteToAdmin(fromTabId)) && !(await hasBoardRole(userId, fromTabId, 'admin')))
+        return reply.code(403).send({ error: 'only admins may move tasks off this board' });
+
+      const kids = await liveDescendantIds(id);
+      const ids = [id, ...kids];
+
+      // Which assignments survive the move: everything pointing at a non-member of the destination
+      // is cleared. Computed here (rather than in the UPDATE) so the counts below are exact.
+      const rows = await db
+        .select({ id: schema.tasks.id, assigneeId: schema.tasks.assigneeId, reviewerId: schema.tasks.reviewerId })
+        .from(schema.tasks)
+        .where(and(inArray(schema.tasks.id, ids), isNull(schema.tasks.deletedAt)));
+      const roster = new Set(
+        (await db
+          .select({ userId: schema.boardMembers.userId })
+          .from(schema.boardMembers)
+          .where(eq(schema.boardMembers.tabId, toTabId))).map((m) => m.userId),
+      );
+      const clearAssignee = rows.filter((r) => r.assigneeId && !roster.has(r.assigneeId)).map((r) => r.id);
+      const clearReviewer = rows.filter((r) => r.reviewerId && !roster.has(r.reviewerId)).map((r) => r.id);
+
+      const rank = await nextSiblingRank(toTabId, null);
+      // ONE statement — see (1) above. Only the moved ROOT is re-parented and re-ranked; the
+      // descendants keep the shape they had, they just live somewhere else now.
+      await db
+        .update(schema.tasks)
+        .set({
+          homeTabId: toTabId,
+          parentTaskId: sql`CASE WHEN ${schema.tasks.id} = ${id} THEN NULL ELSE ${schema.tasks.parentTaskId} END`,
+          rank: sql`CASE WHEN ${schema.tasks.id} = ${id} THEN ${rank} ELSE ${schema.tasks.rank} END`,
+          ...(clearAssignee.length
+            ? { assigneeId: sql`CASE WHEN ${inArray(schema.tasks.id, clearAssignee)} THEN NULL ELSE ${schema.tasks.assigneeId} END` }
+            : {}),
+          ...(clearReviewer.length
+            ? { reviewerId: sql`CASE WHEN ${inArray(schema.tasks.id, clearReviewer)} THEN NULL ELSE ${schema.tasks.reviewerId} END` }
+            : {}),
+          updatedAt: new Date(),
+        })
+        .where(and(inArray(schema.tasks.id, ids), isNull(schema.tasks.deletedAt)));
+
+      // Both documents are now wrong in opposite directions. Best-effort, like restore: a failure
+      // here leaves rows that are correct and a doc that a later board-open reconcile heals.
+      for (const tabId of [fromTabId, toTabId]) {
+        try {
+          await reconcileBoard(tabId);
+        } catch (err) {
+          req.log.error({ err, tabId }, 'move: board reconcile failed');
+        }
+      }
+
+      const moved = await db.select().from(schema.tasks).where(inArray(schema.tasks.id, ids));
+      const dtos = moved.map(taskDTO);
+
+      // Live updates. The generic broadcast hook fans a write to req.boardScope only — which here
+      // is the board the task LEFT, and it carries the request body ({toTabId}), not a task patch.
+      // So publish the real rows explicitly, to BOTH boards: viewers of the source need the task to
+      // leave, viewers of the destination need it to arrive, and every descendant changed board too.
+      for (const dto of dtos) {
+        const message = { v: 1, type: 'entity', entity: 'task', id: dto.id, action: 'PUT', patch: dto, actorId: userId };
+        publish(boardChannel(fromTabId), message);
+        publish(boardChannel(toTabId), message);
+      }
+
+      req.auditHandled = true;
+      recordAudit({
+        actorId: userId, action: 'task_move', targetType: 'task', targetId: id,
+        scopeId: fromTabId, method: 'POST', status: 200,
+        payload: {
+          fromTabId,
+          toTabId,
+          snapshot: { text: before.text },
+          ...(kids.length ? { subtaskCount: kids.length } : {}),
+          // Named, not just counted: "who lost this task" is the question the trail has to answer.
+          ...(clearAssignee.length ? { clearedAssignees: rows.filter((r) => clearAssignee.includes(r.id)).map((r) => r.assigneeId) } : {}),
+          ...(clearReviewer.length ? { clearedReviewers: rows.filter((r) => clearReviewer.includes(r.id)).map((r) => r.reviewerId) } : {}),
+        },
+      });
+
+      return reply.send({
+        ok: true,
+        moved: dtos,
+        subtaskCount: kids.length,
+        clearedAssignees: clearAssignee.length,
+        clearedReviewers: clearReviewer.length,
+      });
     },
   );
 

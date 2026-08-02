@@ -13,7 +13,7 @@
 // 'doc' invalidation is received but not yet applied — that's step 3 (C2 doc + C3 reconcile).
 
 import { useStore } from '../store';
-import { flush, suspendPersistence, resumePersistence, setBaseline } from '../api/persist';
+import { applyServerState } from '../api/persist';
 import { pendingTaskIds } from '../offline/outbox';
 import { useNotifications } from '../notifications/useNotifications';
 import { dlog, sid } from '../util/dlog';
@@ -129,21 +129,8 @@ function syncSubscription(): void {
 
 // --- applying remote mutations ---------------------------------------------------------
 
-/**
- * Apply a remote store mutation without it echoing back to the server. Local pending edits
- * are flushed first (so they aren't lost), then the persistence baseline is advanced past
- * the applied change so the differ treats it as already-persisted.
- */
-function applyRemote(mutate: () => void): void {
-  flush(); // persist any pending local edits BEFORE we move the baseline
-  suspendPersistence();
-  try {
-    mutate();
-  } finally {
-    setBaseline(useStore.getState());
-    resumePersistence();
-  }
-}
+/** Apply a remote store mutation without it echoing back to the server. See applyServerState. */
+const applyRemote = applyServerState;
 
 const TASK_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'rank', 'parentTaskId', 'homeTabId', 'owner'] as const;
 
@@ -177,9 +164,12 @@ function applyEntity(msg: { entity?: string; id?: string; action?: string; patch
 
   if (tasks[id]) {
     // Existing task → merge the changed fields; keep the derived `done` mirror in sync.
+    // `homeTabId` is merged like any other field: a cross-board move is broadcast to BOTH boards
+    // as a full row, and pinning it to the local value (as this did) meant a peer who already held
+    // the task never saw it leave — it stayed rendered on the board it had moved off.
     applyRemote(() =>
       useStore.setState((s) => {
-        const merged: Task = { ...s.tasks[id], ...patch, id, homeTabId: s.tasks[id].homeTabId };
+        const merged: Task = { ...s.tasks[id], ...patch, id, homeTabId: patch.homeTabId ?? s.tasks[id].homeTabId };
         if (patch.status !== undefined) merged.done = patch.status === 'done';
         return { tasks: { ...s.tasks, [id]: merged } };
       }),

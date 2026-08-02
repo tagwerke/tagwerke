@@ -17,12 +17,14 @@ import { useSession } from '../session/useSession';
 import { TaskMeta } from '../components/TaskMeta';
 import { StatusControl } from '../components/StatusControl';
 import { HistoryDrawer } from '../components/HistoryDrawer';
+import { MoveTaskMenu } from '../components/common/MoveTaskMenu';
 import { consumeTaskFocus, focusEnd, peekTaskFocus } from './taskFocus';
 import { TaskTitleSuggest } from './TaskTitleSuggest';
 import { parseEmbeddedCommands } from './embeddedCommands';
 import { createSiblingAfter, deleteTaskLine, nestTask, unnestTask } from './taskTree';
 import { findRefPos } from './docRefs';
 import { navFromTaskLine } from './taskNav';
+import { applyDrop, beginTaskDrag, canDrop, draggedTaskId, endTaskDrag, ownLineHeight, zoneFor, type DropZone } from './taskDnd';
 import type { ID, TaskStatus } from '../types';
 
 /**
@@ -91,6 +93,9 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
   const setTaskStatus = useStore((s) => s.setTaskStatus);
   const [historyOpen, setHistoryOpen] = useState(false);
   const titleRef = useRef<HTMLDivElement>(null);
+  // Where a drop would land, and how tall this row's own line is (the indicator is drawn against
+  // the line, not the <li>, which is as tall as the whole family). Null = not a drop target now.
+  const [drop, setDrop] = useState<{ zone: DropZone; height: number } | null>(null);
 
   const status: TaskStatus = task?.status ?? 'todo';
   const done = status === 'done';
@@ -173,14 +178,72 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
     }
   };
 
+  /**
+   * Drag events are NOT stopped from bubbling: a sub-task's <li> is nested inside its parent's, so
+   * every ancestor row sees the same dragover. Each one answers the same question — "is the pointer
+   * on MY line?" — and only the single row that can say yes claims the drop or paints an indicator.
+   * That is self-correcting: an ancestor whose line the pointer has left clears itself on the very
+   * next move, with no coordination between rows and no stale indicator left behind.
+   */
+  const onDragOver = (e: React.DragEvent<HTMLLIElement>): void => {
+    const dragId = draggedTaskId();
+    if (!dragId || !editable) return; // not one of our task drags (text, a file) — leave it alone
+    const li = e.currentTarget;
+    const height = ownLineHeight(li);
+    const y = e.clientY - li.getBoundingClientRect().top;
+    if (y < 0 || y > height) {
+      setDrop(null); // over my subtree, not my line — that row will handle it
+      return;
+    }
+    e.preventDefault(); // without this the browser refuses the drop outright
+    const zone = zoneFor(y, height);
+    const ok = canDrop(useStore.getState().tasks, dragId, id, zone);
+    e.dataTransfer.dropEffect = ok ? 'move' : 'none';
+    setDrop(ok ? { zone, height } : null);
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLLIElement>): void => {
+    const dragId = draggedTaskId();
+    setDrop(null);
+    if (!dragId || !drop || !editable) return;
+    e.preventDefault();
+    applyDrop(editor, dragId, id, drop.zone);
+    endTaskDrag();
+  };
+
   return (
     <li
       data-type="taskItem"
       data-id={id}
       data-status={status}
       data-depth={depth}
+      data-drop={drop?.zone}
+      style={drop ? ({ '--drop-h': `${drop.height}px` } as React.CSSProperties) : undefined}
       className={`task-item status-${status} ${done || cancelled ? 'is-done' : ''} ${cancelled ? 'is-cancelled' : ''} ${depth ? 'is-subtask' : ''}`}
+      onDragOver={onDragOver}
+      // Only when the pointer leaves the ROW — dragleave also fires moving between the row's own
+      // parts (title → meta), and clearing on those would strobe the indicator. A cancelled drag
+      // has no relatedTarget, so it still clears.
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDrop(null); }}
+      onDrop={onDrop}
     >
+      {editable ? (
+        <span
+          className="task-drag-handle"
+          contentEditable={false}
+          draggable
+          role="presentation"
+          title="Drag to reorder or nest"
+          onDragStart={(e) => beginTaskDrag(e, id)}
+          onDragEnd={endTaskDrag}
+        >
+          <svg viewBox="0 0 10 16" width="10" height="14" aria-hidden>
+            <circle cx="3" cy="4" r="1.1" /><circle cx="7" cy="4" r="1.1" />
+            <circle cx="3" cy="8" r="1.1" /><circle cx="7" cy="8" r="1.1" />
+            <circle cx="3" cy="12" r="1.1" /><circle cx="7" cy="12" r="1.1" />
+          </svg>
+        </span>
+      ) : null}
       <StatusControl
         status={status}
         accentColor={project?.color}
@@ -200,7 +263,10 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
       />
       {editable ? <TaskTitleSuggest inputRef={titleRef} taskId={id} tabId={tabId} /> : null}
       <TaskMeta taskId={id} />
-      {/* History is reachable on every task — a quiet trailing action revealed on row hover. */}
+      {/* Trailing actions, revealed on row hover: move the task to another board, and its history.
+          The move lives here as well as on the card/list row so it is in the same place in every
+          view — and it is the only way to reach another board, since dragging can't leave this one. */}
+      {task && editable ? <MoveTaskMenu taskId={id} /> : null}
       {task ? (
         <button
           type="button"
