@@ -16,7 +16,11 @@ export const TaskItem = Node.create<TaskItemOptions>({
   },
   atom: true, // leaf: no ProseMirror content. Title/meta come from the entity.
   selectable: true,
-  draggable: false, // drag-to-reorder (= moving the ref in the doc) is a later phase.
+  // Dragging is not ProseMirror's: a task is a ROW that the document merely references, so the
+  // handle in TaskLine drives it (see taskDnd.ts) and the node itself stays undraggable. The
+  // `disableDropCursor` half of that arrangement is declared by TaskDropTarget, which is the
+  // extension that owns task drops.
+  draggable: false,
 
   addAttributes() {
     return {

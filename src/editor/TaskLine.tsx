@@ -185,30 +185,43 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
    * That is self-correcting: an ancestor whose line the pointer has left clears itself on the very
    * next move, with no coordination between rows and no stale indicator left behind.
    */
+  /**
+   * Where a drop at this pointer position would land, or null if it wouldn't land on this row at
+   * all. Computed fresh from the event, and shared by dragover and drop, so the drop never depends
+   * on a render having happened first — the indicator is what the state is FOR, not how the drop
+   * decides what to do.
+   */
+  const resolveDrop = (li: HTMLLIElement, clientY: number, dragId: ID): { zone: DropZone; height: number } | null => {
+    const height = ownLineHeight(li);
+    const y = clientY - li.getBoundingClientRect().top;
+    if (y < 0 || y > height) return null; // over my subtree, not my line — that row will handle it
+    const zone = zoneFor(y, height);
+    return canDrop(useStore.getState().tasks, dragId, id, zone) ? { zone, height } : null;
+  };
+
   const onDragOver = (e: React.DragEvent<HTMLLIElement>): void => {
     const dragId = draggedTaskId();
     if (!dragId || !editable) return; // not one of our task drags (text, a file) — leave it alone
     const li = e.currentTarget;
-    const height = ownLineHeight(li);
-    const y = e.clientY - li.getBoundingClientRect().top;
-    if (y < 0 || y > height) {
-      setDrop(null); // over my subtree, not my line — that row will handle it
-      return;
+    const landing = resolveDrop(li, e.clientY, dragId);
+    // preventDefault only where the drop is real: leaving it alone elsewhere lets the event reach
+    // TaskDropTarget, which owns drops that belong in the prose rather than on a row.
+    if (landing) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
     }
-    e.preventDefault(); // without this the browser refuses the drop outright
-    const zone = zoneFor(y, height);
-    const ok = canDrop(useStore.getState().tasks, dragId, id, zone);
-    e.dataTransfer.dropEffect = ok ? 'move' : 'none';
-    setDrop(ok ? { zone, height } : null);
+    setDrop(landing);
   };
 
   const onDrop = (e: React.DragEvent<HTMLLIElement>): void => {
     const dragId = draggedTaskId();
     setDrop(null);
-    if (!dragId || !drop || !editable) return;
+    if (!dragId || !editable) return;
+    const landing = resolveDrop(e.currentTarget, e.clientY, dragId);
+    if (!landing) return; // not for this row — let it fall through to the editor's own handler
     e.preventDefault();
-    applyDrop(editor, dragId, id, drop.zone);
-    endTaskDrag();
+    applyDrop(editor, dragId, id, landing.zone);
+    endTaskDrag(editor);
   };
 
   return (
@@ -234,8 +247,8 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
           draggable
           role="presentation"
           title="Drag to reorder or nest"
-          onDragStart={(e) => beginTaskDrag(e, id)}
-          onDragEnd={endTaskDrag}
+          onDragStart={(e) => beginTaskDrag(e, id, editor)}
+          onDragEnd={() => endTaskDrag(editor)}
         >
           <svg viewBox="0 0 10 16" width="10" height="14" aria-hidden>
             <circle cx="3" cy="4" r="1.1" /><circle cx="7" cy="4" r="1.1" />

@@ -89,12 +89,56 @@ export function insertRefBefore(editor: Editor, beforeId: string | null, id: str
   editor.view.dispatch(state.tr.insert(state.doc.content.size, taskList.create(null, taskItem.create({ id }))));
 }
 
-/** Root task ids in document order — the sequence the board actually reads top to bottom. */
-export function rootRefOrder(editor: Editor): string[] {
-  const ids: string[] = [];
-  editor.state.doc.descendants((node) => {
-    if (node.type.name === 'taskItem' && node.attrs.id) ids.push(node.attrs.id as string);
+/** Every root ref with its document position, in document order — the sequence the board reads top
+ *  to bottom. Used to work out which roots a drop lands between, so the rank written to the rows
+ *  agrees with the order the prose shows. */
+export function refPositions(editor: Editor): { id: string; pos: number }[] {
+  const out: { id: string; pos: number }[] = [];
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'taskItem' && node.attrs.id) out.push({ id: node.attrs.id as string, pos });
     return true;
   });
-  return ids;
+  return out;
+}
+
+/**
+ * Put `id`'s ref at document position `pos`, in ONE transaction — moving the existing ref if the
+ * task had one (a root being repositioned) and creating it if it didn't (a sub-task being promoted
+ * into the prose).
+ *
+ * One transaction because the two halves interact: deleting the old ref shifts everything after it,
+ * so the insertion point is mapped through that deletion rather than recomputed. Doing it as two
+ * dispatches would also flash a moment where the task has no ref at all, which the GC in SyncPlugin
+ * reads as "deleted".
+ *
+ * A taskItem cannot stand on its own — the schema says it lives in a taskList — so the insert
+ * joins an adjacent list when there is one and wraps a fresh list around it when there isn't.
+ * Joining matters: dropping a task directly under an existing list should extend that list, not
+ * leave two lists sitting next to each other with a seam between them.
+ */
+export function placeRefAt(editor: Editor, id: string, pos: number): void {
+  const { state } = editor;
+  const taskItem = state.schema.nodes.taskItem;
+  const taskList = state.schema.nodes.taskList;
+  if (!taskItem || !taskList) return;
+
+  const tr = state.tr;
+  const existing = findRefPos(editor, id);
+  if (existing != null) deleteRefAt(tr, state.doc, existing);
+
+  // Map through the deletion (a no-op when there was nothing to delete), then read the neighbours
+  // off the POST-deletion doc — the list the ref just left may no longer exist.
+  const at = Math.min(tr.mapping.map(pos), tr.doc.content.size);
+  const $at = tr.doc.resolve(at);
+  const before = $at.nodeBefore;
+  const after = $at.nodeAfter;
+
+  if (before?.type.name === 'taskList') {
+    tr.insert(at - 1, taskItem.create({ id })); // just inside the end of the list above
+  } else if (after?.type.name === 'taskList') {
+    tr.insert(at + 1, taskItem.create({ id })); // just inside the start of the list below
+  } else {
+    tr.insert(at, taskList.create(null, taskItem.create({ id })));
+  }
+  editor.view.dispatch(tr);
 }

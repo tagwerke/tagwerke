@@ -17,9 +17,10 @@
 // The sub-task <ul> is the boundary — everything above it is the row itself.
 
 import type { Editor } from '@tiptap/react';
+import { Fragment, Slice } from '@tiptap/pm/model';
 import { childrenOf, siblingsOf, taskDepth, useStore } from '../store';
 import { MAX_TASK_DEPTH } from '../../shared/tree';
-import { insertRefAfter, insertRefBefore, removeRef } from './docRefs';
+import { insertRefAfter, insertRefBefore, placeRefAt, refPositions, removeRef } from './docRefs';
 import { subtreeHeight } from './taskTree';
 import type { ID, Task } from '../types';
 
@@ -34,15 +35,39 @@ export const TASK_DRAG_TYPE = 'application/x-tagwerke-task';
 // spec deliberately hides dataTransfer data until the drop event.
 let draggingId: ID | null = null;
 
-export function beginTaskDrag(e: React.DragEvent, id: ID): void {
+/**
+ * `view.dragging` is set to the slice this drag would insert — a taskList holding the ref — for one
+ * reason: the drop cursor. ProseMirror's dropcursor plugin draws its line at `dropPoint(doc, pos,
+ * slice)` when a slice is known, and at a raw text position when it isn't. Since TaskDropTarget
+ * lands the ref at exactly that `dropPoint`, handing over the slice makes the line the editor shows
+ * and the place the task ends up the same thing by construction, rather than two calculations that
+ * have to be kept in agreement.
+ *
+ * `move: false` so that IF a drop ever escapes TaskDropTarget, ProseMirror inserts rather than
+ * cutting something out. The server's reconcile de-duplicates a stray ref; it cannot un-delete.
+ */
+export function beginTaskDrag(e: React.DragEvent, id: ID, editor: Editor): void {
   draggingId = id;
   e.dataTransfer.setData(TASK_DRAG_TYPE, id);
   e.dataTransfer.setData('text/plain', useStore.getState().tasks[id]?.text ?? '');
   e.dataTransfer.effectAllowed = 'move';
+
+  const { taskItem, taskList } = editor.state.schema.nodes;
+  if (taskItem && taskList) {
+    const slice = new Slice(Fragment.from(taskList.create(null, taskItem.create({ id }))), 0, 0);
+    editor.view.dragging = { slice, move: false };
+  }
 }
 
-export function endTaskDrag(): void {
+/**
+ * Clear both halves of the drag state. `view.dragging` has to be cleared HERE: ProseMirror clears
+ * it on its own dragend handler, but that handler never runs for us — the drag starts inside a node
+ * view whose stopEvent tells ProseMirror the event isn't its business — so a stale slice would
+ * otherwise sit there and be inserted by the next unrelated drop into the editor.
+ */
+export function endTaskDrag(editor?: Editor): void {
   draggingId = null;
+  if (editor && !editor.isDestroyed) editor.view.dragging = null;
 }
 
 export function draggedTaskId(): ID | null {
@@ -168,4 +193,33 @@ export function applyDrop(editor: Editor, dragId: ID, targetId: ID, zone: DropZo
     else insertRefAfter(editor, targetId, dragId);
   }
   // (child → child: the tree is entirely in the rows, and no ref exists to move.)
+}
+
+/**
+ * Drop onto the PROSE — between paragraphs, on an empty line, at the end of the document.
+ *
+ * A root task occupies a real slot in the document (D2), so a position in the prose is a genuine
+ * destination and not a near-miss: "this task belongs here, between these two paragraphs". The task
+ * becomes a root wherever it lands, since only roots have a place in the document at all — dropping
+ * a sub-task into the prose promotes it, carrying its own sub-tasks with it.
+ *
+ * The subtle part is that TWO orders have to come out agreeing. The document decides what the Doc
+ * view shows; `rank` decides what List, Kanban and every other view show. So the rank is computed
+ * from the refs the drop lands BETWEEN in document order — not from wherever the task used to sit —
+ * and the ref is placed at the matching spot in the same breath.
+ */
+export function dropTaskInProse(editor: Editor, dragId: ID, docPos: number): boolean {
+  const store = useStore.getState();
+  const drag = store.tasks[dragId];
+  if (!drag) return false;
+
+  // The roots this position falls between, in document order. The dragged task is excluded: it is
+  // about to move, so its current slot says nothing about where it is going.
+  const refs = refPositions(editor).filter((r) => r.id !== dragId);
+  const beforeRef = [...refs].reverse().find((r) => r.pos < docPos);
+  const afterRef = refs.find((r) => r.pos >= docPos);
+
+  store.moveTask(dragId, { parentTaskId: null, before: beforeRef?.id, after: afterRef?.id });
+  placeRefAt(editor, dragId, docPos);
+  return true;
 }
