@@ -1890,6 +1890,8 @@ input, select, textarea { font: inherit; color: inherit; }
   .status-caret { opacity: 0.4; }
   .task-history-btn { opacity: 0.4; }
   .chip-project-wrap .chip-delete { opacity: 0.5; }
+  /* The task row's own touch affordances are handled further down, next to the rules they have to
+     override — these hover-reveal rules are more specific than anything that could sit here. */
 }
 
 /* ── Phone breakpoint ─────────────────────────────────────────────────────── */
@@ -2823,6 +2825,11 @@ input, select, textarea { font: inherit; color: inherit; }
   opacity: 0;
   cursor: grab;
   transition: opacity .12s;
+  /* The touch drag is driven by pointer events (taskDnd.ts), so the browser must not claim the
+     gesture as a scroll before it starts. Harmless for a mouse. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .task-item.is-subtask > .task-drag-handle { left: -12px; width: 11px; }
 .task-item:hover > .task-drag-handle,
@@ -2924,3 +2931,38 @@ input, select, textarea { font: inherit; color: inherit; }
 /* A search hit is a row now (button + move action) rather than one big button. */
 .search-hit-row { display: flex; align-items: center; gap: 4px; }
 .search-hit-row .search-hit { flex: 1; min-width: 0; }
+
+/* ── Touch: the row's affordances have to be findable and grabbable ───────────
+   Placed here, at the end, deliberately: these override the hover-reveal rules above, which are
+   as specific as anything a media query can hold, so order is what decides it. The generic touch
+   block further up in this file cannot reach them.
+
+   Dragging itself is not a CSS matter — HTML5 drag events never fire from a touch (nothing at all
+   on iOS), so the gesture is re-implemented on pointer events in src/editor/taskDnd.ts. What CSS
+   owes it is a target a finger can find and hit. */
+@media (hover: none) {
+  /* Nothing is revealed by hovering, so the row's actions are simply present. The history button
+     is here too: the generic touch block above has been trying to reveal it since before any of
+     this, but `.task-history-btn { opacity: 0 }` sits later in the file and quietly won, so on a
+     phone the row showed one trailing action and not the other. */
+  .task-item > .task-drag-handle,
+  .task-item:hover > .task-drag-handle { opacity: 0.4; }
+  .task-item .task-move-btn,
+  .task-item > .task-history-btn { opacity: 0.45; }
+
+  /* At 13x18 the handle was a fingertip target a third the size any guideline allows. Grow the
+     BOX to fill the row's gutter without moving the glyph: a 26px box at `top: var(--row-pad)`
+     centres on exactly the point the 18px affordance band does (pad + 13 either way), so the row
+     stays lined up while the target roughly triples. */
+  .task-item > .task-drag-handle {
+    top: var(--row-pad);
+    left: -26px;
+    width: 26px;
+    height: 26px;
+  }
+  .task-item.is-subtask > .task-drag-handle { left: -22px; width: 22px; }
+
+  /* While a drag is in flight the handle stays lit, so the thing under the finger reads as the
+     thing that is moving. */
+  .task-item[data-drop] > .task-drag-handle { opacity: 0.8; }
+}

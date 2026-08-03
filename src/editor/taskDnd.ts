@@ -26,6 +26,12 @@ import type { ID, Task } from '../types';
 
 export type DropZone = 'before' | 'after' | 'into';
 
+/** How far a finger must travel before a press becomes a drag rather than a tap. */
+const TOUCH_SLOP = 5;
+/** Distance from the scroll container's edge at which a drag starts scrolling it. */
+const EDGE = 56;
+const EDGE_SPEED = 12;
+
 /** The MIME type carrying the dragged task id. Also how a drop tells our drags from a file/text
  *  drag — dataTransfer contents are unreadable during dragover, but the type list is not. */
 export const TASK_DRAG_TYPE = 'application/x-tagwerke-task';
@@ -193,6 +199,147 @@ export function applyDrop(editor: Editor, dragId: ID, targetId: ID, zone: DropZo
     else insertRefAfter(editor, targetId, dragId);
   }
   // (child → child: the tree is entirely in the rows, and no ref exists to move.)
+}
+
+// ── Touch ────────────────────────────────────────────────────────────────────────────────────
+//
+// HTML5 drag-and-drop is a mouse gesture. `dragstart` does not fire from a touch on iOS at all, and
+// where it does fire it is behind a long-press on a target that, in the row's left gutter, is far
+// smaller than a fingertip. So touch gets its own implementation on pointer events — the same shape
+// the calendar already drags with (EventCard): pointer capture, a movement threshold, and
+// `touch-action: none` so the browser doesn't take the gesture as a scroll.
+//
+// It deliberately targets ROWS only, not positions in the prose. Placing a task between two
+// paragraphs is a precise instruction that wants a drop cursor to aim with, and there is no drop
+// cursor without dragover; on a phone it is also not the gesture anyone reaches for. Rows cover
+// nearly the whole surface, and "after the last row" reaches the end of the list anyway.
+
+interface TouchDrag {
+  id: ID;
+  editor: Editor;
+  startX: number;
+  startY: number;
+  moved: boolean;
+  scroller: HTMLElement | null;
+  raf: number;
+  edge: number; // px/frame the scroller is currently drifting by, 0 when still
+}
+
+let touch: TouchDrag | null = null;
+
+/** The row a touch drag is currently over, published so the row can draw its own indicator. */
+let touchDrop: { id: ID; zone: DropZone; height: number } | null = null;
+const touchListeners = new Set<() => void>();
+
+export function subscribeTouchDrop(fn: () => void): () => void {
+  touchListeners.add(fn);
+  return () => { touchListeners.delete(fn); };
+}
+
+/** The live touch target for `id`, or null. Identity is stable while unchanged, so a row can read
+ *  it straight from useSyncExternalStore without re-rendering on every move. */
+export function touchDropFor(id: ID): { id: ID; zone: DropZone; height: number } | null {
+  return touchDrop && touchDrop.id === id ? touchDrop : null;
+}
+
+function setTouchDrop(next: { id: ID; zone: DropZone; height: number } | null): void {
+  const same = touchDrop === next
+    || (touchDrop && next && touchDrop.id === next.id && touchDrop.zone === next.zone && touchDrop.height === next.height);
+  if (same) return;
+  touchDrop = next;
+  for (const fn of touchListeners) fn();
+}
+
+/** The nearest ancestor that actually scrolls — what a drag near the screen edge should move. */
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const overflow = getComputedStyle(p).overflowY;
+    if ((overflow === 'auto' || overflow === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
+  }
+  return null;
+}
+
+/** Resolve the row under the finger, and where within it the task would land. */
+function targetUnder(clientX: number, clientY: number, dragId: ID): { id: ID; zone: DropZone; height: number } | null {
+  const el = document.elementFromPoint(clientX, clientY);
+  const li = el?.closest?.('.task-item') as HTMLElement | null;
+  const id = li?.getAttribute('data-id');
+  if (!li || !id) return null;
+  const height = ownLineHeight(li);
+  const y = clientY - li.getBoundingClientRect().top;
+  // Over the row's SUBTREE rather than its own line: the descendant row owns that space, and
+  // elementFromPoint has already returned it — so anything past the line here is a miss.
+  if (y < 0 || y > height) return null;
+  const zone = zoneFor(y, height);
+  if (!canDrop(useStore.getState().tasks, dragId, id, zone)) return null;
+  return { id, zone, height };
+}
+
+function stopTouch(): void {
+  if (touch?.raf) cancelAnimationFrame(touch.raf);
+  touch = null;
+  draggingId = null;
+  setTouchDrop(null);
+}
+
+/**
+ * Pointer handlers for the grab handle. Mouse is left alone — it has the HTML5 path, which brings
+ * the drop cursor and prose positions with it, and running both would apply every drop twice.
+ */
+export function touchDragHandlers(editor: Editor, id: ID) {
+  const finish = (e: React.PointerEvent): void => {
+    const t = touch;
+    if (!t || t.id !== id) return;
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+    const landing = t.moved ? touchDrop : null;
+    stopTouch();
+    if (landing) applyDrop(editor, id, landing.id, landing.zone);
+  };
+
+  return {
+    onPointerDown(e: React.PointerEvent): void {
+      if (e.pointerType === 'mouse') return;
+      e.preventDefault(); // no synthetic click, no text selection, no scroll
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      draggingId = id;
+      touch = {
+        id, editor, startX: e.clientX, startY: e.clientY, moved: false,
+        scroller: scrollParent(e.currentTarget as HTMLElement), raf: 0, edge: 0,
+      };
+    },
+
+    onPointerMove(e: React.PointerEvent): void {
+      const t = touch;
+      if (!t || t.id !== id) return;
+      if (!t.moved && Math.abs(e.clientY - t.startY) < TOUCH_SLOP && Math.abs(e.clientX - t.startX) < TOUCH_SLOP) return;
+      t.moved = true;
+      setTouchDrop(targetUnder(e.clientX, e.clientY, id));
+
+      // Drift the list when the finger nears an edge, so a drag can reach past one screenful.
+      // Re-resolving the target each frame is what makes the indicator follow the moving content
+      // rather than freeze under a stationary finger.
+      const box = t.scroller?.getBoundingClientRect();
+      const top = box?.top ?? 0;
+      const bottom = box?.bottom ?? window.innerHeight;
+      t.edge = e.clientY < top + EDGE ? -EDGE_SPEED : e.clientY > bottom - EDGE ? EDGE_SPEED : 0;
+      if (t.edge && !t.raf) {
+        const { clientX, clientY } = e;
+        const step = (): void => {
+          if (!touch || !touch.edge) { if (touch) touch.raf = 0; return; }
+          if (touch.scroller) touch.scroller.scrollTop += touch.edge;
+          else window.scrollBy(0, touch.edge);
+          setTouchDrop(targetUnder(clientX, clientY, id));
+          touch.raf = requestAnimationFrame(step);
+        };
+        t.raf = requestAnimationFrame(step);
+      }
+    },
+
+    onPointerUp: finish,
+    onPointerCancel(): void {
+      if (touch?.id === id) stopTouch();
+    },
+  };
 }
 
 /**

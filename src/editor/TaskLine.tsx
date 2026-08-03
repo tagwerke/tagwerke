@@ -9,7 +9,7 @@
 // store (LWW; persist.ts PATCHes, peers get it live over the entity channel). The enclosing atom
 // sets stopEvent:()=>true so ProseMirror leaves the widget's keyboard and selection alone.
 
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/react';
 import { TextSelection } from '@tiptap/pm/state';
 import { useStore } from '../store';
@@ -24,7 +24,10 @@ import { parseEmbeddedCommands } from './embeddedCommands';
 import { createSiblingAfter, deleteTaskLine, nestTask, unnestTask } from './taskTree';
 import { findRefPos } from './docRefs';
 import { navFromTaskLine } from './taskNav';
-import { applyDrop, beginTaskDrag, canDrop, draggedTaskId, endTaskDrag, ownLineHeight, zoneFor, type DropZone } from './taskDnd';
+import {
+  applyDrop, beginTaskDrag, canDrop, draggedTaskId, endTaskDrag, ownLineHeight, subscribeTouchDrop,
+  touchDragHandlers, touchDropFor, zoneFor, type DropZone,
+} from './taskDnd';
 import type { ID, TaskStatus } from '../types';
 
 /**
@@ -96,6 +99,11 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
   // Where a drop would land, and how tall this row's own line is (the indicator is drawn against
   // the line, not the <li>, which is as tall as the whole family). Null = not a drop target now.
   const [drop, setDrop] = useState<{ zone: DropZone; height: number } | null>(null);
+  // The same question for a TOUCH drag, which has no dragover to answer it per-row — the drag
+  // publishes the row it is over and every row reads whether it is the one.
+  const touchDrop = useSyncExternalStore(subscribeTouchDrop, () => touchDropFor(id));
+  const landing = touchDrop ?? drop;
+  const dragHandlers = useMemo(() => touchDragHandlers(editor, id), [editor, id]);
 
   const status: TaskStatus = task?.status ?? 'todo';
   const done = status === 'done';
@@ -230,8 +238,8 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
       data-id={id}
       data-status={status}
       data-depth={depth}
-      data-drop={drop?.zone}
-      style={drop ? ({ '--drop-h': `${drop.height}px` } as React.CSSProperties) : undefined}
+      data-drop={landing?.zone}
+      style={landing ? ({ '--drop-h': `${landing.height}px` } as React.CSSProperties) : undefined}
       className={`task-item status-${status} ${done || cancelled ? 'is-done' : ''} ${cancelled ? 'is-cancelled' : ''} ${depth ? 'is-subtask' : ''}`}
       onDragOver={onDragOver}
       // Only when the pointer leaves the ROW — dragleave also fires moving between the row's own
@@ -247,8 +255,10 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
           draggable
           role="presentation"
           title="Drag to reorder or nest"
+          aria-label="Drag to reorder or nest"
           onDragStart={(e) => beginTaskDrag(e, id, editor)}
           onDragEnd={() => endTaskDrag(editor)}
+          {...dragHandlers}
         >
           {/* Six dots, tightened to the middle of the box and a touch heavier — at this size the
               earlier spread read as specks rather than a grip. */}
