@@ -89,9 +89,13 @@ export function MoveTaskMenu({ taskId, className = '' }: { taskId: ID; className
         aria-expanded={open}
         onClick={(e) => { e.stopPropagation(); setQ(''); setActive(0); setOpen((v) => !v); }}
       >
-        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
-          <path d="M2.5 3.2h4l1.1 1.6h6v7.6h-11z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-          <path d="M6.4 8.4h4.2M8.9 6.7l1.9 1.7-1.9 1.7" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        {/* An arrow going into a container: "send this somewhere else". The earlier folder-with-an
+            arrow-inside had too much detail to survive at 14px — the strokes merged and it read as
+            a smudge next to the plain clock beside it. Three strokes, full-height, no interior. */}
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9.5 3.2h3.3v9.6H9.5" />
+          <path d="M2.6 8h6.2" />
+          <path d="M6.3 5.5 8.8 8l-2.5 2.5" />
         </svg>
       </button>
 

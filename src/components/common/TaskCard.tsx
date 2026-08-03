@@ -75,6 +75,10 @@ export function TaskCard({ taskId, onOpen, draggable, onDragStart, expandable = 
         </ul>
       )}
 
+      {/* The footer is the card's action line: priority on the left, then the move action and the
+          assignee. It renders whether or not the task has either, so putting the action here costs
+          the card no height — and keeps it clear of the parent caption a sub-task card carries at
+          the top, which a corner button would sit on top of. */}
       <div className="task-card-foot">
         {task.priority ? <span className={`task-card-prio p${task.priority}`}>{'!'.repeat(task.priority)}</span> : <span />}
         <MoveTaskMenu taskId={task.id} className="on-card" />

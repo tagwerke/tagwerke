@@ -250,10 +250,12 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
           onDragStart={(e) => beginTaskDrag(e, id, editor)}
           onDragEnd={() => endTaskDrag(editor)}
         >
-          <svg viewBox="0 0 10 16" width="10" height="14" aria-hidden>
-            <circle cx="3" cy="4" r="1.1" /><circle cx="7" cy="4" r="1.1" />
-            <circle cx="3" cy="8" r="1.1" /><circle cx="7" cy="8" r="1.1" />
-            <circle cx="3" cy="12" r="1.1" /><circle cx="7" cy="12" r="1.1" />
+          {/* Six dots, tightened to the middle of the box and a touch heavier — at this size the
+              earlier spread read as specks rather than a grip. */}
+          <svg viewBox="0 0 10 14" width="10" height="14" aria-hidden>
+            <circle cx="3.2" cy="4" r="1.25" /><circle cx="6.8" cy="4" r="1.25" />
+            <circle cx="3.2" cy="7" r="1.25" /><circle cx="6.8" cy="7" r="1.25" />
+            <circle cx="3.2" cy="10" r="1.25" /><circle cx="6.8" cy="10" r="1.25" />
           </svg>
         </span>
       ) : null}

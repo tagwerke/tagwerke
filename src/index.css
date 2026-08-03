@@ -2155,9 +2155,11 @@ input, select, textarea { font: inherit; color: inherit; }
 /* History affordance: a quiet trailing action on the task row, revealed on hover — present
    on every task regardless of metadata. */
 .task-item { position: relative; }
+/* Sizing only — the position comes from the row's affordance band further down, so this button
+   shares one vertical line with the status circle, the grab handle and the move button. */
 .task-history-btn {
-  position: absolute; top: 3px; right: 3px;
-  width: 22px; height: 20px; padding: 0; opacity: 0;
+  right: 2px;
+  width: 20px; padding: 0; opacity: 0;
 }
 .task-item:hover .task-history-btn { opacity: 0.45; }
 .task-history-btn:hover { opacity: 1; }
@@ -2788,22 +2790,43 @@ input, select, textarea { font: inherit; color: inherit; }
    board (the tree it can see); the menu is the only way to another board, and is also the way in
    for touch and the keyboard, neither of which gets HTML5 drag events at all. */
 
-/* Grab handle. Sits in the gutter left of the status control — outside the row's grid, so adding
-   it costs the content no width — and stays invisible until the row is hovered. */
-.task-drag-handle {
+/* THE ROW'S AFFORDANCE BAND.
+   Everything that floats outside the row's grid — the grab handle on the left, the move and
+   history buttons on the right — is centred on the same 18px band the status indicator occupies,
+   rather than each carrying its own hand-tuned `top`. The indicator sets that band with
+   `margin-top: 4px; height: 18px` inside the grid, so the band starts one padding-top plus 4px
+   down; sub-task rows are tighter, so they declare their own padding. Anything positioned against
+   this variable lines up with the circle, and therefore with everything else, by construction. */
+.task-item { --row-pad: 3px; }
+.task-item.is-subtask { --row-pad: 1px; }
+.task-drag-handle,
+.task-item > .move-menu-wrap,
+.task-item > .task-history-btn {
   position: absolute;
-  left: -16px;
-  top: 5px;
+  top: calc(var(--row-pad) + 4px);
+  height: 18px;
   display: inline-flex;
-  padding: 1px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Grab handle. Sits in the gutter left of the status control — outside the row's grid, so adding
+   it costs the content no width — and stays invisible until the row is hovered. A sub-task's
+   gutter is the 12px indent strip, which already has the family rule down its left edge, so the
+   handle tucks INSIDE that strip instead of sitting on top of the rule. */
+.task-drag-handle {
+  left: -17px;
+  width: 13px;
+  padding: 0;
   color: var(--ink-mute);
   fill: currentColor;
   opacity: 0;
   cursor: grab;
   transition: opacity .12s;
 }
+.task-item.is-subtask > .task-drag-handle { left: -12px; width: 11px; }
 .task-item:hover > .task-drag-handle,
-.task-item:focus-within > .task-drag-handle { opacity: 0.4; }
+.task-item:focus-within > .task-drag-handle { opacity: 0.45; }
 .task-drag-handle:hover { opacity: 1 !important; }
 .task-drag-handle:active { cursor: grabbing; }
 
@@ -2831,15 +2854,22 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* "Move to board" trigger + popover. */
 .move-menu-wrap { position: relative; display: inline-flex; }
-.task-move-btn { width: 22px; height: 20px; padding: 0; }
-/* In the doc, it is a trailing hover action beside the history button (which owns the corner). */
-.task-item .move-menu-wrap { position: absolute; top: 3px; right: 26px; }
+.task-move-btn { width: 20px; height: 18px; padding: 0; }
+/* In the doc it is a trailing hover action, paired tightly with the history button rather than
+   drifting away from it: the two read as one cluster at the end of the row. Both sit on the
+   affordance band declared above, so they line up with the status circle and with each other. */
+.task-item > .move-menu-wrap { right: 22px; }
 .task-item .task-move-btn { opacity: 0; }
 .task-item:hover .task-move-btn { opacity: 0.45; }
 .task-item .task-move-btn:hover { opacity: 1; }
-/* On a card / list row it sits inline with the other trailing metadata. */
+/* On a card / list row it sits with the other trailing metadata rather than floating in a corner.
+   A card has more room than a doc line, so the glyph goes a size up there. */
 .task-move-btn.on-card, .task-move-btn.on-row { opacity: 0; }
-.task-card-foot .move-menu-wrap { margin-left: auto; margin-right: 6px; }
+.task-card-foot .move-menu-wrap { margin-left: auto; margin-right: 7px; }
+.task-card .task-move-btn { width: 22px; height: 20px; }
+.task-card .task-move-btn svg { width: 15px; height: 15px; }
+/* A list row is a grid of top-aligned cells, so this one is pulled onto the row's own text line. */
+.task-row > .move-menu-wrap { align-self: start; margin-top: 3px; }
 .task-card:hover .task-move-btn.on-card,
 .task-row:hover .task-move-btn.on-row,
 .search-hit-row:hover .task-move-btn.on-row { opacity: 0.5; }
