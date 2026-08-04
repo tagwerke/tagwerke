@@ -8,6 +8,23 @@ automatically on boot — always take a backup before upgrading.
 
 ## [Unreleased]
 
+### Added
+
+- **Point-in-time restore for a task** — every row in a task's History drawer is now a point you
+  can put the task back to. Its title, status, assignee, reviewer, due date and priority are
+  reconstructed from the audit trail and rewritten; where the task sits on the board is left
+  alone. Values today's board would refuse (an assignee who has since left, `done` on a board that
+  now requires review) are kept as they are and reported rather than forced, and the restore is
+  itself recorded — so it can be walked back from the same list.
+
+### Fixed
+
+- **Restoring from Trash brings the title back.** A task whose text was empty when it was deleted
+  used to return as a blank line, even though the Trash listed it under its old name. Restore now
+  recovers the last non-empty title (from the retained title, else the audit trail) for the whole
+  restored subtree, and publishes the restored rows to everyone on the board instead of leaving
+  peers with an empty placeholder until their next resync.
+
 ## [0.2.0] — 2026-07-20
 
 Second public release. The headline is **collaboration**: Tagwerke is now real-time and

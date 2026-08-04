@@ -5,6 +5,7 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, boardRequiresReview, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
+import { lastKnownTitle, stateAsOf } from '../lib/taskHistory.ts';
 import { notify } from '../lib/notify.ts';
 import { boardChannel, publish } from '../lib/bus.ts';
 import { taskDTO } from '../lib/assembleState.ts';
@@ -41,6 +42,14 @@ function notifyAssigneeChange(
 // between deliverables, which is a structural change, not reorder noise (SUBTASKS_PLAN P1.3).
 // See AUDIT_IMPLEMENTATION_PLAN §B2.
 const AUDITED_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'parentTaskId'] as const;
+
+// What a point-in-time restore puts back: the audited set MINUS the structural field. Where a task
+// sits in the tree is a fact about the board as it is now — its parent may have been re-organised,
+// re-homed or deleted since, and its rank means nothing against a different set of siblings.
+// Restoring a title and its metadata is recovery; silently re-parenting the task on top of that is
+// a second edit nobody asked for. The task stays where it is and gets its old values back.
+const REVERTABLE_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority'] as const;
+type RevertableField = (typeof REVERTABLE_FIELDS)[number];
 
 /** Resolve a task's home board (for routes whose body doesn't carry it). */
 async function taskBoard(req: FastifyRequest): Promise<string | undefined> {
@@ -82,6 +91,18 @@ const patchBody = z.object({
   owner: z.string().nullable().optional(),
   done: z.boolean().optional(),
 });
+
+/** Shape-check for a value coming back out of the audit trail (JSON, so nothing is guaranteed). */
+const revertShape: Record<RevertableField, z.ZodTypeAny> = {
+  text: z.string(),
+  status: statusEnum,
+  assigneeId: z.string().min(1).nullable(),
+  reviewerId: z.string().min(1).nullable(),
+  date: z.string().min(1).nullable(),
+  priority: priority.nullable(),
+};
+
+const revertBody = z.object({ entryId: z.string().min(1) });
 
 const orphanBody = z.object({
   homeTabId: z.string().min(1),
@@ -641,6 +662,44 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       if (kids.length) {
         await db.update(schema.tasks).set({ deletedAt: null, deletedBy: null }).where(inArray(schema.tasks.id, kids));
       }
+
+      // Bring back a NAMED task, not a blank line. A title can be empty at the moment of deletion
+      // for reasons that have nothing to do with intent — the line was cleared before it was
+      // removed, or an editor emptied it on the way out — and until now restore put that emptiness
+      // back verbatim. The Trash itself already shows the retained title (last_title), so restoring
+      // less than the Trash promised is the one outcome that reads as data loss. Take the newest
+      // non-empty value we still have: last_title, else the newest non-empty title in the audit
+      // trail. A title that survived is never touched, and a task genuinely never named stays
+      // untitled. The whole restored subtree is repaired, not just the row that was clicked.
+      //
+      // last_title stays FIRST on purpose. §G settled that a trashed row must be self-describing at
+      // rest — the trail is pruned on a different clock (12 months vs the 30-day trash) and its
+      // payload shape is not a contract. The trail is the fallback for the rows that predate
+      // last_title, read once, on a restore, only for a row that came back blank.
+      const restored = await db.select().from(schema.tasks).where(inArray(schema.tasks.id, [id, ...kids]));
+      const recovered: string[] = [];
+      for (const row of restored) {
+        if (row.text.trim()) continue;
+        const title = row.lastTitle?.trim() || (await lastKnownTitle(row.id));
+        if (!title) continue;
+        await db.update(schema.tasks).set({ text: title, lastTitle: title }).where(eq(schema.tasks.id, row.id));
+        row.text = title;
+        row.lastTitle = title;
+        recovered.push(row.id);
+      }
+
+      // Tell the board. Peers hold no row for a task that was trashed, and the reconcile below
+      // gives them back a doc ref — which, on its own, materializes as an EMPTY backing row
+      // (SyncPlugin: a ref with no row gets one). Publishing the rows first means what reappears
+      // on their screen is the task, not a blank line waiting for the next full resync.
+      if (req.boardScope) {
+        for (const row of restored) {
+          publish(boardChannel(req.boardScope), {
+            v: 1, type: 'entity', entity: 'task', id: row.id, action: 'PUT', patch: taskDTO(row), actorId: req.user!.id,
+          });
+        }
+      }
+
       // The row is live again, but the doc lost its ref when the task was deleted. Reconcile
       // re-adds the id-only ref so the task reappears on the board (TASKS_AS_ENTITIES.md P4 —
       // this is THE restore fix). Only roots get a ref now (D2), so a restored SUB-task reappears
@@ -660,9 +719,118 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         payload: {
           ...(kids.length ? { subtaskCount: kids.length } : {}),
           ...(set.parentTaskId === null ? { promotedToRoot: true } : {}),
+          // On the record: restore put a title back that the row itself no longer carried.
+          ...(recovered.length ? { recoveredTitles: recovered.length } : {}),
         },
       });
-      return reply.send({ ok: true, subtaskCount: kids.length });
+      return reply.send({ ok: true, subtaskCount: kids.length, recoveredTitles: recovered.length });
+    },
+  );
+
+  /**
+   * Point-in-time restore: put this task back the way it was at one entry of its history.
+   *
+   * The trail already holds everything needed — every audited edit records {field, from, to} — so
+   * the state at any recorded moment is reconstructible by rewinding the changes made since
+   * (lib/taskHistory.ts). Nothing new is stored; a capability that was latent in the log is simply
+   * read back out.
+   *
+   * Three rules make it safe to apply a value from the past:
+   *
+   *   1. INCLUSIVE of the chosen entry. The target is the state that entry LEFT BEHIND, matching
+   *      the timestamp and the "X → Y" the timeline shows on that row. Undoing a bad edit means
+   *      picking the row below it — the state it replaced — which is right there on screen.
+   *   2. TODAY'S RULES STILL APPLY. A past value is not a licence to write something the board
+   *      would refuse now: an assignee who has since left, or `done` on a board that has since
+   *      turned on review. Those fields are SKIPPED, not forced, and the skip is reported back and
+   *      logged — restoring six fields and silently dropping the seventh is how you get a task
+   *      everyone believes is assigned to someone who can no longer see it.
+   *   3. IT IS ITSELF AN EDIT. One `task_revert` row, with the diff it made — the trail stays a
+   *      complete account, and this restore can in turn be undone from the same drawer.
+   */
+  app.post(
+    '/api/tasks/:id/revert',
+    { preHandler: requireBoardRole('editor', taskBoard) },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const b = revertBody.safeParse(req.body);
+      if (!b.success) return reply.code(400).send({ error: 'invalid request' });
+      const before = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0];
+      if (!before) return reply.code(404).send({ error: 'not found' });
+
+      const point = await stateAsOf(id, b.data.entryId, before as Record<string, unknown>, REVERTABLE_FIELDS);
+      // The entry named isn't in this task's trail — a stale drawer, or the retention prune took it
+      // while it was open. Either way the moment it pointed at is no longer reconstructible.
+      if (!point) return reply.code(404).send({ error: 'that history entry is no longer available' });
+
+      const homeTabId = before.homeTabId;
+      const requiresReview = await boardRequiresReview(homeTabId);
+      const set: Record<string, unknown> = {};
+      const skipped: { field: string; reason: string }[] = [];
+      for (const field of REVERTABLE_FIELDS) {
+        const raw = point.values[field];
+        // A blank title is never restored — for the same reason the Trash restore recovers one: an
+        // empty title is far more often an artifact of how the task was edited than a state anyone
+        // means to go back to. Checked before the shape, so "it had no name then" is reported as
+        // itself rather than as a malformed value.
+        if (field === 'text' && !(typeof raw === 'string' && raw.trim())) {
+          skipped.push({ field, reason: 'the task had no title at that point' });
+          continue;
+        }
+        const parsed = revertShape[field].safeParse(raw);
+        if (!parsed.success) {
+          skipped.push({ field, reason: 'that value is no longer valid' });
+          continue;
+        }
+        const value = parsed.data as unknown;
+        // assignee/reviewer are constrained to the board's roster (SPEC §5), and rosters change.
+        if ((field === 'assigneeId' || field === 'reviewerId') && value != null && !(await assigneeAllowed(homeTabId, String(value)))) {
+          skipped.push({ field, reason: 'that person is no longer a member of this board' });
+          continue;
+        }
+        // The review guardrail (§F) is a rule about how `done` is REACHED, so a revert can't be a
+        // side door into it any more than a PATCH can.
+        if (field === 'status' && value === 'done' && before.status !== 'in_review' && before.status !== 'done' && requiresReview) {
+          skipped.push({ field, reason: 'this board requires review before a task can be marked done' });
+          continue;
+        }
+        set[field] = value;
+      }
+
+      const changes = diffChanges(before as Record<string, unknown>, set, REVERTABLE_FIELDS);
+      if (!changes.length) {
+        // Already in that state (or everything that differed was skipped). Not an error, and not
+        // worth an audit row — say so and let the UI report it.
+        req.auditHandled = true;
+        return reply.send({ ok: true, at: point.at, restored: [], skipped, task: taskDTO(before) });
+      }
+
+      if (set.status !== undefined) set.done = set.status === 'done';
+      if (typeof set.text === 'string' && set.text.trim()) set.lastTitle = set.text;
+      // Rolling a task back OUT of done retires its approval stamp with it: approvedBy/approvedAt
+      // describe the in_review → done transition, and left behind they would show an approver for
+      // work that is open again. Who approved what, and when, stays in the trail.
+      if (set.status !== undefined && set.status !== 'done' && before.status === 'done') {
+        set.approvedBy = null;
+        set.approvedAt = null;
+      }
+      await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
+      const after = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0] ?? before;
+
+      req.auditHandled = true;
+      recordAudit({
+        actorId: req.user!.id, action: 'task_revert', targetType: 'task', targetId: id,
+        scopeId: homeTabId, method: 'POST', status: 200,
+        payload: { entryId: b.data.entryId, at: point.at, changes, ...(skipped.length ? { skipped } : {}) },
+      });
+
+      // A revert can hand a task to someone — same notification as any other assignment (§2).
+      notifyAssigneeChange(after.assigneeId, before.assigneeId, req.user!.id, homeTabId, after.text);
+      publish(boardChannel(homeTabId), {
+        v: 1, type: 'entity', entity: 'task', id, action: 'PUT', patch: taskDTO(after), actorId: req.user!.id,
+      });
+
+      return reply.send({ ok: true, at: point.at, restored: changes.map((c) => c.field), skipped, task: taskDTO(after) });
     },
   );
 

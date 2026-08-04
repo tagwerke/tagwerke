@@ -188,6 +188,14 @@ export const api = {
      */
     move: (id: ID, toTabId: ID) =>
       req<MoveResult>(`/api/tasks/${id}/move`, { method: 'POST', body: JSON.stringify({ toTabId }) }),
+    /**
+     * Point-in-time restore: put the task back as it was at one entry of its history. Direct fetch
+     * for the same reason as `move` — the server reconstructs the past state from the audit trail
+     * and decides which of those values today's board will still accept, and it returns the row it
+     * actually wrote. Nothing to guess at optimistically, and offline there is nothing to read.
+     */
+    revert: (id: ID, entryId: ID) =>
+      req<RevertResult>(`/api/tasks/${id}/revert`, { method: 'POST', body: JSON.stringify({ entryId }) }),
   },
   // ── Calendar (events model) ────────────────────────────────────────────────
   // Reads stay direct (live); writes funnel through the durable outbox so an offline
@@ -387,6 +395,20 @@ export interface MoveResult {
   subtaskCount: number;
   clearedAssignees: number;
   clearedReviewers: number;
+}
+
+/**
+ * The outcome of a point-in-time restore. `restored` names the fields that actually changed;
+ * `skipped` names the ones the server refused to write back and why (a member who has left, a
+ * board that now requires review). Both are reported to the user — a restore that quietly did
+ * less than it said is worse than one that explains itself. `task` is the row as written.
+ */
+export interface RevertResult {
+  ok: true;
+  at: string;
+  restored: string[];
+  skipped: { field: string; reason: string }[];
+  task: Task;
 }
 
 /** A trashed (soft-deleted) task shown in the Trash view. */

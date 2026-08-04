@@ -54,6 +54,30 @@ export function confirmSignOut(): Promise<boolean> {
 }
 
 /**
+ * Restoring a task to an earlier point in its history (HistoryDrawer).
+ *
+ * Worth interrupting for, even though it is undoable: the drawer shows one row's worth of change
+ * ("changed status"), but the restore reaches back past EVERY change made since — which is the one
+ * thing the row on screen doesn't say. The copy's job is to name that, and to be clear it lands as
+ * a normal edit that the same drawer can walk back.
+ */
+export function confirmRevertTask(when: string, laterCount: number): Promise<boolean> {
+  return askConfirm({
+    title: 'Restore this task to how it was?',
+    body: (
+      <p>
+        Its title and details go back to {when}
+        {laterCount > 0 ? `, undoing ${laterCount === 1 ? 'the 1 change' : `all ${laterCount} changes`} made since` : ''}. Where the
+        task sits on the board doesn't move. This is recorded as an edit, so you can restore it back
+        from this same list.
+      </p>
+    ),
+    confirmLabel: 'Restore',
+    danger: false,
+  });
+}
+
+/**
  * Deleting a calendar event. Reachable from the board's Events panel, the calendar's event editor,
  * and Delete/Backspace on a focused event card. Unlike tasks, events are NOT soft-deleted — there
  * is no Trash row and no restore, which is the fact this copy has to carry.
