@@ -45,6 +45,7 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
   },
   addProseMirrorPlugins() {
     const tabId = this.options.tabId;
+    const editor = this.editor;
     // Ref ids observed in THIS doc. GC (soft-delete) is scoped to this set so a row loaded from
     // /api/state that hasn't appeared in the doc yet is never deleted (the "refresh wipes the
     // board" guard, carried over from the legacy plugin).
@@ -84,7 +85,14 @@ export const SyncPlugin = Extension.create<SyncPluginOptions>({
               if (!store.tasks[id]) store.upsertTask({ id, homeTabId: tabId, text: '' });
             }
             if (!remote) {
-              const present = new Set(refIds);
+              // Which refs exist is read from the doc as it is NOW, not from the transaction that
+              // queued this microtask. An operation that moves a ref does it as a delete and an
+              // insert — Yjs has no atomic move — and the delete's transaction, seen on its own,
+              // says the task vanished. Judging by that snapshot deleted the row mid-move, and the
+              // insert's microtask then rebuilt it from nothing: same id, empty title, no status,
+              // no assignee, no dates. That is a task reordered against its neighbour arriving
+              // blank, and it is why this must ask the live document instead.
+              const present = editor && !editor.isDestroyed ? scanRefIds(editor.state).ids : new Set(refIds);
               for (const t of Object.values(store.tasks)) {
                 if (t.homeTabId !== tabId) continue;
                 if (t.parentTaskId) continue; // a sub-task has no ref by design (D2)
