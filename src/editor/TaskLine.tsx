@@ -139,6 +139,27 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
     return () => cancelAnimationFrame(raf);
   }, [id]);
 
+  /**
+   * The title is a contentEditable bound to the row, so ANY DOM mutation of it is taken as the
+   * user typing and written straight to the task. A drag is a DOM mutation the user did not type:
+   * when a drop goes unclaimed, the browser performs its own contentEditable drag-move, which
+   * deletes the dragged content from its source — and if that source is inside a title, the row is
+   * saved with an empty one. That is how four tasks on the staging board lost their titles while
+   * keeping everything else, including the `last_title` the server retains for the Trash.
+   *
+   * `inputType` names these precisely. Refuse them, and put back what the browser took: the store
+   * still holds the real title, and the sync effect below only repaints when the STORE changes, so
+   * a DOM-only mutation would otherwise sit there looking like the truth.
+   */
+  const onTitleInput = (e: React.FormEvent<HTMLDivElement>): void => {
+    const kind = (e.nativeEvent as InputEvent).inputType;
+    if (kind === 'deleteByDrag' || kind === 'insertFromDrop') {
+      e.currentTarget.textContent = useStore.getState().tasks[id]?.text ?? '';
+      return;
+    }
+    useStore.getState().setTaskText(id, e.currentTarget.textContent ?? '');
+  };
+
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>): void => {
     const el = e.currentTarget;
     const empty = (el.textContent ?? '') === '';
@@ -212,12 +233,12 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
     if (!dragId || !editable) return; // not one of our task drags (text, a file) — leave it alone
     const li = e.currentTarget;
     const landing = resolveDrop(li, e.clientY, dragId);
-    // preventDefault only where the drop is real: leaving it alone elsewhere lets the event reach
-    // TaskDropTarget, which owns drops that belong in the prose rather than on a row.
-    if (landing) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-    }
+    // Claim the event either way. Where the drop is real this permits it; where it is NOT, it
+    // still has to be taken off the browser, because the alternative is not "nothing happens" —
+    // an unclaimed drag over a contentEditable ends in the browser's own drag-move, which cuts the
+    // dragged content out of wherever it started. `dropEffect: none` is what says "not here".
+    e.preventDefault();
+    e.dataTransfer.dropEffect = landing ? 'move' : 'none';
     setDrop(landing);
   };
 
@@ -225,9 +246,15 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
     const dragId = draggedTaskId();
     setDrop(null);
     if (!dragId || !editable) return;
-    const landing = resolveDrop(e.currentTarget, e.clientY, dragId);
-    if (!landing) return; // not for this row — let it fall through to the editor's own handler
+    // Same reasoning as dragover, and it matters more here: this is the event whose default action
+    // performs the move. A row that cannot take the drop must still swallow it — ProseMirror never
+    // sees drops inside a node view (its stopEvent excludes them), so nothing else will.
     e.preventDefault();
+    const landing = resolveDrop(e.currentTarget, e.clientY, dragId);
+    if (!landing) {
+      endTaskDrag(editor);
+      return;
+    }
     applyDrop(editor, dragId, id, landing.zone);
     endTaskDrag(editor);
   };
@@ -282,7 +309,7 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
         suppressContentEditableWarning
         role="textbox"
         data-placeholder={depth ? 'Sub-task' : 'Task — try / or @'}
-        onInput={(e) => useStore.getState().setTaskText(id, e.currentTarget.textContent ?? '')}
+        onInput={onTitleInput}
         onKeyDown={onKeyDown}
         onBlur={() => commitEmbeddedCommands(id, tabId)}
       />
