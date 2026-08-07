@@ -2166,19 +2166,32 @@ input, select, textarea { font: inherit; color: inherit; }
    go looking for it) and fatal for comments (you have to be told). It is held at a low enough
    opacity to read as chrome rather than content until the row is hovered.
 
-   The box is deliberately bigger than the glyph. These buttons are absolutely positioned outside
-   the row's grid, so the hit area costs the layout nothing — the only thing that grows is the
-   target. Same trick the touch drag handle already uses further down. */
+   The box is deliberately much bigger than the glyph. These buttons are absolutely positioned
+   outside the row's grid, so the hit area costs the layout NOTHING — a 34x30 box and a 20x18 box
+   occupy the same zero width in the row. There was never a reason for the small one. The glyph
+   stays 15px; only the reachable area changes.
+
+   34x30 is still under the 44px guideline, which is a touch figure; the pointer equivalent is
+   roughly 24px and this clears it comfortably while staying visually quiet on a dense line. The
+   touch block at the end of this file takes it to a full 44. */
 .task-activity-btn {
   right: 0;
-  width: 26px; height: 22px; padding: 0;
-  opacity: 0.28;
+  width: 34px; height: 30px; padding: 0;
+  /* Visible at rest, and not so faint it reads as disabled — the first cut sat at 0.28, which on
+     a paper background is nearly invisible and looks like chrome you cannot press. */
+  opacity: 0.45;
   transition: opacity .12s;
+  /* Insurance, not theory: the row paints a drop indicator at z-index 2 and the title beside it is
+     a contentEditable widget. Sit above both, take pointer events explicitly, and tell the browser
+     this is a tap rather than something it should wait 300ms to disambiguate. */
+  z-index: 3;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
-.task-item:hover .task-activity-btn { opacity: 0.55; }
+.task-item:hover .task-activity-btn { opacity: 0.7; }
 .task-activity-btn:hover { opacity: 1; }
 /* A task that HAS comments says so outright, and widens to fit the count. */
-.task-activity-btn.has-comments { opacity: 0.8; width: auto; padding: 0 5px 0 3px; gap: 3px; }
+.task-activity-btn.has-comments { opacity: 0.85; width: auto; min-width: 34px; padding: 0 7px 0 4px; gap: 3px; }
 .task-comment-count { font-size: 10px; line-height: 1; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 
 /* ── per-object history drawer (Layer A) ─────────────────────────────── */
@@ -2895,12 +2908,18 @@ input, select, textarea { font: inherit; color: inherit; }
   align-items: center;
   justify-content: center;
 }
-/* The comment button's box is 22px, not the band's 18px, so it re-centres on the same middle. */
-.task-item > .task-activity-btn { top: calc(var(--row-pad) + 2px); height: 22px; }
+/* Boxes taller than the band re-centre on the same middle: the band's middle is at
+   --row-pad + 13, so a box of height H starts at (--row-pad + 13 - H/2). 30px → --row-pad - 2. */
+.task-item > .task-activity-btn { top: calc(var(--row-pad) - 2px); height: 30px; }
+.task-item > .move-menu-wrap { top: calc(var(--row-pad) - 2px); height: 30px; }
 /* Room at the end of the line for the always-present comment button, so a long title never runs
    underneath it. Only the ALWAYS-visible one is reserved for: the move button appears on hover and
    may overlay the last word of a title for the moment it is shown, as it always has. */
-.task-item { padding-right: 28px; }
+/* `.task-item.is-subtask` sets the whole `padding` shorthand and carries higher specificity, so a
+   bare `.task-item` rule here would leave sub-task rows with no reserve and their titles running
+   under the button. Both selectors, deliberately. */
+.task-item,
+.task-item.is-subtask { padding-right: 36px; }
 
 /* Grab handle. Sits in the gutter left of the status control — outside the row's grid, so adding
    it costs the content no width — and stays invisible until the row is hovered. A sub-task's
@@ -2951,11 +2970,11 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* "Move to board" trigger + popover. */
 .move-menu-wrap { position: relative; display: inline-flex; }
-.task-move-btn { width: 26px; height: 22px; padding: 0; }
+.task-move-btn { width: 34px; height: 30px; padding: 0; z-index: 3; touch-action: manipulation; }
 /* In the doc it is a trailing hover action, paired tightly with the history button rather than
    drifting away from it: the two read as one cluster at the end of the row. Both sit on the
    affordance band declared above, so they line up with the status circle and with each other. */
-.task-item > .move-menu-wrap { right: 27px; top: calc(var(--row-pad) + 2px); height: 22px; }
+.task-item > .move-menu-wrap { right: 35px; }
 .task-item .task-move-btn { opacity: 0; }
 .task-item:hover .task-move-btn { opacity: 0.45; }
 .task-item .task-move-btn:hover { opacity: 1; }
@@ -3049,24 +3068,34 @@ input, select, textarea { font: inherit; color: inherit; }
   }
   .task-item.is-subtask > .task-drag-handle { left: -22px; width: 22px; }
 
-  /* The same growth, for the two buttons the original touch pass forgot. It fixed their OPACITY
-     and left them at 20x18 — a target under half of what any platform guideline asks for, which is
-     why they were reported as very hard to hit on a phone. A 40px box centred on the band means
-     `top: calc(var(--row-pad) - 7px)` (band middle is --row-pad + 13, so 13 - 20 = -7). The glyphs
-     do not move and the row's alignment is untouched; only the reachable area changes.
+  /* The growth the original touch pass forgot. It fixed these buttons' OPACITY and left them at
+     20x18 — under half of what any platform guideline asks for, which is why they were reported as
+     very hard to hit on a phone. The glyphs do not move and the row's alignment is untouched; only
+     the reachable area changes, because these boxes are absolutely positioned and cost the layout
+     nothing.
 
-     They are spaced a full box apart so a thumb can't catch both, and the row reserves the width
-     for them, so neither one sits over the title's last word. */
-  .task-item > .task-activity-btn,
-  .task-item > .move-menu-wrap {
-    top: calc(var(--row-pad) - 7px);
-    height: 40px;
+     `right: 0`, never negative: a box hanging off the row's right edge is the one thing that can
+     be clipped by an ancestor's overflow or run under the screen edge, which would take away the
+     hit area this rule exists to give. */
+  .task-item > .task-activity-btn {
+    top: calc(var(--row-pad) - 9px); /* band middle (--row-pad + 13) minus half of 44 */
+    right: 0; width: 44px; height: 44px;
   }
-  .task-item > .task-activity-btn { right: -6px; width: 40px; }
-  .task-item > .move-menu-wrap { right: 34px; }
-  .task-item .task-move-btn { width: 40px; height: 40px; }
-  .task-item > .task-activity-btn.has-comments { width: auto; min-width: 40px; padding: 0 8px; }
-  .task-item { padding-right: 40px; }
+  .task-item > .task-activity-btn.has-comments { width: auto; min-width: 44px; padding: 0 10px; }
+
+  /* The move button does NOT get the full 44. Both buttons are permanently visible on touch, and
+     only the comment one has width reserved for it — so a 44px move box would put a transparent
+     tap-stealer over 44px of the title's tail, and the row's title is the thing you edit most.
+     30px is a real improvement on the 20x18 it had, without taking the text's taps. If moving a
+     task by thumb turns out to matter, the answer is to reserve width for it too, not to widen it
+     over the title. */
+  .task-item > .move-menu-wrap {
+    top: calc(var(--row-pad) - 2px);
+    right: 48px; height: 30px;
+  }
+  .task-item .task-move-btn { width: 30px; height: 30px; }
+  .task-item,
+  .task-item.is-subtask { padding-right: 46px; }
   /* The glyphs stay at their desktop size — this is about the target, not about shouting. */
   .task-item > .task-activity-btn svg,
   .task-item .task-move-btn svg { width: 16px; height: 16px; }
