@@ -1888,7 +1888,6 @@ input, select, textarea { font: inherit; color: inherit; }
   .tab-card .tab-card-actions,
   .meta-add-date { opacity: 0.6; }
   .status-caret { opacity: 0.4; }
-  .task-history-btn { opacity: 0.4; }
   .chip-project-wrap .chip-delete { opacity: 0.5; }
   /* The task row's own touch affordances are handled further down, next to the rules they have to
      override — these hover-reveal rules are more specific than anything that could sit here. */
@@ -2157,22 +2156,43 @@ input, select, textarea { font: inherit; color: inherit; }
 /* History affordance: a quiet trailing action on the task row, revealed on hover — present
    on every task regardless of metadata. */
 .task-item { position: relative; }
-/* Sizing only — the position comes from the row's affordance band further down, so this button
-   shares one vertical line with the status circle, the grab handle and the move button. */
-.task-history-btn {
-  right: 2px;
-  width: 20px; padding: 0; opacity: 0;
+/* The comment affordance. Sizing only — the position comes from the row's affordance band further
+   down, so this button shares one vertical line with the status circle, the grab handle and the
+   move button.
+
+   It is PRESENT AT REST, unlike every other trailing action on the row. That is a deliberate
+   exception to the hover-reveal rule the rest of this cluster follows: a hover-revealed action is
+   findable only by someone who already suspects it exists, which is fine for "move to board" (you
+   go looking for it) and fatal for comments (you have to be told). It is held at a low enough
+   opacity to read as chrome rather than content until the row is hovered.
+
+   The box is deliberately bigger than the glyph. These buttons are absolutely positioned outside
+   the row's grid, so the hit area costs the layout nothing — the only thing that grows is the
+   target. Same trick the touch drag handle already uses further down. */
+.task-activity-btn {
+  right: 0;
+  width: 26px; height: 22px; padding: 0;
+  opacity: 0.28;
+  transition: opacity .12s;
 }
-.task-item:hover .task-history-btn { opacity: 0.45; }
-.task-history-btn:hover { opacity: 1; }
-/* A task that HAS comments advertises them: the affordance stops being hover-only and widens to
-   fit the count. Hover-revealed discussion is discussion nobody finds. */
-.task-history-btn.has-comments { opacity: 0.75; width: auto; padding: 0 4px; gap: 3px; }
+.task-item:hover .task-activity-btn { opacity: 0.55; }
+.task-activity-btn:hover { opacity: 1; }
+/* A task that HAS comments says so outright, and widens to fit the count. */
+.task-activity-btn.has-comments { opacity: 0.8; width: auto; padding: 0 5px 0 3px; gap: 3px; }
 .task-comment-count { font-size: 10px; line-height: 1; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 
 /* ── per-object history drawer (Layer A) ─────────────────────────────── */
-.history-panel { max-width: 440px; }
+/* The panel is a column so the TIMELINE scrolls and the composer stays pinned at the bottom.
+   `.share-panel` scrolls as one block, which put the comment box below the fold of a long thread —
+   the same "buried" problem the drawer was opened to fix, one level down. */
+.history-panel { max-width: 440px; display: flex; flex-direction: column; overflow: hidden; }
+.history-panel > .share-head,
+.history-panel > .history-toggle,
+.history-panel > .comment-composer,
+.history-panel > .history-note,
+.history-panel > .share-error { flex: none; }
 .history-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
+.history-panel > .history-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
 .history-entry { padding: 8px 2px; border-bottom: 1px solid var(--line); }
 .history-entry:last-child { border-bottom: none; }
 .history-line { display: flex; align-items: baseline; gap: 6px; }
@@ -2220,6 +2240,10 @@ input, select, textarea { font: inherit; color: inherit; }
 .comment:hover .comment-actions, .comment:focus-within .comment-actions { opacity: 1; }
 .comment-replies { list-style: none; margin: 6px 0 0; padding: 0 0 0 10px; display: flex; flex-direction: column; }
 .comment-replies .comment { border-bottom: none; padding-bottom: 4px; }
+
+/* The change-history fold. Quiet and full-width — it is a way down to the audit rows, not an
+   action competing with the composer under it. */
+.history-toggle { align-self: flex-start; margin-top: 8px; color: var(--ink-mute); flex: none; }
 
 /* Composer: the popup is anchored above the field rather than at the caret — a textarea has no
    cheap caret geometry, and the field is short enough that above-the-box is unambiguous. */
@@ -2860,14 +2884,23 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-item.is-subtask { --row-pad: 1px; }
 .task-drag-handle,
 .task-item > .move-menu-wrap,
-.task-item > .task-history-btn {
+.task-item > .task-activity-btn {
   position: absolute;
+  /* Centre a box of any height on the 18px band: the band's middle sits at --row-pad + 13, so a
+     box of height H starts at (--row-pad + 13 - H/2). Written out per element below rather than
+     computed here, because each one chooses its own target size. */
   top: calc(var(--row-pad) + 4px);
   height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
+/* The comment button's box is 22px, not the band's 18px, so it re-centres on the same middle. */
+.task-item > .task-activity-btn { top: calc(var(--row-pad) + 2px); height: 22px; }
+/* Room at the end of the line for the always-present comment button, so a long title never runs
+   underneath it. Only the ALWAYS-visible one is reserved for: the move button appears on hover and
+   may overlay the last word of a title for the moment it is shown, as it always has. */
+.task-item { padding-right: 28px; }
 
 /* Grab handle. Sits in the gutter left of the status control — outside the row's grid, so adding
    it costs the content no width — and stays invisible until the row is hovered. A sub-task's
@@ -2918,11 +2951,11 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* "Move to board" trigger + popover. */
 .move-menu-wrap { position: relative; display: inline-flex; }
-.task-move-btn { width: 20px; height: 18px; padding: 0; }
+.task-move-btn { width: 26px; height: 22px; padding: 0; }
 /* In the doc it is a trailing hover action, paired tightly with the history button rather than
    drifting away from it: the two read as one cluster at the end of the row. Both sit on the
    affordance band declared above, so they line up with the status circle and with each other. */
-.task-item > .move-menu-wrap { right: 22px; }
+.task-item > .move-menu-wrap { right: 27px; top: calc(var(--row-pad) + 2px); height: 22px; }
 .task-item .task-move-btn { opacity: 0; }
 .task-item:hover .task-move-btn { opacity: 0.45; }
 .task-item .task-move-btn:hover { opacity: 1; }
@@ -2998,14 +3031,11 @@ input, select, textarea { font: inherit; color: inherit; }
    on iOS), so the gesture is re-implemented on pointer events in src/editor/taskDnd.ts. What CSS
    owes it is a target a finger can find and hit. */
 @media (hover: none) {
-  /* Nothing is revealed by hovering, so the row's actions are simply present. The history button
-     is here too: the generic touch block above has been trying to reveal it since before any of
-     this, but `.task-history-btn { opacity: 0 }` sits later in the file and quietly won, so on a
-     phone the row showed one trailing action and not the other. */
+  /* Nothing is revealed by hovering, so the row's actions are simply present. */
   .task-item > .task-drag-handle,
   .task-item:hover > .task-drag-handle { opacity: 0.4; }
-  .task-item .task-move-btn,
-  .task-item > .task-history-btn { opacity: 0.45; }
+  .task-item .task-move-btn { opacity: 0.5; }
+  .task-item > .task-activity-btn { opacity: 0.6; }
 
   /* At 13x18 the handle was a fingertip target a third the size any guideline allows. Grow the
      BOX to fill the row's gutter without moving the glyph: a 26px box at `top: var(--row-pad)`
@@ -3018,6 +3048,28 @@ input, select, textarea { font: inherit; color: inherit; }
     height: 26px;
   }
   .task-item.is-subtask > .task-drag-handle { left: -22px; width: 22px; }
+
+  /* The same growth, for the two buttons the original touch pass forgot. It fixed their OPACITY
+     and left them at 20x18 — a target under half of what any platform guideline asks for, which is
+     why they were reported as very hard to hit on a phone. A 40px box centred on the band means
+     `top: calc(var(--row-pad) - 7px)` (band middle is --row-pad + 13, so 13 - 20 = -7). The glyphs
+     do not move and the row's alignment is untouched; only the reachable area changes.
+
+     They are spaced a full box apart so a thumb can't catch both, and the row reserves the width
+     for them, so neither one sits over the title's last word. */
+  .task-item > .task-activity-btn,
+  .task-item > .move-menu-wrap {
+    top: calc(var(--row-pad) - 7px);
+    height: 40px;
+  }
+  .task-item > .task-activity-btn { right: -6px; width: 40px; }
+  .task-item > .move-menu-wrap { right: 34px; }
+  .task-item .task-move-btn { width: 40px; height: 40px; }
+  .task-item > .task-activity-btn.has-comments { width: auto; min-width: 40px; padding: 0 8px; }
+  .task-item { padding-right: 40px; }
+  /* The glyphs stay at their desktop size — this is about the target, not about shouting. */
+  .task-item > .task-activity-btn svg,
+  .task-item .task-move-btn svg { width: 16px; height: 16px; }
 
   /* While a drag is in flight the handle stays lit, so the thing under the finger reads as the
      thing that is moving. */

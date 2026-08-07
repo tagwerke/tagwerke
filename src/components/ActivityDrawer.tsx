@@ -82,6 +82,12 @@ export function ActivityDrawer({
   const [historyDenied, setHistoryDenied] = useState(false);
   const [note, setNote] = useState<string | null>(null); // what the last restore actually did
   const [busy, setBusy] = useState<string | null>(null); // entry id being restored
+  // On a task the drawer opens on the CONVERSATION, with the change log folded away behind a
+  // line. Both were interleaved at first, and the result was that opening it to say something
+  // landed you in a wall of "status todo → in_progress" with the composer below the fold. The
+  // audit rows are still one click away, which is the right depth for them. A board has no
+  // conversation, so there it stays open.
+  const [showHistory, setShowHistory] = useState(kind === 'tab');
 
   // id → display name (email local-part), for resolving assignee/reviewer/approver values.
   const nameOf = useMemo(() => {
@@ -154,10 +160,12 @@ export function ActivityDrawer({
    */
   const items = useMemo<Item[]>(() => {
     const out: Item[] = [];
-    (entries ?? []).forEach((entry, i) => {
-      if (COMMENT_ACTIONS.has(entry.action)) return;
-      out.push({ kind: 'history', at: entry.createdAt, entry, laterCount: i });
-    });
+    if (showHistory) {
+      (entries ?? []).forEach((entry, i) => {
+        if (COMMENT_ACTIONS.has(entry.action)) return;
+        out.push({ kind: 'history', at: entry.createdAt, entry, laterCount: i });
+      });
+    }
     if (comments) {
       const repliesOf = new Map<string, Comment[]>();
       for (const c of comments) {
@@ -174,7 +182,10 @@ export function ActivityDrawer({
       }
     }
     return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
-  }, [entries, comments]);
+  }, [entries, comments, showHistory]);
+
+  /** Change rows available to fold in — the count the toggle advertises. */
+  const historyCount = (entries ?? []).filter((e) => !COMMENT_ACTIONS.has(e.action)).length;
 
   function value(field: string, v: unknown): string {
     if (v == null || v === '') return '—';
@@ -280,6 +291,16 @@ export function ActivityDrawer({
           )}
           {loading && !error && <li className="share-empty">Loading…</li>}
         </ul>
+
+        {/* The fold. Placed under the timeline, not above it, so it reads as "there is more
+            underneath this" rather than as a filter over what you are looking at. */}
+        {isTask && !historyDenied && historyCount > 0 && (
+          <button type="button" className="btn ghost tiny history-toggle" onClick={() => setShowHistory((v) => !v)}>
+            {showHistory
+              ? 'Hide change history'
+              : `Show change history (${historyCount === 1 ? '1 change' : `${historyCount} changes`})`}
+          </button>
+        )}
 
         {isTask && (
           <CommentComposer tabId={boardId} onSubmit={(body) => void post(id, boardId, body)} />

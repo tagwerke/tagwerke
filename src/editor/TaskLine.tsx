@@ -323,30 +323,25 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
           view — and it is the only way to reach another board, since dragging can't leave this one. */}
       {task && editable ? <MoveTaskMenu taskId={id} /> : null}
       {task ? (
+        /* ALWAYS a speech bubble, and always visible — the two things that made the first cut of
+           this unfindable. It used to show a history clock until a task had comments, which meant
+           the affordance for the FIRST comment on any task advertised the one thing it wasn't; and
+           it was hover-only, so on a phone it wasn't there at all. The change log lives behind the
+           same button, one step further in, which is the right depth for it. */
         <button
           type="button"
-          /* `has-comments` keeps the affordance visible without hover — a conversation nobody can
-             see the existence of is a conversation nobody joins. */
-          className={`icon-btn task-history-btn ${commentCount ? 'has-comments' : ''}`}
+          className={`icon-btn task-activity-btn ${commentCount ? 'has-comments' : ''}`}
           contentEditable={false}
-          title={commentCount ? `Activity — ${commentCount === 1 ? '1 comment' : `${commentCount} comments`}` : 'Activity & history'}
+          aria-label={commentCount ? `Comments — ${commentCount === 1 ? '1 comment' : `${commentCount} comments`}` : 'Comment on this task'}
+          title={commentCount ? `${commentCount === 1 ? '1 comment' : `${commentCount} comments`} — click to read` : 'Comment · history'}
           onClick={() => setHistoryOpen(true)}
         >
-          {commentCount ? (
-            /* The icon advertises what's inside: a speech bubble when there is something to read,
-               the history clock when the drawer holds only the change log. */
-            <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
-              <path
-                d="M2.2 4.2c0-.9.7-1.6 1.6-1.6h8.4c.9 0 1.6.7 1.6 1.6v5c0 .9-.7 1.6-1.6 1.6H6.6L3.4 13.2v-2.4h-.8c-.2 0-.4-.2-.4-.4z"
-                fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"
-              />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
-              <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M8 4.6V8l2.4 1.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden>
+            <path
+              d="M2.2 4.2c0-.9.7-1.6 1.6-1.6h8.4c.9 0 1.6.7 1.6 1.6v5c0 .9-.7 1.6-1.6 1.6H6.6L3.4 13.2v-2.4h-.8c-.2 0-.4-.2-.4-.4z"
+              fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"
+            />
+          </svg>
           {commentCount > 0 && <span className="task-comment-count">{commentCount}</span>}
         </button>
       ) : null}
