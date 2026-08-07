@@ -1909,6 +1909,8 @@ input, select, textarea { font: inherit; color: inherit; }
   .brand-mark { width: 28px; height: 28px; }
 
   .mobile-nav { display: flex; }
+  /* The row's left-gutter affordances are dropped on a phone — at the very end of this file, with
+     the other row-affordance overrides, per the ordering note there. */
 
   /* Sheet-ify the centered modals so they meet the thumb. */
   .modal-backdrop { align-items: flex-end; padding: 0; }
@@ -3103,4 +3105,31 @@ input, select, textarea { font: inherit; color: inherit; }
   /* While a drag is in flight the handle stays lit, so the thing under the finger reads as the
      thing that is moving. */
   .task-item[data-drop] > .task-drag-handle { opacity: 0.8; }
+}
+
+/* ── Phone: no left gutter, so nothing lives in it ────────────────────────────
+   Last in the file, with the other row-affordance overrides and for the same reason: these have to
+   beat every earlier rule that sizes or reveals them.
+
+   Both of these are positioned at `left: -26px`, against a phone page padding of 16px — so they
+   hang 10px off the screen and render as clipped half-glyphs beside the status control. Rather
+   than shave them down to fit a gutter that isn't there, a phone simply doesn't offer them.
+
+   Scoped to the PHONE WIDTH, not to `hover: none`: a touch tablet has the gutter room and its drag
+   works, so this must not reach it.
+
+   Two things go with them, deliberately and not as an oversight:
+     - Reordering by touch. taskDnd.ts drives the touch drag from pointer events on the handle and
+       has no other trigger, so on a phone tasks can no longer be reordered by hand. Moving a task
+       to another BOARD is unaffected (that is the move button, at the other end of the row).
+     - The discoverable way to make a task. EmptyLineAdd's whole purpose is that creating one
+       "never requires knowing the '- ' gesture (typed markdown syntax nobody guesses on a blank
+       board)" — which is exactly what a phone is now left with.
+   Both are recoverable without bringing the gutter back: a long-press drag on the row itself, and
+   a task-add action in the bottom nav. Neither is built. */
+@media (max-width: 720px) {
+  .pm-add-task-btn { display: none; }
+  .task-item > .task-drag-handle,
+  .task-item:hover > .task-drag-handle,
+  .task-item:focus-within > .task-drag-handle { display: none; }
 }
