@@ -19,7 +19,15 @@ import { dlog, sid } from './dlog.ts';
 
 const PROTOCOL_VERSION = 1;
 
-export type NotificationType = 'task_assigned' | 'review_requested' | 'task_approved' | 'board_added';
+export type NotificationType =
+  | 'task_assigned'
+  | 'review_requested'
+  | 'task_approved'
+  | 'board_added'
+  // Comments (COMMENTS_PLAN.md §4). `comment_mention` is the specific one — someone named you;
+  // `comment_added` is the ambient one — something was said on work you own or review.
+  | 'comment_mention'
+  | 'comment_added';
 
 export interface NotifyInput {
   type: NotificationType;

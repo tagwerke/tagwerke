@@ -193,6 +193,12 @@ interface Actions {
   setFilter(patch: Partial<Filter>): void;
   resetFilter(): void;
 
+  /** Nudge a task's comment-count badge (COMMENTS_PLAN.md D9). Called when a comment is posted
+   *  or deleted, locally or by a peer, so the badge moves without a state re-pull. */
+  bumpCommentCount(taskId: ID, delta: number): void;
+  /** Set a task's comment count outright — used after loading a thread, which is authoritative. */
+  setCommentCount(taskId: ID, count: number): void;
+
   cleanupEmptyTasks(): number;
 
   // `keepTaskIds` = tasks with an un-acked local write; their local value is preserved so a
@@ -250,6 +256,7 @@ function makeInitial(): RootState {
     tasks: {},
     events: {},
     membersByBoard: {},
+    commentCounts: {},
     projectOrder: [defaultProjectId, personalProjectId],
     tabOrder: [sampleTabId, personalTabId],
     starredRowOrder: [sampleTabId],
@@ -623,6 +630,27 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         set({ filter: initialFilter });
       },
 
+      bumpCommentCount(taskId, delta) {
+        set((s) => {
+          const next = Math.max(0, (s.commentCounts[taskId] ?? 0) + delta);
+          // A task back at zero drops out of the map rather than sitting there as a 0 — the
+          // badge reads "absent means none", and this keeps the payload and the local map alike.
+          const counts = { ...s.commentCounts };
+          if (next) counts[taskId] = next;
+          else delete counts[taskId];
+          return { commentCounts: counts };
+        });
+      },
+
+      setCommentCount(taskId, count) {
+        set((s) => {
+          const counts = { ...s.commentCounts };
+          if (count > 0) counts[taskId] = count;
+          else delete counts[taskId];
+          return { commentCounts: counts };
+        });
+      },
+
       cleanupEmptyTasks() {
         const { tasks, tabs } = get();
         const emptyIds = new Set<ID>();
@@ -689,6 +717,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           ...state,
           tasks,
           events: state.events ?? {},
+          commentCounts: state.commentCounts ?? {},
           plannerOpen: false,
           plannerDate: state.plannerDate ?? todayISO(),
           plannerMode: state.plannerMode ?? 'day',

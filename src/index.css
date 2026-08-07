@@ -2165,6 +2165,10 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .task-item:hover .task-history-btn { opacity: 0.45; }
 .task-history-btn:hover { opacity: 1; }
+/* A task that HAS comments advertises them: the affordance stops being hover-only and widens to
+   fit the count. Hover-revealed discussion is discussion nobody finds. */
+.task-history-btn.has-comments { opacity: 0.75; width: auto; padding: 0 4px; gap: 3px; }
+.task-comment-count { font-size: 10px; line-height: 1; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 
 /* ── per-object history drawer (Layer A) ─────────────────────────────── */
 .history-panel { max-width: 440px; }
@@ -2188,6 +2192,51 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 /* Always visible, not hover-revealed: the drawer is reachable on touch, where there is no hover. */
 .history-restore { flex: none; margin-left: 4px; }
+
+/* ── comments in the task Activity timeline (COMMENTS_PLAN.md) ────────── */
+/* A comment sits in the same list as a change row but has to read as SPEECH, not as a log line:
+   it gets an avatar, a real body, and its own left rule. The change rows stay typographically
+   quieter so the eye can separate the two at a glance without a divider between them. */
+.comment { padding: 8px 2px 8px 8px; border-bottom: 1px solid var(--line); border-left: 2px solid var(--line); }
+.comment:last-child { border-bottom: none; }
+.comment-head { display: flex; align-items: baseline; gap: 6px; }
+.comment-avatar {
+  flex: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg-elev); border: 1px solid var(--line);
+  font-size: 9px; line-height: 14px; text-align: center; color: var(--ink-soft);
+  align-self: center;
+}
+.comment-author { font-weight: 600; font-size: 13px; color: var(--ink); }
+.comment-time { margin-left: auto; font-size: 11px; color: var(--ink-mute); white-space: nowrap; }
+.comment-edited { font-size: 11px; color: var(--ink-mute); font-style: italic; }
+.comment-body { font-size: 13px; color: var(--ink); margin-top: 3px; }
+/* Newlines are the only formatting a comment has, so they have to survive. */
+.comment-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment-tombstone { color: var(--ink-mute); font-style: italic; }
+.comment-mention { color: var(--ink-soft); font-weight: 600; }
+/* Your own name, so a mention is findable in a long thread without reading it. */
+.comment-mention.me { color: var(--pop); background: rgba(255,106,61,0.10); border-radius: 3px; padding: 0 2px; }
+.comment-actions { display: flex; gap: 2px; margin-top: 4px; opacity: 0; transition: opacity 0.12s ease; }
+.comment:hover .comment-actions, .comment:focus-within .comment-actions { opacity: 1; }
+.comment-replies { list-style: none; margin: 6px 0 0; padding: 0 0 0 10px; display: flex; flex-direction: column; }
+.comment-replies .comment { border-bottom: none; padding-bottom: 4px; }
+
+/* Composer: the popup is anchored above the field rather than at the caret — a textarea has no
+   cheap caret geometry, and the field is short enough that above-the-box is unambiguous. */
+.comment-composer { position: relative; margin-top: 10px; }
+.comment-input {
+  width: 100%; resize: vertical; min-height: 46px;
+  font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 7px 9px;
+}
+.comment-input:focus { outline: none; border-color: var(--pop); }
+.comment-composer-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+.comment-suggest { position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); z-index: 40; max-height: 190px; overflow-y: auto; }
+/* Touch has no hover, so the row actions can't hide behind one. */
+@media (hover: none) {
+  .comment-actions { opacity: 1; }
+}
 
 /* ── trash view (recoverable soft-deletes) ───────────────────────────── */
 .trash-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }

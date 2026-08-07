@@ -98,3 +98,25 @@ export function confirmDeleteEvent(opts: { title?: string | null; recurring?: bo
     confirmLabel: 'Delete event',
   });
 }
+
+/**
+ * Deleting a comment (the task Activity drawer).
+ *
+ * Worth interrupting for because the outcome is not what "delete" usually means here: unlike a
+ * task, a comment leaves a visible tombstone in the thread — deliberately, so replies to it still
+ * make sense (COMMENTS_PLAN.md D7) — and unlike Trash, there is no restore. Deleting someone
+ * else's comment is a moderation act, so the copy says whose it is.
+ */
+export function confirmDeleteComment(opts: { authorName?: string | null; mine: boolean }): Promise<boolean> {
+  return askConfirm({
+    title: opts.mine ? 'Delete your comment?' : `Delete ${opts.authorName ?? 'this member'}’s comment?`,
+    body: (
+      <p>
+        The text goes for everyone. A “comment deleted” line stays in its place so replies still make
+        sense, and the deletion is recorded in the audit log. There is no Trash for comments — this
+        can’t be undone.
+      </p>
+    ),
+    confirmLabel: 'Delete comment',
+  });
+}

@@ -11,7 +11,7 @@ import { askConfirm } from '../confirm/useConfirm';
 import { useSession } from '../session/useSession';
 import { useStore } from '../store';
 import { EmailLookup } from './EmailLookup';
-import { HistoryDrawer } from './HistoryDrawer';
+import { ActivityDrawer } from './ActivityDrawer';
 import { TrashPanel } from './TrashPanel';
 
 const ROLES: BoardRole[] = ['viewer', 'editor', 'admin'];
@@ -222,7 +222,7 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
           </div>
         )}
 
-        {historyOpen && <HistoryDrawer kind="tab" id={tabId} boardId={tabId} title={tabName} onClose={() => setHistoryOpen(false)} />}
+        {historyOpen && <ActivityDrawer kind="tab" id={tabId} boardId={tabId} title={tabName} onClose={() => setHistoryOpen(false)} />}
         {trashOpen && <TrashPanel tabId={tabId} tabName={tabName} onClose={() => setTrashOpen(false)} />}
     </>
   );

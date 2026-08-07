@@ -10,6 +10,7 @@ import { auth, getState, setWriteErrorHandler, type SessionUser } from '../api/c
 import { startPersistence, setBaseline, suspendPersistence, resumePersistence, flush } from '../api/persist';
 import { startRealtime, stopRealtime } from '../realtime/socket';
 import { useNotifications } from '../notifications/useNotifications';
+import { useComments } from '../comments/useComments';
 import { startOutbox, clearOutbox, pendingTaskIds, outboxIdle } from '../offline/outbox';
 import { saveSnapshot, loadSnapshot, saveCachedUser, loadCachedUser, clearSnapshot } from '../offline/snapshot';
 import { offline } from '../offline/status';
@@ -196,6 +197,7 @@ export const useSession = create<SessionState>((set) => ({
     clearSnapshot();
     clearOutbox();
     useNotifications.getState().reset();
+    useComments.getState().reset(); // loaded threads belong to the departing user
     set({ user: null, status: 'unauthenticated', error: null });
   },
 

@@ -96,7 +96,13 @@ export interface BlockFilter {
 export type PlannerMode = 'day' | 'week';
 
 // ── Notifications (per-user feed) ──────────────────────────────────────────
-export type NotificationType = 'task_assigned' | 'review_requested' | 'task_approved' | 'board_added';
+export type NotificationType =
+  | 'task_assigned'
+  | 'review_requested'
+  | 'task_approved'
+  | 'board_added'
+  | 'comment_mention'
+  | 'comment_added';
 
 /** One row of the notification feed, as the server serializes it (ISO timestamps). */
 export interface Notification {
@@ -109,6 +115,30 @@ export interface Notification {
   actorId?: ID | null;
   readAt?: string | null; // ISO; null = unread
   createdAt: string; // ISO
+}
+
+// ── Comments (COMMENTS_PLAN.md) ────────────────────────────────────────────
+/**
+ * One comment on a task, as the server serializes it. `body` is plain text carrying
+ * `@[name](userId)` mention tokens (shared/mentions.ts) — never HTML, never a second rich-text
+ * surface. A deleted comment keeps its place and byline but arrives with an empty body and
+ * `deleted: true`: the tombstone is there so replies still make sense, not to republish what was
+ * withdrawn.
+ */
+export interface Comment {
+  id: ID;
+  taskId: ID;
+  tabId: ID;
+  authorId: ID | null;
+  authorEmail: string | null;
+  /** Email local-part, for display until a real display name exists. Null for an erased user. */
+  authorName: string | null;
+  parentCommentId: ID | null;
+  body: string;
+  mentions: ID[];
+  deleted: boolean;
+  createdAt: string; // ISO
+  editedAt: string | null; // ISO; non-null = "edited"
 }
 
 // ── Calendar (events model) ────────────────────────────────────────────────
@@ -155,6 +185,12 @@ export interface RootState {
   events: Record<ID, CalendarEvent>;
   /** Per-board member rosters (the `@` picker's source). Keyed by tab/board id. */
   membersByBoard: Record<ID, Member[]>;
+  /**
+   * Live comment count per task, for the badge on a task row (COMMENTS_PLAN.md D9). Server-owned:
+   * it arrives with /api/state and is nudged locally as comments are posted/deleted. Tombstones
+   * are not counted. A task with no comments is simply absent.
+   */
+  commentCounts: Record<ID, number>;
   projectOrder: ID[];
   tabOrder: ID[];
   starredRowOrder: ID[];

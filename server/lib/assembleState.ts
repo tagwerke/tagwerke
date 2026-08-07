@@ -11,6 +11,7 @@
 
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
+import { commentCountsForTabs } from '../routes/comments.ts';
 
 /**
  * One task row in the shape src/types.ts `Task` expects: absent rather than null for the optional
@@ -124,11 +125,17 @@ export async function assembleState(userId: string) {
     }
   }
 
+  // Per-task comment counts for the badge on each task row (COMMENTS_PLAN.md D9). One grouped
+  // query for every visible board — the alternative is a count fetch per task on the one screen
+  // that renders every task at once.
+  const commentCounts = tabIds.length ? await commentCountsForTabs(tabIds) : {};
+
   return {
     projects,
     tabs,
     tasks,
     membersByBoard,
+    commentCounts,
     projectOrder,
     tabOrder,
     starredRowOrder,

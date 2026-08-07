@@ -208,6 +208,53 @@ export const tasks = pgTable(
   ],
 );
 
+// Discussion on a task (COMMENTS_PLAN.md). Deliberately NOT part of the Yjs document (D1): the
+// doc holds prose plus id-only refs to root task nodes, whereas a comment is an append-only,
+// identity-stamped, per-task record — structurally the same animal as `notifications` and
+// `audit_log`. Consequence: no CRDT format change, and comments survive doc reconcile untouched.
+//
+// `body` is PLAIN TEXT carrying `@[name](userId)` mention tokens (shared/mentions.ts). `mentions`
+// is DERIVED from it server-side and filtered to members of `tab_id` — a client-supplied recipient
+// list would be a notification-spam primitive (D5).
+export const taskComments = pgTable(
+  'task_comments',
+  {
+    // Client-generated (nanoid), so a POST replayed from the offline outbox inserts once
+    // instead of duplicating the comment (D8).
+    id: text('id').primaryKey(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    // Denormalized board scope. Authorization and the realtime channel both need the board, and
+    // every read would otherwise join `tasks` for it. Set from the task's home_tab_id at insert;
+    // never client-supplied. Hard-deleting the task (retention prune) cascades the thread away;
+    // SOFT-deleting it leaves the thread, so a restore from Trash brings the conversation back.
+    tabId: text('tab_id')
+      .notNull()
+      .references(() => tabs.id, { onDelete: 'cascade' }),
+    // A real FK, unlike audit_log.actorId: a comment is user-facing content, not a forensic
+    // record. Erasing a user blanks the byline ("deleted user") and the audit log keeps the trail.
+    authorId: text('author_id').references(() => users.id, { onDelete: 'set null' }),
+    // One level of replies is what the UI renders (D4); the column is here from the first
+    // migration so going deeper later needs no schema change. SET NULL, not cascade: deleting a
+    // parent comment must not silently take its replies with it.
+    parentCommentId: text('parent_comment_id').references((): AnyPgColumn => taskComments.id, { onDelete: 'set null' }),
+    body: text('body').notNull(),
+    mentions: jsonb('mentions').notNull().default([]), // string[] of user ids, server-derived
+    editedAt: timestamp('edited_at', { withTimezone: true }),
+    // Soft delete + tombstone (D7), mirroring `tasks`. A thread with a hole in it reads as a
+    // non-sequitur, so a deleted comment keeps its place and its "deleted" label.
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedBy: text('deleted_by'),
+    lastBody: text('last_body'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('task_comments_task_idx').on(t.taskId, t.createdAt), // the thread read
+    index('task_comments_tab_idx').on(t.tabId, t.createdAt), // board-wide counts / activity
+  ],
+);
+
 // v2 collaboration: a board's access list AND each member's personal view of it.
 // PK (tab_id, user_id). A "private" board is just a board with one admin member.
 // role: 'viewer' | 'editor' | 'admin'. category_id is the member's personal filing
@@ -420,7 +467,8 @@ export const notifications = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    // Event kind: 'task_assigned' | 'review_requested' | 'task_approved' | 'board_added'.
+    // Event kind: 'task_assigned' | 'review_requested' | 'task_approved' | 'board_added' |
+    // 'comment_mention' | 'comment_added'.
     // Kept as free text (not an enum) so new kinds don't need a migration.
     type: text('type').notNull(),
     title: text('title').notNull(), // the one-line headline shown in the feed

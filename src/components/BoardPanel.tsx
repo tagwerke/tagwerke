@@ -2,14 +2,14 @@
 // separate Share / Schedule modals. Each tab embeds the existing panel body:
 //   Members  — roster, roles, invite, board rules  (SharePanel, embedded)
 //   Events   — agenda, location, RSVP              (EventsPanel, embedded)
-//   Activity — presence + board history + trash    (BoardActivity + HistoryDrawer/TrashPanel)
+//   Activity — presence + board history + trash    (BoardActivity + ActivityDrawer/TrashPanel)
 // On desktop it's a persistent right rail; on mobile TabView mounts it inside a Sheet.
 
 import { useState } from 'react';
 import { SharePanel } from './SharePanel';
 import { EventsPanel } from './EventsPanel';
 import { BoardActivity } from './BoardActivity';
-import { HistoryDrawer } from './HistoryDrawer';
+import { ActivityDrawer } from './ActivityDrawer';
 import { TrashPanel } from './TrashPanel';
 
 type PanelTab = 'members' | 'events' | 'activity';
@@ -41,7 +41,7 @@ export function BoardPanel({ tabId, tabName }: { tabId: string; tabName: string 
         )}
       </div>
 
-      {historyOpen && <HistoryDrawer kind="tab" id={tabId} boardId={tabId} title={tabName} onClose={() => setHistoryOpen(false)} />}
+      {historyOpen && <ActivityDrawer kind="tab" id={tabId} boardId={tabId} title={tabName} onClose={() => setHistoryOpen(false)} />}
       {trashOpen && <TrashPanel tabId={tabId} tabName={tabName} onClose={() => setTrashOpen(false)} />}
     </aside>
   );

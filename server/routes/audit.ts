@@ -193,6 +193,35 @@ async function resolveTask(id: string): Promise<PreviewRecord | null> {
   };
 }
 
+/**
+ * A comment behind a `task_comment` audit row (COMMENTS_PLAN.md §3).
+ *
+ * A DELETED comment still resolves, and it shows its `last_body`. That is the point of retaining
+ * it: the board-facing thread shows only a tombstone (D7), while this surface — admin + sudo, the
+ * forensic one — has to be able to answer "what was actually said and then withdrawn". The
+ * `deleted` flag makes clear which it is.
+ */
+async function resolveComment(id: string): Promise<PreviewRecord | null> {
+  const [c] = await db.select().from(schema.taskComments).where(eq(schema.taskComments.id, id)).limit(1);
+  if (!c) return null;
+  const [author, board, deleter] = await Promise.all([emailOf(c.authorId), boardNameOf(c.tabId), emailOf(c.deletedBy)]);
+  const text = (c.deletedAt ? c.lastBody : c.body)?.trim();
+  return {
+    type: 'task_comment', id, deleted: !!c.deletedAt,
+    title: plainBody(text || '(empty comment)'),
+    fields: [
+      F('board', board ?? c.tabId),
+      F('task', c.taskId),
+      F('author', author),
+      ...(c.parentCommentId ? [F('reply to', c.parentCommentId)] : []),
+      F('mentions', ((c.mentions as string[] | null) ?? []).length || '—'),
+      F('created', iso(c.createdAt)),
+      ...(c.editedAt ? [F('edited', iso(c.editedAt))] : []),
+      ...(c.deletedAt ? [F('deleted', iso(c.deletedAt)), F('deleted by', deleter)] : []),
+    ],
+  };
+}
+
 async function resolveTab(id: string): Promise<PreviewRecord | null> {
   const [t] = await db.select().from(schema.tabs).where(eq(schema.tabs.id, id)).limit(1);
   if (!t) return null;
@@ -270,6 +299,7 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
     else if (type === 'tab') record = await resolveTab(id);
     else if (type === 'user') record = await resolveUser(id);
     else if (type === 'board_member') record = await resolveMember(id, scope);
+    else if (type === 'task_comment') record = await resolveComment(id);
     const history = await recordHistory(id);
     return { record, history };
   });

@@ -8,7 +8,7 @@
 // stay as direct fetches and simply fail while offline.
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import type { BlockFilter, CalendarEvent, ID, Notification as NotificationDTO, RsvpStatus, Task, TaskStatus } from '../types';
+import type { BlockFilter, CalendarEvent, Comment as CommentDTO, ID, Notification as NotificationDTO, RsvpStatus, Task, TaskStatus } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
 
@@ -247,6 +247,18 @@ export const api = {
     // Per-object change timeline (Layer A). Editor+ on the item's board (read → live).
     task: (id: ID) => req<{ entries: HistoryEntry[] }>(`/api/tasks/${id}/history`),
     tab: (id: ID) => req<{ entries: HistoryEntry[] }>(`/api/tabs/${id}/history`),
+  },
+  // ── Comments on tasks (COMMENTS_PLAN.md) ───────────────────────────────────
+  // The thread read is a direct fetch (it's opened on demand and there is nothing to show
+  // offline that we'd have). The WRITES go through the durable outbox: a comment typed on a
+  // train is exactly the edit that must survive a reload, and the client-generated id makes the
+  // replayed POST idempotent server-side (D8).
+  comments: {
+    list: (taskId: ID) => req<{ comments: CommentDTO[] }>(`/api/tasks/${taskId}/comments`),
+    create: (taskId: ID, b: { id: ID; body: string; parentCommentId?: ID | null }) =>
+      submitMutation(M('POST', `/api/tasks/${taskId}/comments`, b)),
+    update: (id: ID, body: string) => submitMutation(M('PATCH', `/api/comments/${id}`, { body })),
+    remove: (id: ID) => submitMutation(M('DELETE', `/api/comments/${id}`)),
   },
   trash: {
     // A board's soft-deleted tasks + restore (recoverability, §G). Editor+ (read/act → live).

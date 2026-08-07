@@ -16,8 +16,9 @@ import { useStore } from '../store';
 import { applyServerState } from '../api/persist';
 import { pendingTaskIds } from '../offline/outbox';
 import { useNotifications } from '../notifications/useNotifications';
+import { useComments } from '../comments/useComments';
 import { dlog, sid } from '../util/dlog';
-import type { ID, Notification, Task } from '../types';
+import type { Comment, ID, Notification, Task } from '../types';
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
@@ -236,6 +237,14 @@ function handleMessage(raw: string): void {
       // sidebar reflects it without a manual refresh. Same mechanism as a reconnect resync.
       opts?.onResync();
       return;
+    case 'comment': {
+      // A comment posted/edited/deleted on the open board (server/routes/comments.ts). Its own
+      // frame rather than a Yjs update, because comments are rows and not document content
+      // (COMMENTS_PLAN.md D1/D2). The store dedupes by id, so our own echo lands as a no-op.
+      const m = msg as { action?: 'create' | 'update' | 'delete'; comment?: Comment };
+      if (m.action && m.comment?.id) useComments.getState().receive(m.action, m.comment);
+      return;
+    }
     case 'notification': {
       // A live notification on our personal channel (server/lib/notify.ts). Feed it to the
       // standalone notifications store — bell badge + list update instantly, no re-pull.
