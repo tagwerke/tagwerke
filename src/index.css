@@ -401,9 +401,14 @@ input, select, textarea { font: inherit; color: inherit; }
   margin-left: 28px;
 }
 
-/* Collaborative cursors (CollaborationCaret). The caret color is set inline per-user from the
-   awareness `user.color`; these rules give it shape and the floating name label. */
-.ProseMirror .collaboration-caret__caret {
+/* Collaborative cursors (CollaborationCaret). A peer's presence in the prose is a bare coloured
+   bar and nothing else — the caret color is set inline per-user from the awareness `user.color`,
+   and the same color identifies them in the board head's presence avatars (usePresence.ts reads
+   the same awareness field), so the name never needs to be repeated inside the text.
+   NOTE the class names: the extension's default render() emits "carets" (PLURAL) and makes the
+   label a <div>. Styling the singular spelling silently matched nothing, which left that div at
+   its default `display: block`, in flow, breaking the line around every peer's cursor. */
+.ProseMirror .collaboration-carets__caret {
   position: relative;
   margin-left: -1px;
   margin-right: -1px;
@@ -413,21 +418,9 @@ input, select, textarea { font: inherit; color: inherit; }
   word-break: normal;
   pointer-events: none;
 }
-.ProseMirror .collaboration-caret__label {
-  position: absolute;
-  top: -1.4em;
-  left: -1px;
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 600;
-  line-height: 1;
-  color: #fff;
-  white-space: nowrap;
-  padding: 2px 5px;
-  border-radius: 4px 4px 4px 0;
-  user-select: none;
-  pointer-events: none;
-}
+/* The name badge. Not a hover reveal — the caret is 1px wide with pointer-events: none, so there
+   is nothing to hover; the avatars in the board head are where a name belongs. */
+.ProseMirror .collaboration-carets__label { display: none; }
 
 /* The node view's wrapper is layout-invisible so the <li> it renders is the direct child of the
    enclosing taskList <ul> — and the sub-task <ul> nested inside that <li> stays valid HTML.
@@ -1905,6 +1898,22 @@ input, select, textarea { font: inherit; color: inherit; }
   .topbar { margin-bottom: 18px; }
   /* Desktop action row is replaced by the bottom nav. */
   .topbar-actions { display: none; }
+  /* Which leaves the pill as the top bar's ONLY child here — so mounting/unmounting it with sync
+     state would grow the header 0 → 26px and shove the whole board down on every sync. Float it
+     out of flow instead, with .cascade-toast's geometry: transient status never moves the page. */
+  .net-pill {
+    position: fixed;
+    left: 50%;
+    bottom: calc(68px + env(safe-area-inset-bottom)); /* clears the ~60px nav */
+    transform: translateX(-50%);
+    z-index: 50;
+    margin: 0;
+    background: var(--bg-paper); /* opaque: it floats over content, not over the page background */
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  }
+  /* Same tint as the desktop rule, mixed into paper rather than laid over it — a translucent
+     wash reads as mud once there's board content behind it. */
+  .net-pill.is-offline { background: color-mix(in srgb, #a8581f 7%, var(--bg-paper)); }
   .brand-name { font-size: 24px; }
   .brand-mark { width: 28px; height: 28px; }
 
