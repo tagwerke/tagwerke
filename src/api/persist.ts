@@ -3,7 +3,10 @@
 // and each tab's `docJSON` (mutated by setTabDoc, cleanupEmptyTasks).
 // On a debounced tick we diff against the last persisted snapshot and emit granular
 // upsert/delete/patch calls. Structural entities (projects, tab metadata, blocks,
-// snapshots) are persisted explicitly inside their store actions, not here.
+// snapshots) are persisted explicitly inside their store actions, not here — with one
+// carve-out: board and space NAMES, which a user types one character at a time. Sending
+// those per keystroke meant a PATCH and an audit row per character, so they are diffed
+// here to get this file's coalescing, unload flush and echo suppression for free.
 
 import { useStore } from '../store';
 import { api, enqueue } from './client';
@@ -14,6 +17,8 @@ const DEBOUNCE_MS = 400;
 
 interface Snap {
   tasks: Record<ID, Task>;
+  tabNames: Record<ID, string>;
+  projectNames: Record<ID, string>;
 }
 
 let last: Snap | null = null;
@@ -23,9 +28,44 @@ let unsub: (() => void) | null = null;
 
 function snapshot(s: RootState): Snap {
   // The document no longer persists here — it's a Yjs CRDT synced + saved server-side (see
-  // yProvider.ts / server/realtime/ydoc.ts). Only `tasks` are diffed. Doc edits still tick the
-  // store subscription, which keeps the offline snapshot fresh at the end of diff().
-  return { tasks: s.tasks };
+  // yProvider.ts / server/realtime/ydoc.ts). Only `tasks` and the two name maps are diffed. Doc
+  // edits still tick the store subscription, which keeps the offline snapshot fresh at the end
+  // of diff().
+  return { tasks: s.tasks, tabNames: names(s.tabs), projectNames: names(s.projects) };
+}
+
+/** Just the `name` of each entity in a store map — the only field of theirs this file diffs. */
+function names(entities: Record<ID, { name: string }>): Record<ID, string> {
+  const out: Record<ID, string> = {};
+  for (const id in entities) out[id] = entities[id].name;
+  return out;
+}
+
+/**
+ * Emit a PATCH for every renamed entity, and report which ids were NOT sent.
+ *
+ * A name typed one character at a time passes through "" on the way to the next one, and both
+ * PATCH routes require `min(1)` — a rejected write is poison to the outbox, which drops the op
+ * and fires a blunt repull, clobbering the edit in progress (that is what made the last letter
+ * of a board title undeletable). So a blank name is never sent, and its id comes back here so
+ * the caller can hold the field dirty: the real name still goes out on a later tick.
+ */
+function emitRenames(
+  prev: Record<ID, string>,
+  next: Record<ID, string>,
+  patch: (id: ID, name: string) => void,
+): Set<ID> {
+  const held = new Set<ID>();
+  for (const id in next) {
+    // A brand-new entity carries its name in its own create call; only renames belong here.
+    if (!(id in prev) || prev[id] === next[id]) continue;
+    if (!next[id].trim()) {
+      held.add(id);
+      continue;
+    }
+    patch(id, next[id]);
+  }
+  return held;
 }
 
 // Field-granular diff (SPEC §8): only changed fields are sent, so a text edit can't
@@ -140,6 +180,17 @@ function diff(): void {
     if (parent && removed.has(parent)) continue; // covered by an ancestor's delete
     enqueue(() => api.tasks.remove(id));
   }
+
+  // Renames (see emitRenames). A name held back as blank keeps its PREVIOUS value in the new
+  // baseline, so the field stays dirty and the eventual real name is still emitted.
+  const heldTabs = emitRenames(prev.tabNames, next.tabNames, (id, name) =>
+    enqueue(() => api.tabs.update(id, { name })),
+  );
+  const heldProjects = emitRenames(prev.projectNames, next.projectNames, (id, name) =>
+    enqueue(() => api.projects.update(id, { name })),
+  );
+  for (const id of heldTabs) next.tabNames[id] = prev.tabNames[id];
+  for (const id of heldProjects) next.projectNames[id] = prev.projectNames[id];
 
   last = next;
   // Keep the offline snapshot current so a reload (online or not) restores edits.

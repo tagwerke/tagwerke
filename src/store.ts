@@ -320,8 +320,10 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         return project;
       },
       renameProject(id, name) {
+        // Local only — the PATCH is emitted by the debounced differ (api/persist.ts). A name is
+        // typed a character at a time, and one write per keystroke meant one audit row per
+        // keystroke; the intermediate "" would also be rejected and repull over the edit.
         set((s) => ({ projects: { ...s.projects, [id]: { ...s.projects[id], name } } }));
-        enqueue(() => api.projects.update(id, { name }));
       },
       recolorProject(id, color) {
         set((s) => ({ projects: { ...s.projects, [id]: { ...s.projects[id], color } } }));
@@ -379,8 +381,9 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         return tab;
       },
       renameTab(id, name) {
+        // Local only — the PATCH is emitted by the debounced differ (api/persist.ts). See
+        // renameProject above for why.
         set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], name } } }));
-        enqueue(() => api.tabs.update(id, { name }));
       },
       setTabLocation(id, location) {
         set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], location } } }));

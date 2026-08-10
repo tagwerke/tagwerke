@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { TabEditor } from '../editor/Editor';
 import { hexToRgba } from '../util/color';
@@ -43,6 +43,8 @@ export function TabView({ tabId }: { tabId: string }) {
   // board's task data, and must never persist as "the" view a board reopens into.
   const [pane, setPane] = useState<'help' | null>(null);
   const { hasNew: hasNewHelp } = useHelpBadge();
+  // The title as it stood when editing began, so an emptied field can be put back on blur.
+  const titleOnFocus = useRef(tab?.name ?? '');
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -75,7 +77,18 @@ export function TabView({ tabId }: { tabId: string }) {
         </button>
         <div className="board-head-title">
           {project && <span className="board-eyebrow">{project.name}</span>}
-          <input className="board-title" value={tab.name} onChange={(e) => renameTab(tab.id, e.target.value)} aria-label="board title" />
+          <input
+            className="board-title"
+            value={tab.name}
+            onFocus={() => { titleOnFocus.current = tab.name; }}
+            onChange={(e) => renameTab(tab.id, e.target.value)}
+            // A board must have a name (both PATCH routes require one), so an emptied field is an
+            // editing state, not a value: nothing was sent for it, and leaving it would strand the
+            // store on a blank the next re-pull would silently overwrite. Put back whatever was
+            // there on focus — which is also correct if a different name was typed and sent first.
+            onBlur={() => { if (!tab.name.trim()) renameTab(tab.id, titleOnFocus.current); }}
+            aria-label="board title"
+          />
         </div>
         <button
           className={`icon-btn star ${tab.starred ? 'on' : ''}`}
