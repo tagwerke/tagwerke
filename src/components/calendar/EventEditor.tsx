@@ -3,7 +3,7 @@
 // set = a project meeting. Times are local wall-clock composed into ISO with the event's day
 // (single-timezone instance). Reuses the app's .modal pattern.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../../store';
 import { useSession } from '../../session/useSession';
@@ -79,16 +79,19 @@ export function EventEditor({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const boardOptions: DropdownOption[] = useMemo(
-    () => [
-      { value: NO_BOARD, label: 'No board · 1:1' },
-      ...rankTabs('', tabs, projects, tabOrder).map((m) => ({
+  const rankBoards = useCallback(
+    (query: string): DropdownOption[] =>
+      rankTabs(query, tabs, projects, tabOrder).map((m) => ({
         value: m.tabId,
         label: m.projectName ? `${m.projectName} · ${m.name}` : m.name,
         accent: m.projectColor,
       })),
-    ],
     [tabs, projects, tabOrder],
+  );
+
+  const boardOptions: DropdownOption[] = useMemo(
+    () => [{ value: NO_BOARD, label: 'No board · 1:1' }, ...rankBoards('')],
+    [rankBoards],
   );
 
   const save = () => {
@@ -144,7 +147,15 @@ export function EventEditor({
 
         <label className="field">
           <span>board</span>
-          <Dropdown value={tabId} onChange={setTabId} options={boardOptions} placeholder="No board · 1:1" />
+          <Dropdown
+            value={tabId}
+            onChange={setTabId}
+            options={boardOptions}
+            placeholder="No board · 1:1"
+            searchable
+            searchPlaceholder="search boards…"
+            rank={rankBoards}
+          />
         </label>
 
         {editing && (

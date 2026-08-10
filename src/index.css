@@ -1473,16 +1473,31 @@ input, select, textarea { font: inherit; color: inherit; }
 .dd.open .dd-caret { transform: rotate(180deg); color: var(--ink); }
 .dd-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 
-.dd-list {
+.dd-panel {
   position: absolute;
   top: calc(100% + 4px); left: 0; right: 0;
-  list-style: none;
-  margin: 0; padding: 4px;
+  display: flex; flex-direction: column;
   background: var(--bg-paper);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   box-shadow: var(--shadow-pop);
   z-index: 60;
+}
+.dd-search {
+  margin: 4px 4px 0;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+}
+.dd-search::placeholder { color: var(--ink-mute); }
+.dd-search:focus { border-color: var(--pop); }
+.dd-list {
+  list-style: none;
+  margin: 0; padding: 4px;
   max-height: 240px;
   overflow-y: auto;
 }
