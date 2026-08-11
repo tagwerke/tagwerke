@@ -21,7 +21,18 @@ import { CascadeToast } from './components/common/CascadeToast';
 import { ConfirmDialog } from './components/common/ConfirmDialog';
 import { Toast } from './components/common/Toast';
 import { InfoPane } from './components/InfoPane';
-import { usePath, boardPath, parseBoardId, isCalendarPath, CALENDAR_PATH } from './util/router';
+import { TaskPage } from './components/TaskPage';
+import {
+  usePath,
+  boardPath,
+  parseBoardId,
+  isCalendarPath,
+  CALENDAR_PATH,
+  boardSprintsPath,
+  isBoardSprintsPath,
+  boardTaskPath,
+  parseOpenTaskId,
+} from './util/router';
 
 export type Panel = 'new' | 'import' | 'filter' | 'search' | 'security' | 'more' | 'notifications' | 'help';
 
@@ -93,9 +104,10 @@ function Workspace() {
     return () => window.removeEventListener('keydown', onKey);
   }, [panel]);
 
-  // Navigation lives in the URL so a refresh (or a shared link) restores the open board or
-  // the calendar. URL → store: whenever the path changes (initial load, back/forward),
-  // reflect it. /calendar drives the calendar; /b/:id a board; / the grid.
+  // Navigation lives in the URL so a refresh (or a shared link) restores the open board, the
+  // calendar, the sprints page, or an open task. URL → store: whenever the path changes
+  // (initial load, back/forward), reflect it. /calendar the calendar; /b/:id a board;
+  // /b/:id/sprints its sprints page; /b/:id/task/:taskId an open task page; / the grid.
   const path = usePath();
   useEffect(() => {
     const st = useStore.getState();
@@ -105,20 +117,47 @@ function Workspace() {
     }
     if (st.plannerOpen) useStore.setState({ plannerOpen: false });
     const id = parseBoardId(path);
-    if (st.activeTabId !== id) st.setActiveTab(id);
+    const taskId = id ? parseOpenTaskId(path) : null;
+    const wantSprints = id ? isBoardSprintsPath(path) : false;
+    if (st.activeTabId !== id) {
+      // A different (or no) board: full reset, same as setActiveTab, but landing on whatever
+      // sub-route the URL actually names instead of always defaulting to doc.
+      useStore.setState({ activeTabId: id, boardView: wantSprints ? 'sprints' : 'doc', openTaskId: taskId, plannerOpen: false });
+      return;
+    }
+    // Same board: only reconcile the pieces the URL disagrees with — e.g. opening/closing the
+    // task page must not reset which of list/kanban/calendar was showing underneath it.
+    const patch: { openTaskId?: string | null; boardView?: typeof st.boardView } = {};
+    if (st.openTaskId !== taskId) patch.openTaskId = taskId;
+    const wantBoardView = wantSprints ? 'sprints' : st.boardView === 'sprints' ? 'doc' : st.boardView;
+    if (wantBoardView !== st.boardView) patch.boardView = wantBoardView;
+    if (Object.keys(patch).length) useStore.setState(patch);
   }, [path]);
-  // store → URL: when the open board or calendar changes from within the app, update the
-  // address bar. subscribe() only fires on an actual change, so it never clobbers a deeper
-  // URL present on first paint.
+  // store → URL: when the open board, calendar, sprints page, or open task changes from
+  // within the app, update the address bar. subscribe() only fires on an actual change, so it
+  // never clobbers a deeper URL present on first paint. Every distinct destination gets its own
+  // pushState (never replaceState) so back/forward steps through boards/task pages naturally.
   useEffect(() => {
     return useStore.subscribe((s, prev) => {
-      if (s.activeTabId === prev.activeTabId && s.plannerOpen === prev.plannerOpen) return;
-      const want = s.plannerOpen ? CALENDAR_PATH : boardPath(s.activeTabId);
+      if (
+        s.activeTabId === prev.activeTabId &&
+        s.plannerOpen === prev.plannerOpen &&
+        s.boardView === prev.boardView &&
+        s.openTaskId === prev.openTaskId
+      )
+        return;
+      let want: string;
+      if (s.plannerOpen) want = CALENDAR_PATH;
+      else if (!s.activeTabId) want = '/';
+      else if (s.openTaskId) want = boardTaskPath(s.activeTabId, s.openTaskId);
+      else if (s.boardView === 'sprints') want = boardSprintsPath(s.activeTabId);
+      else want = boardPath(s.activeTabId);
       if (window.location.pathname !== want) window.history.pushState(null, '', want);
     });
   }, []);
 
   const active = activeTabId ? tabs[activeTabId] : null;
+  const openTaskId = useStore((s) => s.openTaskId);
 
   return (
     <div className="app-shell">
@@ -127,6 +166,8 @@ function Workspace() {
         <TopBar onOpen={setPanel} />
         {plannerOpen ? (
           <CalendarView />
+        ) : active && openTaskId ? (
+          <TaskPage taskId={openTaskId} boardId={active.id} />
         ) : active ? (
           <TabView tabId={active.id} />
         ) : (

@@ -60,12 +60,17 @@ export function ActivityDrawer({
   boardId,
   title,
   onClose,
+  embedded = false,
 }: {
   kind: Kind;
   id: string;
   boardId: string;
   title: string;
   onClose: () => void;
+  /** Render as a plain panel in the caller's own layout (the task page), instead of the
+   *  modal-backdrop overlay this was originally built for. Same data, same actions — only the
+   *  chrome around it changes. */
+  embedded?: boolean;
 }) {
   const members = useStore((s) => s.membersByBoard[boardId]);
   const myRole = useStore((s) => s.tabs[boardId]?.role);
@@ -123,12 +128,13 @@ export function ActivityDrawer({
   }, [kind, id, loadComments]);
 
   useEffect(() => {
+    if (embedded) return; // the task page owns its own Escape behavior
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [embedded, onClose]);
 
   /**
    * Restore the task to the state entry `e` left behind. `laterCount` is how many changes this
@@ -236,13 +242,14 @@ export function ActivityDrawer({
   const isTask = kind === 'task';
   const loading = entries === null || (isTask && commentsLoading && !comments);
 
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="share-panel history-panel" onClick={(e) => e.stopPropagation()}>
-        <header className="share-head">
-          <strong>{isTask ? 'Activity' : 'History'} — {title}</strong>
-          <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
-        </header>
+  const panel = (
+      <div className={`share-panel history-panel ${embedded ? 'is-embedded' : ''}`} onClick={embedded ? undefined : (e) => e.stopPropagation()}>
+        {!embedded && (
+          <header className="share-head">
+            <strong>{isTask ? 'Activity' : 'History'} — {title}</strong>
+            <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
+          </header>
+        )}
 
         {error && <div className="share-error">{error}</div>}
         {commentsError && <div className="share-error">{commentsError}</div>}
@@ -306,6 +313,12 @@ export function ActivityDrawer({
           <CommentComposer tabId={boardId} onSubmit={(body) => void post(id, boardId, body)} />
         )}
       </div>
+  );
+
+  if (embedded) return panel;
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      {panel}
     </div>
   );
 }

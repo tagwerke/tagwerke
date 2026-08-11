@@ -40,15 +40,17 @@ function notifyAssigneeChange(
 // Fields whose changes are worth an accountability trail. `rank` is excluded (reorder
 // noise); `done`/`owner` are derived/legacy. `parentTaskId` IS audited — re-parenting moves a task
 // between deliverables, which is a structural change, not reorder noise (SUBTASKS_PLAN P1.3).
-// See AUDIT_IMPLEMENTATION_PLAN §B2.
-const AUDITED_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'parentTaskId'] as const;
+// `sprintId` IS audited for the same reason (SPRINTS_PLAN): which sprint a task is scoped to is a
+// planning decision worth a trail, unlike rank. See AUDIT_IMPLEMENTATION_PLAN §B2.
+const AUDITED_FIELDS = ['text', 'description', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'parentTaskId', 'sprintId'] as const;
 
-// What a point-in-time restore puts back: the audited set MINUS the structural field. Where a task
-// sits in the tree is a fact about the board as it is now — its parent may have been re-organised,
-// re-homed or deleted since, and its rank means nothing against a different set of siblings.
-// Restoring a title and its metadata is recovery; silently re-parenting the task on top of that is
-// a second edit nobody asked for. The task stays where it is and gets its old values back.
-const REVERTABLE_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority'] as const;
+// What a point-in-time restore puts back: the audited set MINUS the structural fields. Where a
+// task sits in the tree, and which sprint it's scoped to, are facts about the board as it is
+// NOW — its parent may have been re-organised since, and last week's sprint means nothing today.
+// Restoring a title and its metadata is recovery; silently re-parenting or re-sprinting a task on
+// top of that is a second edit nobody asked for. The task stays where it is and gets its old
+// values back.
+const REVERTABLE_FIELDS = ['text', 'description', 'status', 'assigneeId', 'reviewerId', 'date', 'priority'] as const;
 type RevertableField = (typeof REVERTABLE_FIELDS)[number];
 
 /** Resolve a task's home board (for routes whose body doesn't carry it). */
@@ -68,6 +70,7 @@ export const statusEnum = z.enum(['todo', 'in_progress', 'in_review', 'done', 'c
 const upsertBody = z.object({
   homeTabId: z.string().min(1),
   text: z.string(),
+  description: z.string().nullable().optional(),
   status: statusEnum.optional(),
   assigneeId: z.string().nullable().optional(),
   reviewerId: z.string().nullable().optional(),
@@ -75,12 +78,14 @@ const upsertBody = z.object({
   priority: priority.nullable().optional(),
   rank: rankField,
   parentTaskId: z.string().nullable().optional(),
+  sprintId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
   done: z.boolean().optional(),
 });
 
 const patchBody = z.object({
   text: z.string().optional(),
+  description: z.string().nullable().optional(),
   status: statusEnum.optional(),
   assigneeId: z.string().nullable().optional(),
   reviewerId: z.string().nullable().optional(),
@@ -88,6 +93,7 @@ const patchBody = z.object({
   priority: priority.nullable().optional(),
   rank: rankField,
   parentTaskId: z.string().nullable().optional(),
+  sprintId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
   done: z.boolean().optional(),
 });
@@ -95,6 +101,7 @@ const patchBody = z.object({
 /** Shape-check for a value coming back out of the audit trail (JSON, so nothing is guaranteed). */
 const revertShape: Record<RevertableField, z.ZodTypeAny> = {
   text: z.string(),
+  description: z.string().nullable(),
   status: statusEnum,
   assigneeId: z.string().min(1).nullable(),
   reviewerId: z.string().min(1).nullable(),
@@ -117,6 +124,19 @@ const orphanBody = z.object({
 async function assigneeAllowed(homeTabId: string, assigneeId: string | null | undefined): Promise<boolean> {
   if (assigneeId == null) return true;
   return (await boardRole(assigneeId, homeTabId)) != null;
+}
+
+/** True when `sprintId` is null/undefined (backlog) or names a sprint on `homeTabId`. The DB's
+ *  tasks_sprint_same_board FK would reject a mismatch too, but this turns it into a friendly 400
+ *  instead of a 500 (same reasoning as parentRefusal). */
+async function sprintAllowed(homeTabId: string, sprintId: string | null | undefined): Promise<boolean> {
+  if (sprintId == null) return true;
+  const rows = await db
+    .select({ id: schema.sprints.id })
+    .from(schema.sprints)
+    .where(and(eq(schema.sprints.id, sprintId), eq(schema.sprints.tabId, homeTabId)))
+    .limit(1);
+  return rows.length > 0;
 }
 
 /**
@@ -271,6 +291,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'assignee is not a member of the home board' });
       if (!(await assigneeAllowed(b.data.homeTabId, b.data.reviewerId)))
         return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
+      if (!(await sprintAllowed(b.data.homeTabId, b.data.sprintId)))
+        return reply.code(400).send({ error: 'sprint is not on the home board' });
       const putRefusal = await parentRefusal(b.data.homeTabId, id, b.data.parentTaskId);
       if (putRefusal) return reply.code(400).send({ error: PARENT_REFUSAL_MESSAGE[putRefusal] });
       const userId = req.user!.id;
@@ -302,6 +324,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         createdBy: userId,
         homeTabId: b.data.homeTabId,
         text: b.data.text,
+        // Unlike the other fields, PUT is also the doc-sync write path (SUBTASKS_PLAN), which has
+        // no idea about description. Omitted must PRESERVE, not wipe — only an explicit null clears
+        // it. (`??` alone can't tell "omitted" from "explicitly null", hence the `!== undefined`.)
+        description: b.data.description !== undefined ? b.data.description : (before?.description ?? null),
         status,
         assigneeId: b.data.assigneeId ?? null,
         reviewerId: b.data.reviewerId ?? null,
@@ -309,6 +335,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         priority: b.data.priority ?? null,
         rank,
         parentTaskId: b.data.parentTaskId ?? null,
+        sprintId: b.data.sprintId ?? null,
         owner: b.data.owner ?? null,
         done: status === 'done',
         // Retain a recognizable Trash label; null only when genuinely never titled (§G).
@@ -317,6 +344,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const onConflictSet: Record<string, unknown> = {
         homeTabId: values.homeTabId,
         text: values.text,
+        description: values.description,
         status: values.status,
         assigneeId: values.assigneeId,
         reviewerId: values.reviewerId,
@@ -324,6 +352,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         priority: values.priority,
         rank: values.rank,
         parentTaskId: values.parentTaskId,
+        sprintId: values.sprintId,
         owner: values.owner,
         done: values.done,
         // Resurrect: re-adding a task (e.g. editor undo / re-typing a line) clears any
@@ -369,6 +398,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'assignee is not a member of the home board' });
       if (b.data.reviewerId != null && !(await assigneeAllowed(homeTabId, b.data.reviewerId)))
         return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
+      if (b.data.sprintId != null && !(await sprintAllowed(homeTabId, b.data.sprintId)))
+        return reply.code(400).send({ error: 'sprint is not on the home board' });
       if (b.data.parentTaskId !== undefined) {
         const refusal = await parentRefusal(homeTabId, id, b.data.parentTaskId);
         if (refusal) return reply.code(400).send({ error: PARENT_REFUSAL_MESSAGE[refusal] });

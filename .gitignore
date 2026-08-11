@@ -17,6 +17,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Local-dev-only compose override (publishes the db port to the host)
+docker-compose.override.yml
+
 # Private research / internal material (any folder, any depth)
 MAP.md
 research/

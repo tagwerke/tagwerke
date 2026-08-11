@@ -29,6 +29,7 @@ export function taskDTO(t: typeof schema.tasks.$inferSelect): Record<string, unk
     ...(t.rank != null ? { rank: t.rank } : {}),
     createdAt: t.createdAt instanceof Date ? t.createdAt.getTime() : undefined,
     updatedAt: t.updatedAt instanceof Date ? t.updatedAt.getTime() : undefined,
+    ...(t.description != null ? { description: t.description } : {}),
     ...(t.assigneeId != null ? { assigneeId: t.assigneeId } : {}),
     ...(t.reviewerId != null ? { reviewerId: t.reviewerId } : {}),
     ...(t.approvedBy != null ? { approvedBy: t.approvedBy } : {}),
@@ -36,6 +37,7 @@ export function taskDTO(t: typeof schema.tasks.$inferSelect): Record<string, unk
     ...(t.date != null ? { date: t.date } : {}),
     ...(t.priority != null ? { priority: t.priority } : {}),
     ...(t.parentTaskId != null ? { parentTaskId: t.parentTaskId } : {}),
+    ...(t.sprintId != null ? { sprintId: t.sprintId } : {}),
     ...(t.owner != null ? { owner: t.owner } : {}),
   };
 }
@@ -130,12 +132,36 @@ export async function assembleState(userId: string) {
   // that renders every task at once.
   const commentCounts = tabIds.length ? await commentCountsForTabs(tabIds) : {};
 
+  // Sprints (SPRINTS_PLAN.md): loaded in bulk alongside everything else, same reasoning as
+  // membersByBoard above — the sprint switcher/page needs this on first paint, not after a
+  // second round trip.
+  const sprintsByBoard: Record<string, unknown[]> = {};
+  if (tabIds.length) {
+    const sprintRows = await db
+      .select()
+      .from(schema.sprints)
+      .where(inArray(schema.sprints.tabId, tabIds))
+      .orderBy(asc(schema.sprints.startsAt));
+    for (const s of sprintRows) {
+      const list = sprintsByBoard[s.tabId] ?? (sprintsByBoard[s.tabId] = []);
+      list.push({
+        id: s.id,
+        tabId: s.tabId,
+        label: s.label,
+        startsAt: s.startsAt,
+        endsAt: s.endsAt,
+        isCurrent: s.isCurrent,
+      });
+    }
+  }
+
   return {
     projects,
     tabs,
     tasks,
     membersByBoard,
     commentCounts,
+    sprintsByBoard,
     projectOrder,
     tabOrder,
     starredRowOrder,

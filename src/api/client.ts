@@ -8,7 +8,7 @@
 // stay as direct fetches and simply fail while offline.
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import type { BlockFilter, CalendarEvent, Comment as CommentDTO, ID, Notification as NotificationDTO, RsvpStatus, Task, TaskStatus } from '../types';
+import type { BlockFilter, CalendarEvent, Comment as CommentDTO, ID, Notification as NotificationDTO, RsvpStatus, Sprint, Task, TaskStatus } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
 
@@ -171,9 +171,9 @@ export const api = {
     reorderStarred: (order: ID[]) => submitMutation(M('POST', '/api/tabs/reorder-starred', { order })),
   },
   tasks: {
-    upsert: (id: ID, b: { homeTabId: ID; text: string; status?: TaskStatus; assigneeId?: ID | null; reviewerId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; owner?: string | null; done?: boolean }) =>
+    upsert: (id: ID, b: { homeTabId: ID; text: string; description?: string | null; status?: TaskStatus; assigneeId?: ID | null; reviewerId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; sprintId?: ID | null; owner?: string | null; done?: boolean }) =>
       submitMutation(M('PUT', `/api/tasks/${id}`, b)),
-    patch: (id: ID, patch: { text?: string; status?: TaskStatus; assigneeId?: ID | null; reviewerId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; owner?: string | null; done?: boolean }) =>
+    patch: (id: ID, patch: { text?: string; description?: string | null; status?: TaskStatus; assigneeId?: ID | null; reviewerId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; sprintId?: ID | null; owner?: string | null; done?: boolean }) =>
       submitMutation(M('PATCH', `/api/tasks/${id}`, patch)),
     remove: (id: ID) => submitMutation(M('DELETE', `/api/tasks/${id}`)),
     deleteOrphans: (homeTabId: ID, keepIds: ID[]) =>
@@ -217,6 +217,17 @@ export const api = {
   // Workspace user search for the add-member picker (server-side, ≥2 chars, board-admin gated).
   users: {
     lookup: (q: string) => req<{ users: UserLookupResult[] }>(`/api/users/lookup?q=${encodeURIComponent(q)}`),
+  },
+  // ── Sprints (SPRINTS_PLAN.md) ───────────────────────────────────────────────
+  // The list read is direct/live (used for an explicit refresh only — the bulk /api/state
+  // hydrate is the primary load, see sprintsByBoard in the store). Writes go through the
+  // durable outbox, same as tabs.update/remove: renaming/deleting/switching-current a sprint
+  // is exactly as offline-critical as editing a board's own metadata.
+  sprints: {
+    list: (tabId: ID) => req<{ sprints: Sprint[] }>(`/api/tabs/${tabId}/sprints`),
+    rename: (id: ID, label: string) => submitMutation(M('PATCH', `/api/sprints/${id}`, { label })),
+    setCurrent: (id: ID, isCurrent: boolean) => submitMutation(M('PATCH', `/api/sprints/${id}`, { isCurrent })),
+    remove: (id: ID) => submitMutation(M('DELETE', `/api/sprints/${id}`)),
   },
   members: {
     list: (tabId: ID) => req<{ members: BoardMember[] }>(`/api/tabs/${tabId}/members`),

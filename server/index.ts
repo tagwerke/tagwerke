@@ -15,6 +15,7 @@ import { stateRoutes } from './routes/state.ts';
 import { projectRoutes } from './routes/projects.ts';
 import { tabRoutes } from './routes/tabs.ts';
 import { taskRoutes } from './routes/tasks.ts';
+import { sprintRoutes } from './routes/sprints.ts';
 import { importRoutes } from './routes/imports.ts';
 import { memberRoutes } from './routes/members.ts';
 import { eventRoutes } from './routes/events.ts';
@@ -30,6 +31,7 @@ import { registerAuditHook } from './lib/audit.ts';
 import { registerWebsocket } from './ws.ts';
 import { flushAllYdocRooms } from './realtime/ydoc.ts';
 import { startBackupScheduler } from './jobs/backup.ts';
+import { startSprintRolloverScheduler } from './jobs/sprints.ts';
 
 const PORT = Number(process.env.PORT ?? 5174);
 // Bind all interfaces by default so the container is reachable; override with HOST.
@@ -67,6 +69,7 @@ await db
 // Automatic daily backups — on by default, local-only, opt-out via
 // BACKUP_DISABLED=true (see server/jobs/backup.ts + docs/self-hosting.md).
 await startBackupScheduler(app.log);
+startSprintRolloverScheduler(app.log);
 
 await app.register(cookie, { secret });
 
@@ -95,6 +98,7 @@ await app.register(stateRoutes);
 await app.register(projectRoutes);
 await app.register(tabRoutes);
 await app.register(taskRoutes);
+await app.register(sprintRoutes);
 await app.register(importRoutes);
 await app.register(memberRoutes);
 await app.register(eventRoutes);

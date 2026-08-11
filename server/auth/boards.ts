@@ -87,6 +87,17 @@ type TabIdResolver = (req: FastifyRequest) => string | undefined | Promise<strin
 /** Common resolver: the board id is the `:id` route param. */
 export const paramTabId: TabIdResolver = (req) => (req.params as { id: string }).id;
 
+/** Resolver for routes keyed by a `:id` that's a SPRINT id: looks up its owning board. */
+export const sprintTabId: TabIdResolver = async (req) => {
+  const { id } = req.params as { id: string };
+  const rows = await db
+    .select({ tabId: schema.sprints.tabId })
+    .from(schema.sprints)
+    .where(eq(schema.sprints.id, id))
+    .limit(1);
+  return rows[0]?.tabId;
+};
+
 /**
  * preHandler factory: requires the caller to be at least `min` on the board returned
  * by `getTabId`. Must run AFTER requireAuth (reads req.user). Replies and stops on

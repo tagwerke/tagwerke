@@ -9,6 +9,7 @@ import { publish, userChannel } from '../lib/bus.ts';
 import { dlog, sid } from '../lib/dlog.ts';
 import { applyBoardAccessChange } from '../realtime/connections.ts';
 import { destroyRoom } from '../realtime/ydoc.ts';
+import { ensureCurrentSprint } from '../lib/sprints.ts';
 
 // Opt-in per-board guardrails (AUDIT_IMPLEMENTATION_PLAN §F4). Admin-only to change.
 const settingsBody = z.object({
@@ -103,6 +104,9 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
         position: b.data.position,
         starred,
       });
+      // SPRINTS_PLAN: a new board starts with its current-week sprint already seeded, so
+      // tasks have somewhere to land without waiting for the next daily rollout tick.
+      await ensureCurrentSprint(tx, b.data.id, new Date());
     });
     dlog('tabs', `POST /api/tabs board=${sid(b.data.id)} COMMITTED (membership now exists → ydoc-join will pass)`);
     return reply.code(201).send({ ok: true });

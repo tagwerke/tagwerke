@@ -14,6 +14,8 @@ import { useMemo, useState } from 'react';
 import { useBoardOutline, taskDepth, useStore } from '../store';
 import { STATUS_ORDER, STATUS_LABEL } from './StatusControl';
 import { TaskRow } from './common/TaskRow';
+import { boardTaskPath, navigate } from '../util/router';
+import type { SprintFilter } from './TabView';
 import type { Task, TaskStatus } from '../types';
 
 type Grouping = 'status' | 'outline';
@@ -23,8 +25,12 @@ const MODES: { key: Grouping; label: string; hint: string }[] = [
   { key: 'outline', label: 'Outline', hint: 'The board’s structure, sub-tasks indented under their parent' },
 ];
 
-export function BoardList({ tabId }: { tabId: string }) {
-  const { list: tasks } = useBoardOutline(tabId);
+export function BoardList({ tabId, sprintFilter = 'all' }: { tabId: string; sprintFilter?: SprintFilter }) {
+  const { list: outline } = useBoardOutline(tabId);
+  const tasks = useMemo(
+    () => (sprintFilter === 'all' ? outline : outline.filter((t) => (t.sprintId ?? null) === sprintFilter)),
+    [outline, sprintFilter],
+  );
   const allTasks = useStore((s) => s.tasks);
   const [grouping, setGrouping] = useState<Grouping>('status');
   const [collapsed, setCollapsed] = useState<Set<TaskStatus>>(new Set());
@@ -68,7 +74,7 @@ export function BoardList({ tabId }: { tabId: string }) {
       {grouping === 'outline' ? (
         <div className="list-rows list-outline">
           {tasks.map((t) => (
-            <TaskRow key={t.id} taskId={t.id} indent={taskDepth(allTasks, t.id)} />
+            <TaskRow key={t.id} taskId={t.id} indent={taskDepth(allTasks, t.id)} onOpen={() => navigate(boardTaskPath(tabId, t.id))} />
           ))}
         </div>
       ) : (
@@ -87,7 +93,7 @@ export function BoardList({ tabId }: { tabId: string }) {
               {!isCollapsed && (
                 <div className="list-rows">
                   {items.map((t) => (
-                    <TaskRow key={t.id} taskId={t.id} showParent />
+                    <TaskRow key={t.id} taskId={t.id} showParent onOpen={() => navigate(boardTaskPath(tabId, t.id))} />
                   ))}
                 </div>
               )}

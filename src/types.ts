@@ -50,6 +50,8 @@ export interface Task {
   // parent's node view renders its subtree from these rows.
   parentTaskId?: ID;
   text: string;
+  // The task page's write-up (SPRINTS_PLAN follow-up). Distinct from the comment thread.
+  description?: string;
   // P0: status is authoritative. Optional during the transition; slice 2 makes it required
   // and removes `done`. Treat a missing status as 'todo'.
   status?: TaskStatus;
@@ -66,6 +68,8 @@ export interface Task {
   // (shared/rank.ts). ONE order for every view (SUBTASKS_PLAN D4). Absent only for a row written
   // before the backfill; `compareRank` sorts those last.
   rank?: string;
+  // Sprints (SPRINTS_PLAN.md): the sprint this task is scoped to. Absent = backlog.
+  sprintId?: ID;
   owner?: string; // legacy display fallback; superseded by assigneeId
   done?: boolean; // deprecated mirror of status==='done'; kept for one release
   createdAt?: number; // DB-managed; read-only on the client
@@ -174,8 +178,22 @@ export interface CalendarEvent {
   occurrences?: EventOccurrence[];
 }
 
-/** Which view an open board renders. All read the same task entities. */
-export type BoardView = 'doc' | 'list' | 'kanban' | 'calendar';
+/** Which view an open board renders. All but `sprints` read the same task entities;
+ *  `sprints` is the board's sprint list/management page instead. */
+export type BoardView = 'doc' | 'list' | 'kanban' | 'calendar' | 'sprints';
+
+// ── Sprints (SPRINTS_PLAN.md) ───────────────────────────────────────────────
+/** One sprint (a week) on a board, as the server serializes it. `isCurrent` is unique per
+ *  board at the DB level — at most one, never enforced to be exactly one (a board can have
+ *  none current, by design: "up to me to uncheck it"). */
+export interface Sprint {
+  id: ID;
+  tabId: ID;
+  label: string;
+  startsAt: string; // 'YYYY-MM-DD'
+  endsAt: string; // 'YYYY-MM-DD'
+  isCurrent: boolean;
+}
 
 export interface RootState {
   projects: Record<ID, Project>;
@@ -185,6 +203,9 @@ export interface RootState {
   events: Record<ID, CalendarEvent>;
   /** Per-board member rosters (the `@` picker's source). Keyed by tab/board id. */
   membersByBoard: Record<ID, Member[]>;
+  /** Per-board sprint list (SPRINTS_PLAN.md), newest-first is NOT assumed — sort by startsAt
+   *  where it matters. Loaded in bulk with /api/state, same reasoning as membersByBoard. */
+  sprintsByBoard: Record<ID, Sprint[]>;
   /**
    * Live comment count per task, for the badge on a task row (COMMENTS_PLAN.md D9). Server-owned:
    * it arrives with /api/state and is nudged locally as comments are posted/deleted. Tombstones
@@ -195,8 +216,11 @@ export interface RootState {
   tabOrder: ID[];
   starredRowOrder: ID[];
   activeTabId: ID | null;
-  /** Which view the open board renders (doc/list/kanban/calendar). */
+  /** Which view the open board renders (doc/list/kanban/calendar/sprints). */
   boardView: BoardView;
+  /** The task page's task id, or null when none is open. Independent of `activeTabId` — the
+   *  task page is its own route (`/b/:id/task/:taskId`), reachable while a board is active. */
+  openTaskId: ID | null;
   /**
    * A parent was just marked done while sub-tasks were still open. Holds the offer to sweep them
    * too (SUBTASKS_PLAN D5) until the user accepts or declines. Never blocks the parent's own status

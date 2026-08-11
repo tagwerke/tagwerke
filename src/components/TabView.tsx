@@ -8,12 +8,17 @@ import { BoardPanel } from './BoardPanel';
 import { BoardList } from './BoardList';
 import { BoardKanban } from './BoardKanban';
 import { BoardCalendar } from './BoardCalendar';
+import { SprintsPage } from './SprintsPage';
 import { InfoPane } from './InfoPane';
 import { useHelpBadge } from '../help/useHelpBadge';
-import type { BoardView } from '../types';
+import type { BoardView, ID } from '../types';
 
-const VIEW_LABEL: Record<BoardView, string> = { doc: 'Doc', list: 'List', kanban: 'Kanban', calendar: 'Calendar' };
-const VIEWS: BoardView[] = ['doc', 'list', 'kanban', 'calendar'];
+const VIEW_LABEL: Record<BoardView, string> = { doc: 'Doc', list: 'List', kanban: 'Kanban', calendar: 'Calendar', sprints: 'Sprints' };
+const VIEWS: BoardView[] = ['doc', 'list', 'kanban', 'calendar', 'sprints'];
+
+/** A sprint filter for List/Kanban: a specific sprint id, `null` for backlog, or 'all' for no
+ *  filter. Not persisted — reopening a board (or the Sprints page's own "view all") clears it. */
+export type SprintFilter = ID | null | 'all';
 
 /** Live cursors present in this board, as ringed avatars (self excluded, deduped by name). */
 function PresenceAvatars({ tabId }: { tabId: string }) {
@@ -38,7 +43,18 @@ export function TabView({ tabId }: { tabId: string }) {
   const setTabStarred = useStore((s) => s.setTabStarred);
   const boardView = useStore((s) => s.boardView);
   const setBoardView = useStore((s) => s.setBoardView);
+  const sprints = useStore((s) => s.sprintsByBoard[tabId]);
   const [panelOpen, setPanelOpen] = useState(true);
+  // Which sprint List/Kanban show. Defaults to the board's current sprint (or 'all' if it has
+  // none) — deliberately NOT persisted, so reopening a board always lands back on "now" instead
+  // of wherever you last drilled into. Reset whenever the board itself changes.
+  const [sprintFilter, setSprintFilter] = useState<SprintFilter>(
+    () => sprints?.find((s) => s.isCurrent)?.id ?? 'all',
+  );
+  useEffect(() => {
+    setSprintFilter(sprints?.find((s) => s.isCurrent)?.id ?? 'all');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabId]);
   // Not part of `boardView`/global store on purpose — it's an auxiliary pane, not a view of the
   // board's task data, and must never persist as "the" view a board reopens into.
   const [pane, setPane] = useState<'help' | null>(null);
@@ -134,9 +150,17 @@ export function TabView({ tabId }: { tabId: string }) {
           ) : view === 'doc' ? (
             <div className="tab-view-body"><TabEditor tabId={tab.id} autoFocus /></div>
           ) : view === 'list' ? (
-            <BoardList tabId={tab.id} />
+            <BoardList tabId={tab.id} sprintFilter={sprintFilter} />
           ) : view === 'kanban' ? (
-            <BoardKanban tabId={tab.id} />
+            <BoardKanban tabId={tab.id} sprintFilter={sprintFilter} />
+          ) : view === 'sprints' ? (
+            <SprintsPage
+              tabId={tab.id}
+              onOpenSprint={(id) => {
+                setSprintFilter(id);
+                setBoardView('list');
+              }}
+            />
           ) : (
             <BoardCalendar tabId={tab.id} />
           )}

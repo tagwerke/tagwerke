@@ -2600,6 +2600,44 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-card-prio.p2 { color: var(--pop); }
 .task-card-prio.p3 { color: #fff; background: var(--pop); border-radius: 999px; padding: 1px 6px; }
 
+/* ── Sprints page (SPRINTS_PLAN.md) ──────────────────────────────────────── */
+.sprints-page { padding: 12px clamp(16px, 3vw, 40px) 48px; max-width: 720px; }
+.sprints-list { display: flex; flex-direction: column; }
+.sprints-row { display: flex; align-items: center; gap: 10px; padding: 10px 6px; border-top: 1px solid var(--line); }
+.sprints-row:first-child { border-top: 0; }
+.sprints-row.is-current { background: color-mix(in srgb, var(--pop) 6%, transparent); }
+.sprints-current-toggle { flex: none; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: 0; background: none; color: var(--ink-mute); cursor: pointer; border-radius: var(--r-sm); }
+.sprints-current-toggle:not(:disabled):hover { color: var(--pop); }
+.sprints-row.is-current .sprints-current-toggle { color: var(--pop); }
+.sprints-current-toggle-spacer { pointer-events: none; }
+.sprints-row-label { flex: 1; text-align: left; border: 0; background: none; padding: 4px 2px; font-size: 14px; color: var(--ink); cursor: pointer; }
+.sprints-row-label:hover { text-decoration: underline; }
+.sprints-row-label-input { flex: 1; font-size: 14px; padding: 4px 6px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--bg-paper); color: var(--ink); }
+.sprints-row-count { font-family: var(--mono); font-size: 11px; flex: none; }
+.sprints-row-delete:hover { color: #c0392b; }
+.sprints-row-backlog { color: var(--ink-soft); }
+
+/* ── Task page (`/b/:id/task/:id`) ───────────────────────────────────────── */
+.task-page-body { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 28px; padding: 10px clamp(16px, 3vw, 40px) 60px; overflow-y: auto; flex: 1; min-height: 0; }
+.task-page-main { min-width: 0; max-width: 720px; }
+.task-page-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.task-page-title { flex: 1; font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 24px; letter-spacing: -0.3px; border: 0; background: none; color: var(--ink); outline: none; }
+.task-page-title:focus { background: rgba(0,0,0,0.03); border-radius: var(--r-sm); }
+.task-page-description { width: 100%; min-height: 110px; resize: vertical; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-paper); color: var(--ink); font-size: 13.5px; line-height: 1.5; padding: 10px 12px; margin-bottom: 20px; }
+.task-page-subtasks { margin-bottom: 24px; }
+.task-page-subtasks-head { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 6px; }
+.task-page-subtasks ul { display: flex; flex-direction: column; }
+.task-page-subtask-link { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--line); background: none; padding: 7px 4px; font-size: 13px; color: var(--ink); cursor: pointer; }
+.task-page-subtask-link:first-child { border-top: 0; }
+.task-page-subtask-link:hover { text-decoration: underline; }
+.task-page-fields { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
+.task-page-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-mute); }
+.task-page-field select, .task-page-field input { font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: normal; color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-paper); padding: 6px 8px; }
+.task-page .history-panel.is-embedded { width: 100%; max-width: none; max-height: none; overflow: visible; border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px; background: var(--bg-paper); box-shadow: none; }
+@media (max-width: 720px) {
+  .task-page-body { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ── Calendar view (tasks-by-date + events, month grid) ──────────────────── */
 .board-calendar { padding: 16px clamp(16px, 3vw, 32px) 40px; }
 .cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }

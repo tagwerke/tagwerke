@@ -14,6 +14,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useBoardOutline, useStore } from '../store';
 import { STATUS_LABEL } from './StatusControl';
 import { TaskCard } from './common/TaskCard';
+import { boardTaskPath, navigate } from '../util/router';
+import type { SprintFilter } from './TabView';
 import type { Task, TaskStatus } from '../types';
 
 const COLUMNS: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done'];
@@ -21,10 +23,14 @@ const COLUMNS: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done'];
 type Scope = 'all' | 'roots';
 const SCOPE_KEY = (tabId: string) => `tw:kanban-scope:${tabId}`;
 
-export function BoardKanban({ tabId }: { tabId: string }) {
+export function BoardKanban({ tabId, sprintFilter = 'all' }: { tabId: string; sprintFilter?: SprintFilter }) {
   // Outline order in, outline order out: bucketing preserves it, so each column shows its cards
   // in the board's one true order and families stay adjacent.
-  const { list: tasks } = useBoardOutline(tabId);
+  const { list: outline } = useBoardOutline(tabId);
+  const tasks = useMemo(
+    () => (sprintFilter === 'all' ? outline : outline.filter((t) => (t.sprintId ?? null) === sprintFilter)),
+    [outline, sprintFilter],
+  );
   const setTaskMeta = useStore((s) => s.setTaskMeta);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
   const [scope, setScope] = useState<Scope>(() => {
@@ -114,6 +120,7 @@ export function BoardKanban({ tabId }: { tabId: string }) {
                   draggable
                   expandable={scope === 'roots'}
                   onDragStart={(e) => e.dataTransfer.setData('text/task', t.id)}
+                  onOpen={() => navigate(boardTaskPath(tabId, t.id))}
                 />
               ))}
             </div>

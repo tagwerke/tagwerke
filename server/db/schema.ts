@@ -7,6 +7,7 @@
 // PKs (ids vary: nanoid(8), `t_${nanoid(8)}`, `t_${random}`), so no length/format
 // constraints. `order` is a SQL reserved word -> column is `position`.
 
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   text,
@@ -19,6 +20,7 @@ import {
   primaryKey,
   foreignKey,
   unique,
+  uniqueIndex,
   index,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
@@ -132,6 +134,36 @@ export const tabs = pgTable(
   },
 );
 
+// SPRINTS_PLAN.md: one row per week per board. `is_current` is DB-enforced unique per
+// board (partial unique index below), so "the current sprint" can never be ambiguous —
+// no app-level race is possible even if it were ever checked from two places. Rows are
+// never deleted on rollover, so switching between sprints is just changing which one is
+// current or which one a task's sprint_id points at; nothing is locked or hidden.
+// Auto-created (server/lib/sprints.ts): synchronously on board creation, and weekly by
+// server/jobs/sprints.ts. There is no client-facing "create sprint" endpoint.
+export const sprints = pgTable(
+  'sprints',
+  {
+    id: text('id').primaryKey(),
+    tabId: text('tab_id')
+      .notNull()
+      .references(() => tabs.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    startsAt: text('starts_at').notNull(), // 'YYYY-MM-DD', see shared/sprintWeek.ts
+    endsAt: text('ends_at').notNull(),
+    isCurrent: boolean('is_current').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Target for tasks' composite same-board FK below (mirrors tasks_id_home_uniq).
+    unique('sprints_tab_id_id_uniq').on(t.tabId, t.id),
+    // Makes the weekly rollout idempotent: a second insert for a week already seeded is
+    // just a conflict, not a duplicate row.
+    unique('sprints_tab_starts_uniq').on(t.tabId, t.startsAt),
+    uniqueIndex('sprints_one_current_per_tab').on(t.tabId).where(sql`${t.isCurrent}`),
+  ],
+);
+
 export const tasks = pgTable(
   'tasks',
   {
@@ -139,6 +171,10 @@ export const tasks = pgTable(
     homeTabId: text('home_tab_id')
       .notNull()
       .references(() => tabs.id, { onDelete: 'cascade' }),
+    // Sprints (SPRINTS_PLAN.md): null = backlog. A plain FK, deliberately NOT part of the
+    // Yjs document — sprint assignment is one scalar field with no concurrent-edit problem,
+    // unlike prose. Same-board enforced by the composite FK below, like parentTaskId.
+    sprintId: text('sprint_id').references((): AnyPgColumn => sprints.id, { onDelete: 'set null' }),
     // Sub-task nesting (SUBTASKS_PLAN D1): the parent task, or null for a top-level task. The ROW
     // is authoritative for the tree — this is NOT derived from the document. Under D2 the doc
     // references root tasks only; a child has no node in the document at all, and the parent's
@@ -148,6 +184,9 @@ export const tasks = pgTable(
     // rather than cascading them away.
     parentTaskId: text('parent_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
     text: text('text').notNull().default(''),
+    // The task page's body (SPRINTS_PLAN follow-up: task detail page). Distinct from the comment
+    // thread — this is the task's own write-up, not conversation.
+    description: text('description'),
     // P0: status is the authoritative state field (todo|in_progress|in_review|done|cancelled).
     // `done` is retained for one release as a derived/back-compat mirror (= status==='done').
     status: text('status').notNull().default('todo'),
@@ -193,6 +232,8 @@ export const tasks = pgTable(
     index('tasks_parent_idx').on(t.parentTaskId),
     // The ordered sibling read: children of X on board B, in rank order, straight off the index.
     index('tasks_tree_idx').on(t.homeTabId, t.parentTaskId, t.rank),
+    // The sprint-filtered board read (current sprint / backlog / a past sprint), in rank order.
+    index('tasks_sprint_idx').on(t.homeTabId, t.sprintId, t.rank),
     // Target for the composite FK below. Trivially satisfied (id is already the PK) — it exists
     // only so Postgres will accept (parent_task_id, home_tab_id) as a foreign key.
     unique('tasks_id_home_uniq').on(t.id, t.homeTabId),
@@ -204,6 +245,14 @@ export const tasks = pgTable(
       name: 'tasks_parent_same_board',
       columns: [t.parentTaskId, t.homeTabId],
       foreignColumns: [t.id, t.homeTabId],
+    }),
+    // A sprint must live on the SAME board as the task — same MATCH SIMPLE reasoning as
+    // tasks_parent_same_board: a null sprint_id (backlog) passes freely. Column order must
+    // match sprints_tab_id_id_uniq's declared order (tab_id, id).
+    foreignKey({
+      name: 'tasks_sprint_same_board',
+      columns: [t.homeTabId, t.sprintId],
+      foreignColumns: [sprints.tabId, sprints.id],
     }),
   ],
 );

@@ -155,8 +155,20 @@ interface Actions {
   setActiveTab(id: ID | null): void;
   setBoardView(view: BoardView): void;
 
+  // Sprints (SPRINTS_PLAN.md). Rename/delete/setCurrent, matching renameTab/deleteTab/
+  // setTabStarred's shape: optimistic local mutate + durable-outbox persist.
+  renameSprint(id: ID, label: string): void;
+  /** true = make this the board's current sprint (server enforces the one-current invariant).
+   *  false = un-set THIS one, possibly leaving the board with no current sprint at all —
+   *  the "up to me to uncheck it" behavior the data model was built for. */
+  setSprintCurrent(tabId: ID, id: ID, isCurrent: boolean): void;
+  removeSprint(id: ID): void;
+
+  /** Open/close the task page (`/b/:boardId/task/:taskId`). Independent of activeTabId. */
+  setOpenTask(id: ID | null): void;
+
   upsertTask(t: Partial<Task> & { id: ID; homeTabId: ID; text: string }): Task;
-  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'reviewerId' | 'rank'>>): void;
+  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'reviewerId' | 'rank' | 'sprintId' | 'description'>>): void;
   setTaskText(id: ID, text: string): void;
   /** Re-parent a task. Always assigns a rank in the new sibling group (append unless given). */
   setTaskParent(id: ID, parentTaskId: ID | undefined, rank?: string): void;
@@ -256,12 +268,14 @@ function makeInitial(): RootState {
     tasks: {},
     events: {},
     membersByBoard: {},
+    sprintsByBoard: {},
     commentCounts: {},
     projectOrder: [defaultProjectId, personalProjectId],
     tabOrder: [sampleTabId, personalTabId],
     starredRowOrder: [sampleTabId],
     activeTabId: null,
     boardView: 'doc',
+    openTaskId: null,
     pendingCascade: null,
     plannerOpen: false,
     plannerDate: todayISO(),
@@ -421,12 +435,20 @@ export const useStore = create<RootState & Actions>()((set, get) => {
           const tabs = { ...s.tabs };
           delete tabs[id];
           const tasks = { ...s.tasks };
+          let openTaskId = s.openTaskId;
           for (const task of Object.values(tasks)) {
-            if (task.homeTabId === id) delete tasks[task.id];
+            if (task.homeTabId === id) {
+              if (task.id === openTaskId) openTaskId = null;
+              delete tasks[task.id];
+            }
           }
+          const sprintsByBoard = { ...s.sprintsByBoard };
+          delete sprintsByBoard[id];
           return {
             tabs,
             tasks,
+            sprintsByBoard,
+            openTaskId,
             tabOrder: s.tabOrder.filter((tid) => tid !== id),
             starredRowOrder: s.starredRowOrder.filter((tid) => tid !== id),
             activeTabId: s.activeTabId === id ? null : s.activeTabId,
@@ -436,8 +458,9 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       },
       setActiveTab(id) {
         // Opening a board lands on the doc view; leaving resets too (harmless). Any board /
-        // space / home selection also leaves the calendar (they share the main content area).
-        set({ activeTabId: id, boardView: 'doc', plannerOpen: false });
+        // space / home selection also leaves the calendar (they share the main content area)
+        // and closes an open task page — it belonged to wherever we're navigating away from.
+        set({ activeTabId: id, boardView: 'doc', plannerOpen: false, openTaskId: null });
       },
       applyCascadeDone() {
         const pending = get().pendingCascade;
@@ -456,6 +479,53 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       },
       setBoardView(view) {
         set({ boardView: view });
+      },
+
+      renameSprint(id, label) {
+        set((s) => {
+          const tabId = Object.keys(s.sprintsByBoard).find((tid) => s.sprintsByBoard[tid].some((sp) => sp.id === id));
+          if (!tabId) return s;
+          return {
+            sprintsByBoard: {
+              ...s.sprintsByBoard,
+              [tabId]: s.sprintsByBoard[tabId].map((sp) => (sp.id === id ? { ...sp, label } : sp)),
+            },
+          };
+        });
+        enqueue(() => api.sprints.rename(id, label));
+      },
+      setSprintCurrent(tabId, id, isCurrent) {
+        set((s) => {
+          const list = s.sprintsByBoard[tabId];
+          if (!list) return s;
+          return {
+            sprintsByBoard: {
+              ...s.sprintsByBoard,
+              [tabId]: list.map((sp) => (sp.id === id ? { ...sp, isCurrent } : isCurrent ? { ...sp, isCurrent: false } : sp)),
+            },
+          };
+        });
+        enqueue(() => api.sprints.setCurrent(id, isCurrent));
+      },
+      removeSprint(id) {
+        set((s) => {
+          const tabId = Object.keys(s.sprintsByBoard).find((tid) => s.sprintsByBoard[tid].some((sp) => sp.id === id));
+          const sprintsByBoard = tabId
+            ? { ...s.sprintsByBoard, [tabId]: s.sprintsByBoard[tabId].filter((sp) => sp.id !== id) }
+            : s.sprintsByBoard;
+          // Match the server's ON DELETE SET NULL: any locally-held task pointing at this sprint
+          // falls back to backlog, so the client's optimistic view doesn't lie until the next hydrate.
+          const tasks = { ...s.tasks };
+          for (const t of Object.values(tasks)) {
+            if (t.sprintId === id) tasks[t.id] = { ...t, sprintId: undefined };
+          }
+          return { sprintsByBoard, tasks };
+        });
+        enqueue(() => api.sprints.remove(id));
+      },
+
+      setOpenTask(id) {
+        set({ openTaskId: id });
       },
 
       upsertTask({ id, homeTabId, text, ...meta }) {
