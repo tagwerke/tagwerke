@@ -26,7 +26,9 @@ export const GROUPINGS: { key: Grouping; label: string }[] = [
   { key: 'status', label: 'Status' },
   { key: 'assignee', label: 'Assignee' },
   { key: 'sprint', label: 'Sprint' },
-  { key: 'none', label: 'Nothing' },
+  // Named for what it IS rather than what it lacks: with no grouping and the board's own rank
+  // order, the rows are a contiguous outline and can be indented truthfully (§N2.5).
+  { key: 'none', label: 'Outline' },
 ];
 
 /** The bucket a task belongs to under `grouping`. `null` means "the unset bucket". */
@@ -60,7 +62,7 @@ export function groupTasks(
   };
   for (const t of tasks) put(bucketOf(t, grouping) ?? '~none', t);
 
-  if (grouping === 'none') return [{ key: 'all', label: 'All tasks', tasks: buckets.get('all') ?? [] }];
+  if (grouping === 'none') return [{ key: 'all', label: 'Outline', tasks: buckets.get('all') ?? [] }];
 
   if (grouping === 'status') {
     return STATUS_ORDER.map((s) => ({
