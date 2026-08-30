@@ -6,6 +6,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { convertRemainingDocs } from './db/notes-split-boot.ts';
 import { db, pool, schema } from './db/client.ts';
 import { ensureTaskRanks } from './db/ensure-rank.ts';
 import { authRoutes } from './auth/routes.ts';
@@ -54,6 +55,10 @@ try {
   // instance has to fill them in. No-op on a fresh database and after 0027 has run.
   await ensureTaskRanks(app.log);
   await migrate(db, { migrationsFolder });
+  // Not a SQL migration — it rewrites Yjs state — but it carries a migration's obligations, and
+  // running it HERE is what lets a client that no longer knows `taskItem` deploy safely against a
+  // database that still holds some. Idempotent; a no-op scan once everything is converted.
+  await convertRemainingDocs(app.log);
   app.log.info('migrations up to date');
 } catch (err) {
   app.log.error({ err }, 'migration failed');

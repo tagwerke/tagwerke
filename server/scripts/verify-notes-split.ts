@@ -13,6 +13,9 @@
 
 import 'dotenv/config';
 import * as Y from 'yjs';
+import { eq, inArray } from 'drizzle-orm';
+import { db, schema } from '../db/client.ts';
+import { convertRemainingDocs } from '../db/notes-split-boot.ts';
 import { convert, FRAGMENT, proseLength } from '../lib/notesSplit.ts';
 
 let failures = 0;
@@ -59,7 +62,7 @@ function mentionIds(node: Y.XmlElement | Y.XmlFragment, out: string[] = []): str
   return out;
 }
 
-function main(): void {
+function checkConversion(): void {
   const doc = new Y.Doc();
   const frag = doc.getXmlFragment(FRAGMENT);
 
@@ -103,9 +106,63 @@ function main(): void {
   const plainBefore = names(plain.getXmlFragment(FRAGMENT)).join(',');
   Y.transact(plain, () => convert(plain, new Set()));
   check('a prose-only document is untouched', names(plain.getXmlFragment(FRAGMENT)).join(',') === plainBefore, '');
+}
 
-  console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
+const BOARD = 'vns_board';
+const quiet = { info: () => {}, error: (o: unknown) => console.error('  boot:', o) };
+
+async function storedState(): Promise<string | null> {
+  const row = (await db.select({ s: schema.tabs.ydocState }).from(schema.tabs).where(eq(schema.tabs.id, BOARD)).limit(1))[0];
+  return row?.s ?? null;
+}
+
+async function storedFragment(): Promise<Y.XmlFragment> {
+  const state = await storedState();
+  const d = new Y.Doc();
+  Y.applyUpdate(d, new Uint8Array(Buffer.from(state!, 'base64')));
+  return d.getXmlFragment(FRAGMENT);
+}
+
+/**
+ * The same conversion as it actually runs: on boot, against the database. This is the path that
+ * makes the client safe to deploy against un-converted documents, so it is the one worth
+ * exercising against a real row rather than an in-memory doc.
+ */
+async function checkBootConversion(): Promise<void> {
+  await db.delete(schema.tabs).where(inArray(schema.tabs.id, [BOARD]));
+
+  const doc = new Y.Doc();
+  doc.getXmlFragment(FRAGMENT).insert(0, [para('Notes above.'), taskList(['t_a', 't_b'])]);
+  const before = proseLength(doc.getXmlFragment(FRAGMENT));
+  await db.insert(schema.tabs).values({
+    id: BOARD,
+    name: 'verify notes split',
+    ydocState: Buffer.from(Y.encodeStateAsUpdate(doc)).toString('base64'),
+  });
+
+  await convertRemainingDocs(quiet);
+
+  const frag = await storedFragment();
+  check('boot: the stored document is converted', !names(frag).includes('taskItem'), `[${names(frag)}]`);
+  check('boot: mentions carry the same ids', mentionIds(frag).join(',') === 't_a,t_b', `[${mentionIds(frag)}]`);
+  check('boot: prose survives the round-trip', proseLength(frag) === before, `${before} -> ${proseLength(frag)}`);
+
+  // Every boot after the first must be a no-op scan, not another rewrite.
+  const first = await storedState();
+  await convertRemainingDocs(quiet);
+  check('boot: a second boot writes nothing', first === (await storedState()), '');
+
+  await db.delete(schema.tabs).where(inArray(schema.tabs.id, [BOARD]));
+}
+
+async function main(): Promise<void> {
+  checkConversion();
+  await checkBootConversion();
+  console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
   process.exit(failures ? 1 : 0);
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

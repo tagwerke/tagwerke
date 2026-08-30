@@ -148,14 +148,9 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
         );
       });
 
-      // The board's Yjs doc starts empty — reconcile appends id-only refs for every row just
-      // inserted, which is what makes the tasks actually render when the board is opened. Do
-      // not hand-roll docJSON edits, the CRDT layer would just overwrite them. Best-effort,
-      // matching the task-restore endpoint's precedent (tasks.ts).
-      try {
-      } catch (err) {
-        req.log.error({ err, tabId: boardId }, 'csv import: board reconcile failed');
-      }
+      // Nothing to do to the board's document: imported rows show up because the views read
+      // rows. This used to append an id-only ref per task, back when a document owned a slot for
+      // each one (NOTES_SPLIT_PLAN §N5).
 
       const matchedAssignees = rows.filter(
         (r) => r.assigneeEmail && byEmail.has(r.assigneeEmail.toLowerCase()),

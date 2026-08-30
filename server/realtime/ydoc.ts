@@ -21,10 +21,9 @@ import * as awarenessProtocol from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { yDocToProsemirrorJSON } from 'y-prosemirror';
-import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { dlog, sid } from '../lib/dlog.ts';
-import { rankAfter } from '../../shared/rank.ts';
 
 const PROTOCOL_VERSION = 1;
 const messageSync = 0;
