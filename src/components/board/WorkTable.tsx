@@ -6,17 +6,19 @@
 // true inside a table.
 
 import { useMemo, useState } from 'react';
-import { StatusControl, STATUS_LABEL } from '../StatusControl';
+import { STATUS_LABEL } from '../StatusControl';
+import { QuickAdd } from '../common/QuickAdd';
 import { formatDateChip, todayISO } from '../../util/dates';
 import type { FocusField } from '../../tasks/actions';
 import { COLUMNS, type ColumnDef } from './workColumns';
 import type { Group, Sort, SortKey } from './workView';
-import type { ID, Member, Sprint, Task, TaskStatus } from '../../types';
+import type { ID, Member, Sprint, Task } from '../../types';
 
 export function WorkTable({
-  groups, sort, onSort, selection, onSelect, onOpenMenu, onOpenTask, onToggleDone, onPickStatus, canReorder, onReorder,
-  members, sprints, tasksById, editable,
+  tabId, groups, sort, onSort, selection, onSelect, onOpenMenu, onOpenTask, canReorder, onReorder,
+  members, sprints, tasksById, editable, nesting,
 }: {
+  tabId: ID;
   groups: Group[];
   sort: Sort;
   onSort: (key: SortKey) => void;
@@ -24,8 +26,18 @@ export function WorkTable({
   onSelect: (id: ID, mode: 'toggle' | 'range' | 'only') => void;
   onOpenMenu: (ids: ID[], x: number, y: number, field?: FocusField) => void;
   onOpenTask: (id: ID) => void;
-  onToggleDone: (id: ID) => void;
-  onPickStatus: (id: ID, status: TaskStatus) => void;
+  /**
+   * Nesting is only shown when the rows on screen are a contiguous outline — no grouping, rank
+   * order. Under any other arrangement a child can appear with its parent nowhere above it, and an
+   * indent would be pointing at nothing. That is the same reason the old List used a crumb when
+   * grouped by status and indentation only in outline mode.
+   */
+  nesting: {
+    depthOf: (id: ID) => number;
+    hasChildren: (id: ID) => boolean;
+    isCollapsed: (id: ID) => boolean;
+    toggle: (id: ID) => void;
+  } | null;
   /** Reordering is meaningful only in rank order (§I.3); otherwise the handle is not drawn. */
   canReorder: boolean;
   onReorder: (dragId: ID, targetId: ID, place: 'before' | 'after') => void;
@@ -42,7 +54,12 @@ export function WorkTable({
 
   const cell = (t: Task, col: ColumnDef): React.ReactNode => {
     switch (col.key) {
-      case 'status': return <span className="wt-mono">{STATUS_LABEL[t.status ?? 'todo']}</span>;
+      case 'status': return (
+        <span className="wt-status">
+          <span className={`list-dot status-${t.status ?? 'todo'}`} />
+          <span className="wt-mono">{STATUS_LABEL[t.status ?? 'todo']}</span>
+        </span>
+      );
       case 'assignee': return <span className="wt-mono">{t.assigneeId ? memberName.get(t.assigneeId) ?? '—' : '—'}</span>;
       case 'due': {
         if (!t.date) return <span className="wt-mono muted">—</span>;
@@ -82,6 +99,8 @@ export function WorkTable({
             {g.tasks.map((t) => {
               const parent = t.parentTaskId ? tasksById[t.parentTaskId] : undefined;
               const done = t.status === 'done' || t.status === 'cancelled';
+              const depth = nesting ? nesting.depthOf(t.id) : 0;
+              const kids = nesting ? nesting.hasChildren(t.id) : false;
               return (
                 <div
                   key={t.id}
@@ -131,13 +150,25 @@ export function WorkTable({
                     )}
                   </span>
 
-                  <span className="wt-title-cell">
-                    <StatusControl
-                      status={t.status ?? 'todo'}
-                      disabled={!editable}
-                      onToggle={() => onToggleDone(t.id)}
-                      onPick={(s) => onPickStatus(t.id, s)}
-                    />
+                  <span
+                    className="wt-title-cell"
+                    style={depth ? { paddingLeft: depth * 18 } : undefined}
+                  >
+                    {nesting && (kids
+                      ? (
+                        <button
+                          type="button"
+                          className={`wt-twisty ${nesting.isCollapsed(t.id) ? 'is-closed' : ''}`}
+                          aria-label={nesting.isCollapsed(t.id) ? 'Show sub-tasks' : 'Hide sub-tasks'}
+                          aria-expanded={!nesting.isCollapsed(t.id)}
+                          onClick={() => nesting.toggle(t.id)}
+                        >
+                          <svg viewBox="0 0 16 16" width="9" height="9" aria-hidden>
+                            <path d="M5 3l6 5-6 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                      )
+                      : <span className="wt-twisty is-leaf" aria-hidden />)}
                     <button type="button" className="wt-title" onClick={() => onOpenTask(t.id)} title="Open task">
                       {t.text || <em className="muted">(empty)</em>}
                     </button>
@@ -170,6 +201,15 @@ export function WorkTable({
           </div>
         );
       })}
+
+      {/* The add line is the last ROW, not a field floating above the table: it is where the next
+          task will actually appear, so that is where you type it. */}
+      {editable && (
+        <div className="wt-row is-add" role="row">
+          <span className="wt-cb" />
+          <QuickAdd tabId={tabId} shortcut />
+        </div>
+      )}
     </div>
   );
 }

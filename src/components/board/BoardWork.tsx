@@ -6,8 +6,7 @@
 // a per-person table and a per-person board, and it is one implementation.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useBoardOutline, useStore } from '../../store';
-import { QuickAdd } from '../common/QuickAdd';
+import { childrenOf, descendantsOf, taskDepth, useBoardOutline, useStore } from '../../store';
 import { TaskActionMenu } from '../common/TaskActionMenu';
 import { WorkTable } from './WorkTable';
 import { WorkBoard } from './WorkBoard';
@@ -16,7 +15,7 @@ import { actionForField, type FocusField } from '../../tasks/actions';
 import { boardTaskPath, navigate } from '../../util/router';
 import type { DraftFields } from '../../tasks/createTask';
 import type { SprintFilter } from '../TabView';
-import type { ID, Member, Sprint, TaskStatus } from '../../types';
+import type { ID, Member, Sprint } from '../../types';
 
 /** Shared empties. `?? []` would mint a new array each render and churn every memo below. */
 const NO_MEMBERS: Member[] = [];
@@ -55,6 +54,7 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all' }: {
     readStored(SCOPE_KEY(tabId), ['all', 'roots'] as const, 'all'));
   const [sort, setSort] = useState<Sort>({ key: 'rank', dir: 'asc' });
   const [selection, setSelection] = useState<Set<ID>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<ID>>(new Set());
   const [menu, setMenu] = useState<{ ids: ID[]; x: number; y: number; field?: FocusField } | null>(null);
 
   useEffect(() => {
@@ -67,10 +67,26 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all' }: {
   // A board layout needs columns to lay out, so "group by nothing" is a table-only choice.
   const effectiveGrouping: Grouping = layout === 'board' && grouping === 'none' ? 'status' : grouping;
 
+  /**
+   * Nesting is shown only when the rows are a contiguous outline: no grouping, and the board's own
+   * rank order. Group by status and a parent and its child routinely land in different sections, so
+   * an indent would point at nothing that is on screen — the crumb in the Parent column carries the
+   * relationship instead, and holds wherever a task falls.
+   */
+  const isOutline = effectiveGrouping === 'none' && sort.key === 'rank' && scope === 'all';
+
+  const hiddenByCollapse = useMemo(() => {
+    if (!isOutline || !collapsed.size) return null;
+    const hidden = new Set<ID>();
+    for (const id of collapsed) for (const d of descendantsOf(tasksById, id)) hidden.add(d.id);
+    return hidden;
+  }, [isOutline, collapsed, tasksById]);
+
   const visible = useMemo(() => {
     const bySprint = sprintFilter === 'all' ? outline : outline.filter((t) => (t.sprintId ?? null) === sprintFilter);
-    return scope === 'roots' ? bySprint.filter((t) => !t.parentTaskId) : bySprint;
-  }, [outline, sprintFilter, scope]);
+    const byScope = scope === 'roots' ? bySprint.filter((t) => !t.parentTaskId) : bySprint;
+    return hiddenByCollapse ? byScope.filter((t) => !hiddenByCollapse.has(t.id)) : byScope;
+  }, [outline, sprintFilter, scope, hiddenByCollapse]);
 
   const groups = useMemo(() => {
     const memberName = new Map(members.map((m) => [m.id, m.name]));
@@ -193,14 +209,13 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all' }: {
         <span className="work-count">{total} task{total === 1 ? '' : 's'} · {doneCount} done</span>
       </div>
 
-      {editable && layout === 'table' && <QuickAdd tabId={tabId} shortcut />}
-
-      {total === 0 ? (
+      {total === 0 && (layout === 'board' || !editable) ? (
         <div className="view-placeholder muted">
-          {editable ? <>No tasks yet — add one above. Try <code>/p1</code> or <code>@</code>.</> : 'No tasks on this board yet.'}
+          {editable ? 'No tasks yet — add one in a column.' : 'No tasks on this board yet.'}
         </div>
       ) : layout === 'table' ? (
         <WorkTable
+          tabId={tabId}
           groups={groups}
           sort={sort}
           onSort={onSort}
@@ -208,8 +223,17 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all' }: {
           onSelect={onSelect}
           onOpenMenu={openMenu}
           onOpenTask={(id) => navigate(boardTaskPath(tabId, id))}
-          onToggleDone={(id) => useStore.getState().toggleTaskDone(id)}
-          onPickStatus={(id, s: TaskStatus) => useStore.getState().setTaskStatus(id, s)}
+          nesting={isOutline ? {
+            depthOf: (id) => taskDepth(tasksById, id),
+            hasChildren: (id) => childrenOf(tasksById, id).length > 0,
+            isCollapsed: (id) => collapsed.has(id),
+            toggle: (id) => setCollapsed((prev) => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            }),
+          } : null}
           canReorder={canReorder}
           onReorder={onReorder}
           members={members}

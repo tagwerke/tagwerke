@@ -11,13 +11,14 @@
 // the doc runs on blur. Nothing is created until Enter.
 
 import { useEffect, useRef, useState } from 'react';
-import { useStore } from '../../store';
+import { ancestorsOf, useStore } from '../../store';
 import { useSession } from '../../session/useSession';
 import { detectToken, matchCommands, rankMembers, categoryOf, type CommandPatch } from '../../editor/suggestEngine';
 import { parseEmbeddedCommands } from '../../editor/embeddedCommands';
 import { createTaskInBoard, type DraftFields } from '../../tasks/createTask';
 import { SuggestPopup, type SuggestItem } from './SuggestPopup';
 import { registerQuickAdd } from '../../tasks/quickAddFocus';
+import { MAX_TASK_DEPTH } from '../../../shared/tree';
 import type { ID, Member } from '../../types';
 
 interface CommandChoice extends SuggestItem {
@@ -54,6 +55,14 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
   const [highlight, setHighlight] = useState(0);
   // Not state: a pick must not re-render the field mid-keystroke, and nothing renders from it.
   const draft = useRef<DraftFields>({});
+  /**
+   * Nesting, restored as a gesture rather than a menu item (§N2.5). In the document you pressed
+   * Enter then Tab and kept typing; the same two keys do the same thing here. Tab nests the NEXT
+   * task under the one just added, Shift+Tab steps back out, and the line says which parent it is
+   * about to write under so the state is never invisible.
+   */
+  const [nestUnder, setNestUnder] = useState<ID | null>(null);
+  const lastCreated = useRef<ID | null>(null);
   const role = useStore((s) => s.tabs[tabId]?.role);
   const canEdit = role !== 'viewer';
 
@@ -75,6 +84,8 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
       unregister();
     };
   }, [shortcut, tabId]);
+
+  const parentTitle = useStore((s) => (nestUnder ? s.tasks[nestUnder]?.text : undefined));
 
   if (!canEdit) return null;
 
@@ -142,6 +153,21 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
     setMode(null);
   };
 
+  /** Tab: one level deeper, under whatever was added last. Refused at the depth limit. */
+  const nestDeeper = (): void => {
+    const anchor = nestUnder ? lastCreated.current ?? nestUnder : lastCreated.current;
+    if (!anchor) return;
+    const tasks = useStore.getState().tasks;
+    if (ancestorsOf(tasks, anchor).length + 1 >= MAX_TASK_DEPTH) return;
+    setNestUnder(anchor);
+  };
+
+  /** Shift+Tab: back out one level, to the current parent's own parent. */
+  const nestShallower = (): void => {
+    if (!nestUnder) return;
+    setNestUnder(useStore.getState().tasks[nestUnder]?.parentTaskId ?? null);
+  };
+
   const submit = (openAfter: boolean): void => {
     const raw = value.trim();
     if (!raw) return;
@@ -154,13 +180,15 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
 
     const id = createTaskInBoard(tabId, {
       text,
-      parentTaskId,
+      // An explicit prop wins — a Kanban column's line is never nesting anything.
+      parentTaskId: parentTaskId ?? nestUnder ?? undefined,
       // Picked tokens first, then typed ones, then what the surface itself implies: a Kanban
       // column's status must not be overridable by a stray `/todo` left in the line.
       fields: { ...draft.current, ...fields, ...presetFields },
     });
 
     draft.current = {};
+    lastCreated.current = id;
     setValue('');
     setMode(null);
     if (openAfter) useStore.getState().setOpenTask(id);
@@ -176,11 +204,17 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
       if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); return pick(highlight); }
       if (e.key === 'Escape') { e.preventDefault(); return setMode(null); } // closes the popup only
     }
+    // Tab only reaches here with no popup open, where it means nesting rather than picking.
+    if (e.key === 'Tab' && !parentTaskId) {
+      e.preventDefault();
+      return e.shiftKey ? nestShallower() : nestDeeper();
+    }
     if (e.key === 'Enter') { e.preventDefault(); return submit(e.shiftKey); }
     if (e.key === 'Escape') {
       e.preventDefault();
       draft.current = {};
       setValue('');
+      setNestUnder(null);
       inputRef.current?.blur();
     }
   };
@@ -190,11 +224,19 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
       <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
         <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
+      {nestUnder && (
+        <span className="quick-add-under" title="Shift+Tab to step back out">
+          <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden>
+            <path d="M4 3v6h8M9 6l3 3-3 3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {parentTitle || 'task'}
+        </span>
+      )}
       <input
         ref={inputRef}
         className="quick-add-input"
         value={value}
-        placeholder={placeholder ?? 'Add a task — try / or @'}
+        placeholder={nestUnder ? 'Sub-task' : placeholder ?? 'Add a task — try / or @'}
         aria-label="Add a task"
         onChange={(e) => {
           setValue(e.target.value);

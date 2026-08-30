@@ -3469,3 +3469,49 @@ input, select, textarea { font: inherit; color: inherit; }
   white-space: nowrap;
 }
 .selection-bubble-btn:hover { border-color: var(--ink); }
+
+/* ── Outline nesting and the in-table add row ─────────────────────────────
+   Indentation appears only in the Outline grouping, where the rows on screen
+   really are a contiguous tree; grouped by anything else a child can show up
+   with its parent nowhere above it, and the Parent crumb carries it instead. */
+.wt-twisty {
+  width: 14px; height: 14px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; background: none; padding: 0;
+  color: var(--ink-mute);
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+.wt-twisty.is-closed { transform: rotate(0deg); }
+.wt-twisty.is-leaf { visibility: hidden; }
+.wt-twisty:hover { color: var(--ink); }
+/* A hairline back to the parent, so an indent reads as descent rather than padding. */
+.wt-title-cell { position: relative; }
+.wt-status { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.wt-status .list-dot { flex-shrink: 0; }
+
+.wt-row.is-add { border-bottom: none; min-height: 40px; align-items: center; }
+.wt-row.is-add .quick-add {
+  grid-column: 2 / -1;
+  margin-bottom: 0;
+  border-style: dashed;
+  background: transparent;
+}
+.wt-row.is-add .quick-add:focus-within { background: var(--bg-paper); }
+
+/* The parent the add line is about to write under — Tab sets it, Shift+Tab steps back out. */
+.quick-add-under {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 22ch;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
