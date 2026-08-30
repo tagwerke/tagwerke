@@ -43,17 +43,15 @@ export function TabView({ tabId }: { tabId: string }) {
   const setTabStarred = useStore((s) => s.setTabStarred);
   const boardView = useStore((s) => s.boardView);
   const setBoardView = useStore((s) => s.setBoardView);
-  const sprints = useStore((s) => s.sprintsByBoard[tabId]);
   const [panelOpen, setPanelOpen] = useState(true);
-  // Which sprint List/Kanban show. Defaults to the board's current sprint (or 'all' if it has
-  // none) — deliberately NOT persisted, so reopening a board always lands back on "now" instead
-  // of wherever you last drilled into. Reset whenever the board itself changes.
-  const [sprintFilter, setSprintFilter] = useState<SprintFilter>(
-    () => sprints?.find((s) => s.isCurrent)?.id ?? 'all',
-  );
+  // Which sprint List/Kanban show. Defaults to 'all' (unfiltered) — every task that existed
+  // before sprints shipped has no sprintId at all, i.e. is in the backlog, so defaulting to
+  // "current sprint" would render an empty view on every pre-existing board. Filtering to one
+  // sprint is an explicit action (drilling in from the Sprints page), never the default.
+  // Deliberately NOT persisted — reset whenever the board itself changes.
+  const [sprintFilter, setSprintFilter] = useState<SprintFilter>('all');
   useEffect(() => {
-    setSprintFilter(sprints?.find((s) => s.isCurrent)?.id ?? 'all');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setSprintFilter('all');
   }, [tabId]);
   // Not part of `boardView`/global store on purpose — it's an auxiliary pane, not a view of the
   // board's task data, and must never persist as "the" view a board reopens into.
