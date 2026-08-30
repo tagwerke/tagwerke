@@ -82,6 +82,17 @@ cp .env.example .env
 #      SMTP_SECURE         -> "true" for port 465
 #      SMTP_USER/SMTP_PASS -> SES SMTP credentials
 #      MAIL_FROM           -> a verified sender address
+#    All four are required together — SMTP_HOST with blank USER/PASS counts as unconfigured
+#    (hosted relays reject unauthenticated mail); use SMTP_ALLOW_ANONYMOUS=true only for an
+#    internal relay that needs no login.
+#    Or send over the SES API instead, which needs no SMTP credentials at all (those can only
+#    be minted by someone with IAM rights on the AWS account — a send-only access key cannot
+#    speak SMTP). Setting AWS_SES_REGION switches to it:
+#      AWS_SES_REGION      -> e.g. eu-west-1
+#      AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY -> a key allowed to ses:SendEmail
+#      MAIL_FROM           -> a verified SES identity
+#    Verify either path with `npm run mail:test -- you@example.com`; with mail unconfigured,
+#    POST /api/auth/forgot answers 503 instead of pretending to send.
 
 # 3. Build and start (app + database)
 docker compose up -d --build

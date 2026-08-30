@@ -1,6 +1,7 @@
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
 import { appendTaskToBoard } from '../editor/createTaskAt';
+import { focusQuickAdd } from '../tasks/quickAddFocus';
 import type { Panel } from '../App';
 
 // Fixed bottom tab bar — phones only (hidden ≥ 720px via CSS). Primary navigation
@@ -32,9 +33,13 @@ export function MobileNav({ onOpen }: { onOpen: (panel: Panel) => void }) {
    * (wrong view, or a viewer who may not edit) falls through to the original new-board behaviour, so
    * the button is never dead.
    */
-  const onBoard = !!activeTabId && !plannerOpen && boardView === 'doc';
+  const onBoard = !!activeTabId && !plannerOpen;
   const onPlus = () => {
-    if (onBoard && activeTabId && appendTaskToBoard(activeTabId)) return;
+    // Quick-add first: it works on every view and needs no mounted editor, which is the whole
+    // point of it (§N1). The doc's own appender stays as the fallback for the Doc view, where
+    // there is no quick-add line, until that view becomes Notes.
+    if (onBoard && activeTabId && focusQuickAdd(activeTabId)) return;
+    if (onBoard && activeTabId && boardView === 'doc' && appendTaskToBoard(activeTabId)) return;
     onOpen('new');
   };
 
