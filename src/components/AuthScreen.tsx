@@ -43,6 +43,10 @@ function messageFor(err: unknown): string {
         return 'Invalid or exhausted invite code.';
       case 409:
         return 'That email is already registered.';
+      case 503:
+        // The server refuses a reset it could never deliver (mail unconfigured). Say so —
+        // a vague "something went wrong" sends people back to retrying a dead flow.
+        return 'This server can’t send email, so a reset link can’t be delivered. Ask your admin to set it up.';
       case 429:
         return /lock/i.test(err.message)
           ? 'Account temporarily locked after too many attempts. Try again later.'

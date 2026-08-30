@@ -55,6 +55,15 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      # SES API path (set AWS_SES_REGION to use it instead of SMTP). Needed when you only
+      # have a send-only access key — SES SMTP credentials require IAM rights to mint.
+      AWS_SES_REGION: ${AWS_SES_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      # Only for an internal relay that accepts unauthenticated mail. Leaving USER/PASS
+      # blank without this counts as unconfigured, so resets fail loudly instead of silently.
+      SMTP_ALLOW_ANONYMOUS: ${SMTP_ALLOW_ANONYMOUS:-}
       # Automatic daily backups (on by default; see docs/self-hosting.md).
       BACKUP_DISABLED: ${BACKUP_DISABLED:-}
       BACKUP_KEEP: ${BACKUP_KEEP:-14}

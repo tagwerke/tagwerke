@@ -32,6 +32,7 @@ import { registerWebsocket } from './ws.ts';
 import { flushAllYdocRooms } from './realtime/ydoc.ts';
 import { startBackupScheduler } from './jobs/backup.ts';
 import { startSprintRolloverScheduler } from './jobs/sprints.ts';
+import { mailStatus, verifyEmailTransport } from './lib/email.ts';
 
 const PORT = Number(process.env.PORT ?? 5174);
 // Bind all interfaces by default so the container is reachable; override with HOST.
@@ -161,8 +162,26 @@ async function shutdown(signal: string): Promise<void> {
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));
 
+// Mail preflight. A password reset that cannot be delivered is invisible until someone is
+// locked out and waiting on a link that never comes — so the mail path states its health at
+// boot, where a deploy actually shows it. Fire-and-forget: a slow or unreachable relay must
+// never delay serving requests.
+function reportMailHealth(): void {
+  const status = mailStatus();
+  if (!status.ok) {
+    app.log.warn(`email is NOT configured — /api/auth/forgot will answer 503. ${status.detail}`);
+    return;
+  }
+  void verifyEmailTransport().then((v) => {
+    if (!v.ok) app.log.error(`email is configured but UNUSABLE — password resets will fail. ${v.detail}`);
+    else if (v.warning) app.log.warn(`email ready — ${v.detail} — BUT: ${v.warning}`);
+    else app.log.info(`email ready — ${v.detail}`);
+  });
+}
+
 try {
   await app.listen({ port: PORT, host: HOST });
+  reportMailHealth();
   const { dlog } = await import('./lib/dlog.ts');
   dlog('boot', `server listening on ${HOST}:${PORT} — doc/CRDT trace ACTIVE (NODE_ENV=${process.env.NODE_ENV ?? 'unset'})`);
 } catch (err) {

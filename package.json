@@ -22,6 +22,7 @@
     "invite": "tsx server/scripts/create-invite.ts",
     "seed-users": "tsx server/scripts/seed-users.ts",
     "reset-pw": "tsx server/scripts/reset-password.ts",
+    "mail:test": "tsx server/scripts/test-email.ts",
     "prune-audit": "tsx server/scripts/prune-audit.ts",
     "verify:rank": "tsx server/scripts/verify-rank.ts",
     "backfill:task-rank": "tsx server/scripts/backfill-task-rank.ts",
@@ -29,6 +30,7 @@
     "export-user": "tsx server/scripts/export-user.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.1121.0",
     "@fastify/cookie": "^11.0.2",
     "@fastify/rate-limit": "^11.0.0",
     "@fastify/static": "^9.1.3",

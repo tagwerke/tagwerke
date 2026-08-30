@@ -15,7 +15,7 @@ import {
 } from './session.ts';
 import { seedUser } from '../lib/seed.ts';
 import { recordAudit } from '../lib/audit.ts';
-import { sendEmail, appUrl, passwordResetEmail } from '../lib/email.ts';
+import { sendEmail, appUrl, passwordResetEmail, mailStatus } from '../lib/email.ts';
 import { requireAuth } from './guard.ts';
 import { getOidc } from './oidc.ts';
 import { newSecret, otpauthURL, verifyTotp, newBackupCodes, hashCodes, consumeBackupCode } from '../lib/totp.ts';
@@ -210,10 +210,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true });
   });
 
-  // Request a reset link. ALWAYS 200 — never leak whether the email is registered.
+  // Request a reset link. ALWAYS 200 for a *deliverable* request — never leak whether the email
+  // is registered. The one non-200 is the mail-config gate below, which is evaluated BEFORE the
+  // user lookup and so answers identically for a registered and an unregistered address.
   app.post('/api/auth/forgot', authRateLimit, async (req, reply) => {
     const parsed = forgotBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid request' });
+
+    // Refuse rather than lie. An instance with no working SMTP config can never deliver the
+    // link, and answering "check your inbox" leaves a locked-out user waiting on mail that
+    // will never arrive. Deliberately placed before the lookup: enumeration-safe.
+    const mail = mailStatus();
+    if (!mail.ok) {
+      req.log.error(`/api/auth/forgot cannot send: ${mail.detail}`);
+      return reply.code(503).send({ error: 'password reset email is not configured on this server' });
+    }
+
     const email = parsed.data.email.toLowerCase();
 
     const rows = await db.select({ id: schema.users.id, email: schema.users.email }).from(schema.users).where(eq(schema.users.email, email)).limit(1);
@@ -222,12 +234,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const token = nanoid(32);
       await db.insert(schema.passwordResetTokens).values({ token, userId: user.id, expiresAt: new Date(Date.now() + RESET_TTL_MS) });
       const link = `${appUrl()}/reset?token=${token}`;
+      let sent = true;
       try {
         await sendEmail({ to: user.email, ...passwordResetEmail(link) });
       } catch (err) {
-        req.log.error({ err }, 'password reset email failed to send');
+        // Still a 200 (a per-send failure can't be reported without leaking existence), but it
+        // must not vanish: the SMTP response code goes to the log and the failure lands in the
+        // audit trail, where an admin can actually see that resets are dead.
+        sent = false;
+        const e = err as { responseCode?: number; message?: string };
+        req.log.error({ err, responseCode: e.responseCode }, 'password reset email failed to send');
+        recordAudit({ actorId: null, action: 'password_reset_email_failed', targetType: 'user', targetId: user.id, payload: { email, responseCode: e.responseCode ?? null, error: e.message ?? String(err) }, status: 200 });
       }
-      recordAudit({ actorId: null, action: 'password_reset_requested', targetType: 'user', targetId: user.id, payload: { email }, status: 200 });
+      recordAudit({ actorId: null, action: 'password_reset_requested', targetType: 'user', targetId: user.id, payload: { email, sent }, status: 200 });
     }
     return reply.send({ ok: true });
   });
