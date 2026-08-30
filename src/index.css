@@ -3515,3 +3515,39 @@ input, select, textarea { font: inherit; color: inherit; }
   text-overflow: ellipsis;
   flex-shrink: 0;
 }
+
+/* ── Board header: the title is the subject, navigation sits above it ─────── */
+.board-crumb { display: flex; align-items: center; padding: 0 0 8px; }
+.board-head { align-items: flex-start; gap: 12px; }
+.board-head-title { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.board-head-right { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.board-head-title .dropdown { align-self: flex-start; }
+
+/* ── The table cursor: moving through rows like a document ────────────────── */
+.work-table:focus { outline: none; }
+.wt-row.is-cursor { background: var(--bg-paper); box-shadow: inset 2px 0 0 var(--pop); }
+.wt-title-cell.is-focused,
+.wt-cell.is-focused {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  border-radius: 3px;
+}
+.wt-title-input {
+  flex: 1; min-width: 0;
+  border: 0; border-bottom: 1px solid var(--pop);
+  background: transparent; padding: 0 0 1px;
+  font: inherit; color: inherit; outline: none;
+}
+/* A sub-task says so at the far left, where the eye lands before it reads the indent. */
+.wt-sub-mark { color: var(--ink-mute); flex-shrink: 0; opacity: 0.7; }
+
+/* The add line is a row, not a box floating in the table. */
+.wt-row.is-add .quick-add {
+  border: 0;
+  background: transparent;
+  height: 100%;
+  padding: 0;
+}
+.wt-row.is-add { border-bottom: 1px solid var(--line); }
+.wt-row.is-add:hover { background: var(--bg-paper); }
+.notes-toolbar { padding: 0 clamp(16px, 3vw, 40px); }

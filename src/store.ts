@@ -148,6 +148,8 @@ interface Actions {
   createTab(projectId: ID, name: string): Tab;
   renameTab(id: ID, name: string): void;
   setTabLocation(id: ID, location: string): void;
+  /** Move a board to another project, from inside the board itself. */
+  setTabProject(id: ID, projectId: ID): void;
   setTabSettings(id: ID, settings: BoardSettings): void;
   setTabStarred(id: ID, starred: boolean): void;
   setTabDoc(id: ID, doc: unknown): void;
@@ -403,6 +405,10 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         // Local only — the PATCH is emitted by the debounced differ (api/persist.ts). See
         // renameProject above for why.
         set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], name } } }));
+      },
+      setTabProject(id, projectId) {
+        set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], projectId } } }));
+        enqueue(() => api.tabs.update(id, { projectId }));
       },
       setTabLocation(id, location) {
         set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], location } } }));
