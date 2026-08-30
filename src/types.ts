@@ -180,7 +180,16 @@ export interface CalendarEvent {
 
 /** Which view an open board renders. All but `sprints` read the same task entities;
  *  `sprints` is the board's sprint list/management page instead. */
-export type BoardView = 'doc' | 'list' | 'kanban' | 'calendar' | 'sprints';
+// Three views, one of them two layouts of the same component (NOTES_SPLIT_PLAN §N2).
+// 'list' folded into the table (group by status, columns off), 'calendar' into the /calendar
+// route which does that job properly, and 'sprints' into the board panel.
+export type BoardView = 'table' | 'kanban' | 'notes';
+export const BOARD_VIEWS: BoardView[] = ['table', 'kanban', 'notes'];
+
+/** Any older or unknown value lands on the table rather than a blank screen (§N2.4). */
+export function asBoardView(v: unknown): BoardView {
+  return (BOARD_VIEWS as string[]).includes(v as string) ? (v as BoardView) : 'table';
+}
 
 // ── Sprints (SPRINTS_PLAN.md) ───────────────────────────────────────────────
 /** One sprint (a week) on a board, as the server serializes it. `isCurrent` is unique per
@@ -218,6 +227,8 @@ export interface RootState {
   activeTabId: ID | null;
   /** Which view the open board renders (doc/list/kanban/calendar/sprints). */
   boardView: BoardView;
+  /** A board-panel tab requested by the URL (`/b/:id/sprints`), or null (§N2.4). */
+  boardPanel: 'sprints' | null;
   /** The task page's task id, or null when none is open. Independent of `activeTabId` — the
    *  task page is its own route (`/b/:id/task/:taskId`), reachable while a board is active. */
   openTaskId: ID | null;
@@ -226,7 +237,9 @@ export interface RootState {
    * too (SUBTASKS_PLAN D5) until the user accepts or declines. Never blocks the parent's own status
    * change — that has already been applied by the time this is set.
    */
-  pendingCascade: { taskId: ID; count: number } | null;
+  /** One offer covering however many parents were just marked done — a bulk change must raise
+   *  a single prompt, not overwrite this slot once per task (NOTES_SPLIT_PLAN §N3.1). */
+  pendingCascade: { taskIds: ID[]; count: number } | null;
   /** Planner UI state. */
   plannerOpen: boolean;
   plannerDate: string; // 'YYYY-MM-DD' cursor

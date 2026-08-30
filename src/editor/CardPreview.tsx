@@ -1,14 +1,15 @@
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { TaskItem } from './extensions/TaskItem';
-import { TaskList } from './extensions/TaskList';
-import { TaskItemView } from './TaskItemView';
+import { TaskMention } from './extensions/TaskMention';
+import { TaskMentionView } from './TaskMentionView';
 import { useStore } from '../store';
 import type { ID } from '../types';
 
 interface Props { tabId: ID }
 
-/** Read-only preview of a tab's doc, used on the board card. */
+/** Read-only preview of a board's NOTES, used on the board card. It renders the same mention
+ *  node the editor does, so a preview of a converted task list reads as the titles it links to
+ *  rather than as a row of blanks. */
 export function CardPreview({ tabId }: Props) {
   const docJSON = useStore((s) => s.tabs[tabId]?.docJSON);
 
@@ -23,10 +24,9 @@ export function CardPreview({ tabId }: Props) {
           codeBlock: false,
           heading: { levels: [1, 2, 3] },
         }),
-        TaskList,
-        TaskItem.extend({
+        TaskMention.extend({
           addNodeView() {
-            return ReactNodeViewRenderer(TaskItemView);
+            return ReactNodeViewRenderer(TaskMentionView);
           },
         }),
       ],

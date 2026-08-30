@@ -11,7 +11,9 @@ export function extractDocText(docJSON: unknown): string {
   const walk = (n: unknown): void => {
     if (!n || typeof n !== 'object') return;
     const node = n as DocLike;
-    if (node.type === 'taskItem') return;
+    // A mention carries an id and no text; its title belongs to the task, which the search
+    // already indexes on its own. Descending would add nothing and double-count the hit.
+    if (node.type === 'taskMention') return;
     if (typeof node.text === 'string') parts.push(node.text);
     if (Array.isArray(node.content)) for (const child of node.content) walk(child);
   };
