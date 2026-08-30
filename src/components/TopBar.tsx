@@ -1,4 +1,5 @@
 import { useStore } from '../store';
+
 import { useNotifications } from '../notifications/useNotifications';
 import { useHelpBadge } from '../help/useHelpBadge';
 import { OfflinePill } from './OfflinePill';
@@ -6,6 +7,7 @@ import type { Panel } from '../App';
 
 export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
   const activeTabId = useStore((s) => s.activeTabId);
+  const setActiveTab = useStore((s) => s.setActiveTab);
   const unread = useNotifications((s) => s.unread);
   const { hasNew: hasNewHelp } = useHelpBadge();
   // No board open (grid or calendar) is exactly when a board isn't the active tab — that's the
@@ -14,6 +16,16 @@ export function TopBar({ onOpen }: { onOpen: (panel: Panel) => void }) {
 
   return (
     <header className="topbar main-topbar">
+      {/* Leaving a board is app navigation, so it sits in the app's strip rather than inside the
+          board — where it competed with the board's own title for the first thing you read. */}
+      {activeTabId != null && (
+        <button className="btn ghost topbar-back" onClick={() => setActiveTab(null)}>
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
+            <path d="M10 3L4 8l6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </svg>
+          <span>Boards</span>
+        </button>
+      )}
       <OfflinePill />
 
       <div className="topbar-actions">

@@ -2572,10 +2572,12 @@ input, select, textarea { font: inherit; color: inherit; }
 .list-caret { font-size: 9px; color: var(--ink-mute); transition: transform 0.12s; }
 .list-caret.collapsed { transform: rotate(-90deg); }
 .list-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+/* One status palette, shared with the doc indicator and the action menu's swatches (§D). These
+   are the indicator's values, because those are the ones the app has trained everyone on. */
 .list-dot.status-todo { background: var(--ink-mute); }
-.list-dot.status-in_progress { background: #2d8fce; }
-.list-dot.status-in_review { background: var(--pop); }
-.list-dot.status-done { background: #1f8a76; }
+.list-dot.status-in_progress { background: #2563eb; }
+.list-dot.status-in_review { background: #7c3aed; }
+.list-dot.status-done { background: var(--accent); }
 .list-dot.status-cancelled { background: var(--line-strong); }
 .list-group-name { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ink-soft); }
 .list-group-n { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--ink-mute); }
@@ -3310,24 +3312,40 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-menu-swatch.status-cancelled { background: var(--ink-mute); border-color: var(--ink-mute); }
 
 /* ── The work view: one component, two layouts (NOTES_SPLIT_PLAN §N2) ────── */
-.board-work { display: flex; flex-direction: column; gap: 10px; padding: 14px clamp(16px, 3vw, 40px) 40px; min-width: 0; }
-.work-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.board-work { display: flex; flex-direction: column; min-width: 0; padding-bottom: 40px; }
+.work-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: nowrap;
+  padding: 4px clamp(16px, 3vw, 32px) 12px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.work-table, .work-board, .board-work > .view-placeholder { padding: 10px clamp(16px, 3vw, 32px) 0; }
+.work-board { padding-bottom: 8px; }
 .work-spacer { flex: 1; }
-.work-count, .work-note { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
-.work-select { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-mute); }
-.work-select-label { text-transform: uppercase; letter-spacing: 0.09em; font-size: 10px; }
-.work-select select {
-  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
-  background: var(--bg-elev); padding: 3px 6px; font-size: 12px; color: var(--ink);
+.work-note { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
+/* A count is something you read, not something you set, so it sits under the rows it counts
+   rather than in the row of controls — where it was what pushed the view switcher onto a
+   second line as soon as the board panel was open. */
+.work-count {
+  font-family: var(--mono); font-size: 11px; color: var(--ink-mute);
+  padding: 10px clamp(16px, 3vw, 32px) 0;
+}
+.work-control, .work-toolbar .seg, .work-toolbar .list-mode { flex-shrink: 0; }
+.work-control { display: inline-flex; align-items: center; gap: 6px; }
+.work-control-label {
+  text-transform: uppercase; letter-spacing: 0.09em;
+  font-size: 10px; font-weight: 700; color: var(--ink-mute);
 }
 
 /* Table. A grid per row rather than a <table> so a row stays one draggable unit. */
 .work-table { display: flex; flex-direction: column; min-width: 0; }
 .wt-head, .wt-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 96px 110px 90px 54px 92px 130px;
+  /* The title gets a floor and the largest share; the field columns are sized to their content
+     ("In progress", a name, "12 Sep", "!!!") rather than to a round number. */
+  grid-template-columns: 24px minmax(200px, 4fr) 96px 92px 74px 40px 78px minmax(80px, 1.4fr);
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 0 6px;
 }
 .wt-head { height: 28px; border-bottom: 1px solid var(--line-strong); }
@@ -3365,7 +3383,10 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .wt-cell:not(:disabled):hover { background: var(--line); }
 .wt-cell.is-static { padding: 3px 4px; }
-.wt-mono { font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); }
+.wt-mono {
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .wt-mono.is-overdue { color: var(--pop); }
 .wt-parent {
   border: 0; background: none; padding: 0; font-family: var(--mono); font-size: 11px;
@@ -3516,12 +3537,12 @@ input, select, textarea { font: inherit; color: inherit; }
   flex-shrink: 0;
 }
 
-/* ── Board header: the title is the subject, navigation sits above it ─────── */
-.board-crumb { display: flex; align-items: center; padding: 0 0 8px; }
-.board-head { align-items: flex-start; gap: 12px; }
-.board-head-title { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
-.board-head-right { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-.board-head-title .dropdown { align-self: flex-start; }
+/* ── Board header ─────────────────────────────────────────────────────────
+   One definition, up at .board-head — this section only adds what is new.
+   The board's own controls (?, star, panel) sit together on the right; the
+   app's navigation left with the top strip entirely. */
+.board-head-title { gap: 5px; }
+.board-head-right { gap: 6px; }
 
 /* ── The table cursor: moving through rows like a document ────────────────── */
 .work-table:focus { outline: none; }
@@ -3550,4 +3571,55 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .wt-row.is-add { border-bottom: 1px solid var(--line); }
 .wt-row.is-add:hover { background: var(--bg-paper); }
-.notes-toolbar { padding: 0 clamp(16px, 3vw, 40px); }
+
+/* ── The project chip ─────────────────────────────────────────────────────
+   A board's project was a label; it is a choice now, so it has to look like
+   one — but at the size of the label it replaces, not the size of a form
+   control. Same 10px uppercase eyebrow, with a dot for the project's colour
+   and a caret that only shows up on hover, so the header stays quiet until
+   you go looking. */
+.dd.is-chip { display: inline-flex; }
+.dd.is-chip .dd-trigger {
+  width: auto;
+  gap: 5px;
+  padding: 2px 6px;
+  border-color: transparent;
+  background: transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--page-accent, var(--pop));
+}
+.dd.is-chip .dd-trigger:hover,
+.dd.is-chip.open .dd-trigger { background: var(--page-accent-soft, var(--line)); border-color: transparent; }
+.dd.is-chip .dd-dot { width: 6px; height: 6px; }
+.dd.is-chip .dd-caret { width: 8px; height: 8px; opacity: 0; }
+.dd.is-chip .dd-trigger:hover .dd-caret,
+.dd.is-chip .dd-trigger:focus-visible .dd-caret,
+.dd.is-chip.open .dd-caret { opacity: 1; }
+/* The trigger is chip-sized; the list it opens is not, or the project names would be unreadable. */
+.dd.is-chip .dd-panel { left: 0; right: auto; min-width: 200px; }
+
+/* Leaving a board, in the app strip rather than in the board. */
+.topbar-back { padding: 0 12px 0 10px; }
+
+/* A dropdown sized for a toolbar rather than a form. Same component as the field-sized one — the
+   board's controls should not be a second implementation of choosing from a list. */
+.dd.is-compact { display: inline-flex; }
+.dd.is-compact .dd-trigger {
+  width: auto;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+}
+.dd.is-compact .dd-panel { left: 0; right: auto; min-width: 170px; }
+
+@media (max-width: 1240px) {
+  .wt-head > :last-child, .wt-row > :last-child { display: none; }
+  .wt-head, .wt-row { grid-template-columns: 24px minmax(180px, 4fr) 96px 92px 74px 40px 78px; }
+}

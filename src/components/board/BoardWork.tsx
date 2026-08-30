@@ -16,6 +16,7 @@ import { boardTaskPath, navigate } from '../../util/router';
 import type { DraftFields } from '../../tasks/createTask';
 import type { SprintFilter } from '../TabView';
 import { ViewSwitcher } from './ViewSwitcher';
+import { Dropdown } from '../Dropdown';
 import type { BoardView, ID, Member, Sprint } from '../../types';
 
 /** Shared empties. `?? []` would mint a new array each render and churn every memo below. */
@@ -35,10 +36,11 @@ function readStored<T extends string>(key: string, allowed: readonly T[], fallba
   }
 }
 
-export function BoardWork({ tabId, layout, sprintFilter = 'all', view, onViewChange }: {
+export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter, view, onViewChange }: {
   tabId: ID;
   layout: WorkLayout;
   sprintFilter?: SprintFilter;
+  onSprintFilter: (f: SprintFilter) => void;
   view: BoardView;
   onViewChange: (v: BoardView) => void;
 }) {
@@ -196,14 +198,33 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', view, onViewCha
   return (
     <div className="board-work">
       <div className="work-toolbar">
-        <label className="work-select">
-          <span className="work-select-label">Group</span>
-          <select value={grouping} onChange={(e) => setGrouping(e.target.value as Grouping)}>
-            {GROUPINGS.filter((g) => layout === 'table' || g.key !== 'none').map((g) => (
-              <option key={g.key} value={g.key}>{g.label}</option>
-            ))}
-          </select>
-        </label>
+        <span className="work-control">
+          <span className="work-control-label">Group</span>
+          <Dropdown
+            className="is-compact"
+            value={grouping}
+            options={GROUPINGS.filter((g) => layout === 'table' || g.key !== 'none').map((g) => ({ value: g.key, label: g.label }))}
+            onChange={(v) => setGrouping(v as Grouping)}
+          />
+        </span>
+        {/* The sprint filter has always been applied on open — a board lands on its current sprint
+            — but nothing said so once the Sprints view moved into the panel, so a board whose work
+            is all in the backlog read as an empty board. A filter you cannot see is a bug. */}
+        {sprints.length > 0 && (
+          <span className="work-control">
+            <span className="work-control-label">Sprint</span>
+            <Dropdown
+              className="is-compact"
+              value={sprintFilter === 'all' ? 'all' : sprintFilter ?? 'backlog'}
+              options={[
+                { value: 'all', label: 'All' },
+                ...sprints.map((s) => ({ value: s.id, label: s.isCurrent ? `${s.label} · now` : s.label })),
+                { value: 'backlog', label: 'Backlog' },
+              ]}
+              onChange={(v) => onSprintFilter(v === 'all' ? 'all' : v === 'backlog' ? null : v)}
+            />
+          </span>
+        )}
         <button
           type="button"
           className={`list-mode ${scope === 'roots' ? 'is-on' : ''}`}
@@ -215,7 +236,6 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', view, onViewCha
         {hiddenSubtasks > 0 && (
           <span className="muted work-note">{hiddenSubtasks} sub-task{hiddenSubtasks === 1 ? '' : 's'} hidden</span>
         )}
-        <span className="work-count">{total} task{total === 1 ? '' : 's'} · {doneCount} done</span>
         <span className="work-spacer" />
         <ViewSwitcher view={view} onChange={onViewChange} />
       </div>
@@ -283,6 +303,10 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', view, onViewCha
           </button>
           <button type="button" className="btn tiny ghost" onClick={() => setSelection(new Set())}>Clear</button>
         </div>
+      )}
+
+      {total > 0 && (
+        <div className="work-count">{total} task{total === 1 ? '' : 's'} · {doneCount} done</div>
       )}
 
       {menu && (

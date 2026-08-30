@@ -94,21 +94,13 @@ export function TabView({ tabId }: { tabId: string }) {
 
   return (
     <main className="tab-view tab-open" style={style}>
-      {/* Getting back out of a board is app navigation, not part of the board. It sits above the
-          header so the title has nothing competing with it. */}
-      <nav className="board-crumb">
-        <button className="back-btn" onClick={() => setActiveTab(null)} aria-label="back to boards">
-          <svg viewBox="0 0 16 16" width="14" height="14"><path d="M10 3L4 8l6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-          <span>Boards</span>
-        </button>
-      </nav>
-
       <header className="board-head">
         <div className="board-head-title">
           {/* The project is a choice, not a label: a board moves between projects from inside
               itself rather than only from the grid it is filed in. */}
           {isBoard && projectOptions.length > 0 ? (
             <Dropdown
+              className="is-chip"
               value={tab.projectId}
               options={projectOptions}
               onChange={(id) => setTabProject(tab.id, id)}
@@ -177,7 +169,14 @@ export function TabView({ tabId }: { tabId: string }) {
             /* Table and Kanban are one component, two layouts — so grouping, filters and the
                scope switch survive a switch between them (§N2.1). `view` is normalised by
                asBoardView, so there is no fall-through branch to land a deleted view in. */
-            <BoardWork tabId={tab.id} layout={view === 'kanban' ? 'board' : 'table'} sprintFilter={sprintFilter} view={view} onViewChange={setBoardView} />
+            <BoardWork
+              tabId={tab.id}
+              layout={view === 'kanban' ? 'board' : 'table'}
+              sprintFilter={sprintFilter}
+              onSprintFilter={setSprintFilter}
+              view={view}
+              onViewChange={setBoardView}
+            />
           )}
         </div>
         {isBoard && panelOpen && (
