@@ -12,6 +12,7 @@ import { Readable } from 'node:stream';
 import { and, desc, eq, gte, lte, sql, type SQL, type Column } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAdmin, requireSudo } from '../auth/guard.ts';
+import { plainBody } from '../../shared/mentions.ts';
 
 // The filterable fields → their columns. `actor` = actor_id, `scope` = scope_id (a board/tab).
 const FIELD_COLS: Record<string, Column> = {
