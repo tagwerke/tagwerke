@@ -11,7 +11,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
-import { matchCommands, rankMembers, categoryOf, type CommandPatch } from './suggestEngine';
+import { detectToken, matchCommands, rankMembers, categoryOf, type CommandPatch } from './suggestEngine';
+import { SuggestPopup } from '../components/common/SuggestPopup';
 import type { ID, Member } from '../types';
 
 interface CommandItem { key: string; label: string; category: string; run: () => void }
@@ -89,72 +90,44 @@ export function TaskTitleSuggest({ inputRef, taskId, tabId }: { inputRef: React.
       const { before, caret } = ct;
       const full = el.textContent ?? '';
 
-      const at = before.match(/(?:^|\s)@(\w*)$/);
-      if (at) {
-        const query = at[1];
-        const tokenLen = query.length + 1; // "@" + query
-        const start = caret - tokenLen;
+      // The grammar itself lives in suggestEngine, shared with the quick-add line (§N1) so
+      // "/due fri" means the same thing wherever it is typed. What stays here is the half that is
+      // genuinely specific to a contentEditable widget: reading the caret and rewriting the text.
+      const token = detectToken(before, caret);
+      if (!token) return setMode(null);
+      const pos = caretRect();
+      if (!pos) return setMode(null);
+      const strip = () => setWidgetText(el, taskId, full.slice(0, token.start) + full.slice(caret), token.start);
+
+      if (token.kind === 'mention') {
         const members = useStore.getState().membersByBoard[tabId] ?? [];
-        const matches = rankMembers(members, query);
-        const pos = caretRect();
-        if (matches.length && pos) {
-          setHighlight(0);
-          setMode({
-            kind: 'mention', matches, x: pos.x, y: pos.y,
-            strip: () => setWidgetText(el, taskId, full.slice(0, start) + full.slice(caret), start),
-            onPick: (m) => useStore.getState().setTaskAssignee(taskId, m.id),
-          });
-          return;
-        }
-        return setMode(null);
+        const matches = rankMembers(members, token.query);
+        setHighlight(0);
+        // No members for this "@..."? Stop — never fall through to the command grammar.
+        return setMode(matches.length
+          ? {
+              kind: 'mention', matches, x: pos.x, y: pos.y, strip,
+              onPick: (m) => useStore.getState().setTaskAssignee(taskId, m.id),
+            }
+          : null);
       }
 
-      // The trailing arg slot must not itself look like the start of a new token — otherwise an
-      // earlier, still-unconfirmed "/cmd" absorbs a second "/cmd"/"@mention" typed right after it
-      // as if it were plain argument text, and the popup gets stuck on the stale first match.
-      const cm = before.match(/(?:^|\s)\/(\w*)(?:\s+(?![/@])(\S+))?$/);
-      if (cm) {
-        const cmd = (cm[1] ?? '').toLowerCase();
-        const arg = (cm[2] ?? '').trim();
-        const tokenLen = cm[0].length - (cm[0][0] === '/' ? 0 : 1);
-        const start = caret - tokenLen;
-        const matches = buildCommands(cmd, arg, taskId);
-        const pos = caretRect();
-        if (matches.length && pos) {
-          setHighlight(0);
-          setMode({
-            kind: 'command', matches, x: pos.x, y: pos.y,
-            strip: () => setWidgetText(el, taskId, full.slice(0, start) + full.slice(caret), start),
-            onPick: (it) => it.run(),
-          });
-          return;
-        }
-        return setMode(null);
-      }
-
-      // `!` / `!!` / `!!!` priority sigil — only a STANDALONE run (preceded by space/start), so a
-      // trailing "Fix this!" is left alone. Highlights the level you typed; Enter/Tab applies + strips.
-      const bang = before.match(/(?:^|\s)(!{1,3})$/);
-      if (bang) {
-        const start = caret - bang[1].length;
+      if (token.kind === 'priority') {
         const items: CommandItem[] = [1, 2, 3].map((pp) => ({
           key: `pri-${pp}`,
           label: `Priority · ${'!'.repeat(pp)}`,
           category: 'Priority',
           run: () => useStore.getState().setTaskMeta(taskId, { priority: pp as 1 | 2 | 3 }),
         }));
-        const pos = caretRect();
-        if (pos) {
-          setHighlight(Math.min(bang[1].length - 1, 2));
-          setMode({
-            kind: 'command', matches: items, x: pos.x, y: pos.y,
-            strip: () => setWidgetText(el, taskId, full.slice(0, start) + full.slice(caret), start),
-            onPick: (it) => it.run(),
-          });
-          return;
-        }
+        setHighlight(Math.min(token.level - 1, 2)); // highlight the level you typed
+        return setMode({ kind: 'command', matches: items, x: pos.x, y: pos.y, strip, onPick: (it) => it.run() });
       }
-      setMode(null);
+
+      const matches = buildCommands(token.cmd, token.arg, taskId);
+      setHighlight(0);
+      setMode(matches.length
+        ? { kind: 'command', matches, x: pos.x, y: pos.y, strip, onPick: (it) => it.run() }
+        : null);
     };
 
     const onBlur = () => setTimeout(() => setMode(null), 120);
@@ -196,49 +169,21 @@ export function TaskTitleSuggest({ inputRef, taskId, tabId }: { inputRef: React.
   if (!mode) return null;
 
   return (
-    <ul className={`today-suggest ${mode.kind}`} style={{ position: 'fixed', top: mode.y, left: mode.x, zIndex: 50 }} contentEditable={false}>
-      {(() => {
-        const isMention = mode.kind === 'mention';
-        const nodes: React.ReactNode[] = [];
-        let prevCategory: string | null = null;
-        mode.matches.forEach((m, i) => {
-          // A header whenever the (already relevance-sorted) list crosses into a new category —
-          // never reorders anything, just annotates transitions as they occur.
-          if (!isMention) {
-            const category = (m as CommandItem).category;
-            if (category !== prevCategory) {
-              nodes.push(<li key={`cat-${category}`} className="today-suggest-cat" aria-hidden>{category}</li>);
-              prevCategory = category;
-            }
-          }
-          const key = isMention ? (m as Member).id : (m as CommandItem).key;
-          nodes.push(
-            <li
-              key={key}
-              className={`today-suggest-item ${i === highlight ? 'active' : ''}`}
-              onMouseEnter={() => setHighlight(i)}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                mode.strip();
-                if (mode.kind === 'mention') mode.onPick(m as Member);
-                else mode.onPick(m as CommandItem);
-                setMode(null);
-              }}
-            >
-              {isMention ? (
-                <>
-                  <span className="today-suggest-avatar">{(m as Member).name.charAt(0).toUpperCase()}</span>
-                  <span className="today-suggest-name">{(m as Member).name}</span>
-                  <span className="today-suggest-sub">{(m as Member).email}</span>
-                </>
-              ) : (
-                <span className="today-suggest-name">{(m as CommandItem).label}</span>
-              )}
-            </li>,
-          );
-        });
-        return nodes;
-      })()}
-    </ul>
+    <SuggestPopup
+      kind={mode.kind}
+      items={mode.matches}
+      highlight={highlight}
+      x={mode.x}
+      y={mode.y}
+      onHighlight={setHighlight}
+      onPick={(i) => {
+        const m = mode.matches[i];
+        if (!m) return;
+        mode.strip();
+        if (mode.kind === 'mention') mode.onPick(m as Member);
+        else mode.onPick(m as CommandItem);
+        setMode(null);
+      }}
+    />
   );
 }

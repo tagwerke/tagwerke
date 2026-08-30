@@ -114,3 +114,51 @@ export function rankMembers(members: Member[], query: string): Member[] {
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, MAX_SUGGESTIONS).map((s) => s.m);
 }
+
+// ── Token detection ───────────────────────────────────────────────────────────────────────────
+//
+// Pure: given the text before the caret, which suggestion token (if any) is being typed. Shared by
+// the doc's title widget (TaskTitleSuggest, a contentEditable) and the quick-add line (QuickAdd,
+// an <input>) so both recognise exactly the same grammar — the two hosts differ only in how they
+// read a caret and rewrite their own text.
+
+export type SuggestToken =
+  | { kind: 'mention'; query: string; start: number }
+  | { kind: 'command'; cmd: string; arg: string; start: number }
+  | { kind: 'priority'; level: 1 | 2 | 3; start: number };
+
+/**
+ * `before` is the text from the start of the field up to the caret, `caret` its length.
+ * `start` on the result is where the token begins, so a caller strips `text.slice(0, start) +
+ * text.slice(caret)`.
+ *
+ * Order matters and mirrors the original branch order: a `@` match wins outright — a caller that
+ * finds no members for it must NOT fall through and try the command grammar, or an unmatched
+ * "@xy" would start matching "/" commands from earlier in the line.
+ */
+export function detectToken(before: string, caret: number): SuggestToken | null {
+  const at = before.match(/(?:^|\s)@(\w*)$/);
+  if (at) {
+    const query = at[1] ?? '';
+    return { kind: 'mention', query, start: caret - (query.length + 1) };
+  }
+
+  // The trailing arg slot must not itself look like the start of a new token — otherwise an
+  // earlier, still-unconfirmed "/cmd" absorbs a second "/cmd"/"@mention" typed right after it as
+  // if it were plain argument text, and the popup gets stuck on the stale first match.
+  const cm = before.match(/(?:^|\s)\/(\w*)(?:\s+(?![/@])(\S+))?$/);
+  if (cm) {
+    const tokenLen = cm[0].length - (cm[0][0] === '/' ? 0 : 1);
+    return { kind: 'command', cmd: (cm[1] ?? '').toLowerCase(), arg: (cm[2] ?? '').trim(), start: caret - tokenLen };
+  }
+
+  // `!` / `!!` / `!!!` priority sigil — only a STANDALONE run (preceded by space/start), so a
+  // trailing "Fix this!" is left alone.
+  const bang = before.match(/(?:^|\s)(!{1,3})$/);
+  if (bang) {
+    const run = bang[1];
+    return { kind: 'priority', level: run.length as 1 | 2 | 3, start: caret - run.length };
+  }
+
+  return null;
+}

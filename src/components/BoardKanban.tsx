@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useBoardOutline, useStore } from '../store';
 import { STATUS_LABEL } from './StatusControl';
 import { TaskCard } from './common/TaskCard';
+import { QuickAdd } from './common/QuickAdd';
 import { boardTaskPath, navigate } from '../util/router';
 import type { SprintFilter } from './TabView';
 import type { Task, TaskStatus } from '../types';
@@ -113,6 +114,8 @@ export function BoardKanban({ tabId, sprintFilter = 'all' }: { tabId: string; sp
               <span className="kb-col-n">{items.length}</span>
             </header>
             <div className="kb-col-stack">
+              {/* Per column, so the column's own status is what the new task gets (§I.1). */}
+              <QuickAdd tabId={tabId} presetFields={{ status }} placeholder="Add a task" />
               {items.map((t) => (
                 <TaskCard
                   key={t.id}

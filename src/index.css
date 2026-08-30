@@ -3195,3 +3195,41 @@ input, select, textarea { font: inherit; color: inherit; }
   .task-item:hover > .task-drag-handle,
   .task-item:focus-within > .task-drag-handle { display: none; }
 }
+
+/* ── Quick-add (NOTES_SPLIT_PLAN §N1) ─────────────────────────────────────
+   The line a task is typed into now that the document is not the only way in.
+   Dashed on purpose: it reads as a slot waiting to be filled rather than a
+   field with a value, which is what tells you it is an entry point at a glance. */
+.quick-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 11px;
+  margin-bottom: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-paper);
+  color: var(--ink-mute);
+}
+.quick-add:focus-within { border-style: solid; border-color: var(--pop); color: var(--ink-soft); }
+.quick-add-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: var(--ink);
+}
+.quick-add-input::placeholder { color: var(--ink-mute); }
+.quick-add-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+/* A Kanban column is narrow and its status is already the column header. */
+.kb-col-stack .quick-add { height: 32px; margin-bottom: 8px; padding: 0 9px; }
+.kb-col-stack .quick-add-input { font-size: 13px; }
+.kb-col-stack .quick-add-hint { display: none; }

@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react';
 import { useBoardOutline, taskDepth, useStore } from '../store';
 import { STATUS_ORDER, STATUS_LABEL } from './StatusControl';
 import { TaskRow } from './common/TaskRow';
+import { QuickAdd } from './common/QuickAdd';
 import { boardTaskPath, navigate } from '../util/router';
 import type { SprintFilter } from './TabView';
 import type { Task, TaskStatus } from '../types';
@@ -51,11 +52,17 @@ export function BoardList({ tabId, sprintFilter = 'all' }: { tabId: string; spri
     });
 
   if (tasks.length === 0) {
-    return <div className="view-placeholder muted">No tasks yet. Add them in the Doc view — they show up here grouped by status.</div>;
+    return (
+      <div className="board-list">
+        <QuickAdd tabId={tabId} shortcut />
+        <div className="view-placeholder muted">No tasks yet — add one above. Try <code>/p1</code> or <code>@</code>.</div>
+      </div>
+    );
   }
 
   return (
     <div className="board-list">
+      <QuickAdd tabId={tabId} shortcut />
       <div className="list-modes" role="tablist" aria-label="Group by">
         {MODES.map((m) => (
           <button
