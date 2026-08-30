@@ -5,9 +5,12 @@
 // opens the task instead — that asymmetry is what keeps "a row is a label plus one destination"
 // true inside a table.
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { STATUS_LABEL } from '../StatusControl';
 import { QuickAdd } from '../common/QuickAdd';
+import { useTableCursor } from './useTableCursor';
+import { useStore } from '../../store';
+import { focusQuickAdd } from '../../tasks/quickAddFocus';
 import { formatDateChip, todayISO } from '../../util/dates';
 import type { FocusField } from '../../tasks/actions';
 import { COLUMNS, type ColumnDef } from './workColumns';
@@ -16,7 +19,7 @@ import type { ID, Member, Sprint, Task } from '../../types';
 
 export function WorkTable({
   tabId, groups, sort, onSort, selection, onSelect, onOpenMenu, onOpenTask, canReorder, onReorder,
-  members, sprints, tasksById, editable, nesting,
+  onNest, onUnnest, onDelete, onToggleDone, members, sprints, tasksById, editable, nesting,
 }: {
   tabId: ID;
   groups: Group[];
@@ -32,6 +35,10 @@ export function WorkTable({
    * indent would be pointing at nothing. That is the same reason the old List used a crumb when
    * grouped by status and indentation only in outline mode.
    */
+  onNest: (id: ID) => void;
+  onUnnest: (id: ID) => void;
+  onDelete: (id: ID) => void;
+  onToggleDone: (id: ID) => void;
   nesting: {
     depthOf: (id: ID) => number;
     hasChildren: (id: ID) => boolean;
@@ -46,7 +53,41 @@ export function WorkTable({
   tasksById: Record<ID, Task>;
   editable: boolean;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const [dragId, setDragId] = useState<ID | null>(null);
+  const [renaming, setRenaming] = useState<{ id: ID; text: string } | null>(null);
+  const flatIds = useMemo(() => groups.flatMap((g) => g.tasks.map((t) => t.id)), [groups]);
+
+  /** Open the menu over a cell the KEYBOARD chose, so it lands on the cell rather than the pointer. */
+  const openCellByIndex = useCallback((taskId: ID, col: number) => {
+    const el = rootRef.current?.querySelector(`[data-row="${CSS.escape(taskId)}"] [data-col="${col}"]`);
+    const box = el?.getBoundingClientRect();
+    onOpenMenu([taskId], box?.left ?? 0, (box?.bottom ?? 0) + 4, COLUMNS[col - 1]?.field);
+  }, [onOpenMenu]);
+
+  const { cursor, setCursor, onKeyDown } = useTableCursor(
+    flatIds,
+    COLUMNS.length,
+    {
+      openCell: openCellByIndex,
+      renameStart: (id) => setRenaming({ id, text: useStore.getState().tasks[id]?.text ?? '' }),
+      nest: onNest,
+      unnest: onUnnest,
+      remove: onDelete,
+      toggleDone: onToggleDone,
+      focusAdd: () => focusQuickAdd(tabId),
+    },
+    editable,
+    rootRef,
+  );
+
+  const commitRename = (): void => {
+    if (!renaming) return;
+    const text = renaming.text.trim();
+    // An emptied title is an editing state, not a value — the same rule the board title follows.
+    if (text) useStore.getState().setTaskText(renaming.id, text);
+    setRenaming(null);
+  };
   const [dropOn, setDropOn] = useState<{ id: ID; place: 'before' | 'after' } | null>(null);
   const memberName = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
   const sprintName = useMemo(() => new Map(sprints.map((s) => [s.id, s.label])), [sprints]);
@@ -73,7 +114,13 @@ export function WorkTable({
   };
 
   return (
-    <div className="work-table" role="table">
+    <div
+      className="work-table"
+      role="table"
+      ref={rootRef}
+      tabIndex={0}
+      onKeyDown={(e) => { if (!renaming) onKeyDown(e); }}
+    >
       <div className="wt-head" role="row">
         <span className="wt-cb" />
         <button type="button" className={`wt-th ${sort.key === 'title' ? 'is-sorted' : ''}`} onClick={() => onSort('title')}>
@@ -105,8 +152,10 @@ export function WorkTable({
                 <div
                   key={t.id}
                   role="row"
-                  className={`wt-row ${selection.has(t.id) ? 'is-selected' : ''} ${done ? 'is-done' : ''}`}
+                  data-row={t.id}
+                  className={`wt-row ${selection.has(t.id) ? 'is-selected' : ''} ${done ? 'is-done' : ''} ${cursor?.row === t.id ? 'is-cursor' : ''}`}
                   data-drop={dropOn?.id === t.id ? dropOn.place : undefined}
+                  onMouseDown={() => setCursor({ row: t.id, col: 0 })}
                   draggable={canReorder && editable}
                   onDragStart={(e) => { setDragId(t.id); e.dataTransfer.effectAllowed = 'move'; }}
                   onDragEnd={() => { setDragId(null); setDropOn(null); }}
@@ -151,9 +200,17 @@ export function WorkTable({
                   </span>
 
                   <span
-                    className="wt-title-cell"
+                    className={`wt-title-cell ${cursor?.row === t.id && cursor.col === 0 ? 'is-focused' : ''}`}
+                    data-col="0"
                     style={depth ? { paddingLeft: depth * 18 } : undefined}
                   >
+                    {/* A sub-task says so at the far left, so it reads as nested even where the
+                        indent alone is ambiguous — a long title, a narrow window, a phone. */}
+                    {depth > 0 && (
+                      <svg className="wt-sub-mark" viewBox="0 0 16 16" width="11" height="11" aria-label="sub-task">
+                        <path d="M4 2v6.5a2 2 0 0 0 2 2h6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    )}
                     {nesting && (kids
                       ? (
                         <button
@@ -169,16 +226,33 @@ export function WorkTable({
                         </button>
                       )
                       : <span className="wt-twisty is-leaf" aria-hidden />)}
-                    <button type="button" className="wt-title" onClick={() => onOpenTask(t.id)} title="Open task">
-                      {t.text || <em className="muted">(empty)</em>}
-                    </button>
+                    {renaming?.id === t.id ? (
+                      <input
+                        className="wt-title-input"
+                        value={renaming.text}
+                        autoFocus
+                        aria-label="Task title"
+                        onChange={(e) => setRenaming({ id: t.id, text: e.target.value })}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                          if (e.key === 'Escape') { e.preventDefault(); setRenaming(null); }
+                          e.stopPropagation(); // the table's own keys must not fire while typing
+                        }}
+                      />
+                    ) : (
+                      <button type="button" className="wt-title" onClick={() => onOpenTask(t.id)} title="Open task">
+                        {t.text || <em className="muted">(empty)</em>}
+                      </button>
+                    )}
                   </span>
 
-                  {COLUMNS.map((c) => (
+                  {COLUMNS.map((c, ci) => (
                     <button
                       key={c.key}
                       type="button"
-                      className="wt-cell"
+                      data-col={ci + 1}
+                      className={`wt-cell ${cursor?.row === t.id && cursor.col === ci + 1 ? 'is-focused' : ''}`}
                       disabled={!editable || !c.field}
                       onClick={(e) => {
                         const ids = selection.has(t.id) ? [...selection] : [t.id];
@@ -205,7 +279,11 @@ export function WorkTable({
       {/* The add line is the last ROW, not a field floating above the table: it is where the next
           task will actually appear, so that is where you type it. */}
       {editable && (
-        <div className="wt-row is-add" role="row">
+        <div
+          className={`wt-row is-add ${cursor?.row === 'add' ? 'is-cursor' : ''}`}
+          role="row"
+          data-add-row
+        >
           <span className="wt-cb" />
           <QuickAdd tabId={tabId} shortcut />
         </div>

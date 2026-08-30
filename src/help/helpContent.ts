@@ -1,7 +1,7 @@
 // Static reference copy for the in-board Help pane (InfoPane, kind="help"). Plain data, not user
 // content — no schema, no persistence, just code, since it's documentation rather than a document.
-// Keep this in sync with the actual command set in editor/suggestEngine.ts + editor/embeddedCommands.ts
-// when either changes — nothing enforces that automatically.
+// Keep this in sync with tasks/actions.ts — the one list of what can be done to a task —
+// when it changes. Nothing enforces that automatically.
 //
 // Content is split into three tiers, shown in this order (see InfoPane.tsx):
 //   HELP_BASICS + HELP_DETAILS — the required reading for a brand-new user: how to make a task,

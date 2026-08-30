@@ -11,11 +11,12 @@ import { TaskActionMenu } from '../common/TaskActionMenu';
 import { WorkTable } from './WorkTable';
 import { WorkBoard } from './WorkBoard';
 import { GROUPINGS, groupTasks, sortTasks, statusOfGroup, type Grouping, type Sort, type SortKey, type WorkLayout } from './workView';
-import { actionForField, type FocusField } from '../../tasks/actions';
+import { actionForField, TASK_ACTIONS, type FocusField } from '../../tasks/actions';
 import { boardTaskPath, navigate } from '../../util/router';
 import type { DraftFields } from '../../tasks/createTask';
 import type { SprintFilter } from '../TabView';
-import type { ID, Member, Sprint } from '../../types';
+import { ViewSwitcher } from './ViewSwitcher';
+import type { BoardView, ID, Member, Sprint } from '../../types';
 
 /** Shared empties. `?? []` would mint a new array each render and churn every memo below. */
 const NO_MEMBERS: Member[] = [];
@@ -34,10 +35,12 @@ function readStored<T extends string>(key: string, allowed: readonly T[], fallba
   }
 }
 
-export function BoardWork({ tabId, layout, sprintFilter = 'all' }: {
+export function BoardWork({ tabId, layout, sprintFilter = 'all', view, onViewChange }: {
   tabId: ID;
   layout: WorkLayout;
   sprintFilter?: SprintFilter;
+  view: BoardView;
+  onViewChange: (v: BoardView) => void;
 }) {
   const { list: outline } = useBoardOutline(tabId);
   const tasksById = useStore((s) => s.tasks);
@@ -134,6 +137,13 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all' }: {
     setMenu({ ids, x, y, field });
   }, []);
 
+  /** The keyboard runs the SAME actions the menu does, so the two can never disagree (§N3). */
+  const runAction = useCallback((id: string, taskId: ID) => {
+    const ctx = { ids: [taskId], tabId };
+    const action = TASK_ACTIONS.find((a) => a.id === id);
+    if (action?.enabled(ctx)) action.run?.(ctx);
+  }, [tabId]);
+
   /** Drop onto a column: set whichever field the board is grouped by. Never a reorder (§I.4). */
   const onDropOn = useCallback((taskId: ID, groupKey: string) => {
     const store = useStore.getState();
@@ -205,8 +215,9 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all' }: {
         {hiddenSubtasks > 0 && (
           <span className="muted work-note">{hiddenSubtasks} sub-task{hiddenSubtasks === 1 ? '' : 's'} hidden</span>
         )}
-        <span className="work-spacer" />
         <span className="work-count">{total} task{total === 1 ? '' : 's'} · {doneCount} done</span>
+        <span className="work-spacer" />
+        <ViewSwitcher view={view} onChange={onViewChange} />
       </div>
 
       {total === 0 && (layout === 'board' || !editable) ? (
@@ -223,6 +234,10 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all' }: {
           onSelect={onSelect}
           onOpenMenu={openMenu}
           onOpenTask={(id) => navigate(boardTaskPath(tabId, id))}
+          onNest={(id) => runAction('nest', id)}
+          onUnnest={(id) => runAction('unnest', id)}
+          onDelete={(id) => runAction('delete', id)}
+          onToggleDone={(id) => useStore.getState().toggleTaskDone(id)}
           nesting={isOutline ? {
             depthOf: (id) => taskDepth(tasksById, id),
             hasChildren: (id) => childrenOf(tasksById, id).length > 0,

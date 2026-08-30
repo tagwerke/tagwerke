@@ -13,7 +13,7 @@
 
 import { useRef, useState } from 'react';
 import { useStore } from '../store';
-import { rankMembers } from '../editor/suggestEngine';
+import { rankMembers } from '../util/members';
 import { mentionToken } from '../../shared/mentions';
 import type { ID, Member } from '../types';
 
