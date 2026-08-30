@@ -181,6 +181,8 @@ interface Actions {
   moveTask(id: ID, to: { parentTaskId?: ID | null; before?: ID; after?: ID }): void;
   setTaskStatus(id: ID, status: TaskStatus): void;
   /** Accept the offer to mark a completed parent's open sub-tasks done too (SUBTASKS_PLAN D5). */
+  /** One cascade offer covering a whole selection (NOTES_SPLIT_PLAN §N3.1). */
+  offerCascadeFor(ids: ID[]): void;
   applyCascadeDone(): void;
   /** Decline it — the parent stays done and its sub-tasks stay as they are. */
   dismissCascade(): void;
@@ -304,7 +306,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       const st = t.status ?? 'todo';
       return st !== 'done' && st !== 'cancelled';
     });
-    if (open.length) set({ pendingCascade: { taskId: id, count: open.length } });
+    if (open.length) set({ pendingCascade: { taskIds: [id], count: open.length } });
   };
 
   // On a board with requireReview set, `done` is reachable only via the in_review → done approval —
@@ -462,15 +464,40 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         // and closes an open task page — it belonged to wherever we're navigating away from.
         set({ activeTabId: id, boardView: 'doc', plannerOpen: false, openTaskId: null });
       },
+      offerCascadeFor(ids) {
+        // The bulk counterpart of offerCascade: ONE offer for the whole selection. Calling the
+        // single-task version per id would overwrite this slot N-1 times and silently lose every
+        // prompt but the last (NOTES_SPLIT_PLAN §N3.1).
+        const tasks = get().tasks;
+        const parents: ID[] = [];
+        const seen = new Set<ID>();
+        let count = 0;
+        for (const id of ids) {
+          const open = descendantsOf(tasks, id).filter((t) => {
+            const st = t.status ?? 'todo';
+            return st !== 'done' && st !== 'cancelled' && !seen.has(t.id);
+          });
+          if (!open.length) continue;
+          for (const t of open) seen.add(t.id);
+          parents.push(id);
+          count += open.length;
+        }
+        if (parents.length) set({ pendingCascade: { taskIds: parents, count } });
+      },
       applyCascadeDone() {
         const pending = get().pendingCascade;
         if (!pending) return;
         // Only the OPEN ones — a cancelled sub-task was deliberately taken off the table, and
         // sweeping it to done would rewrite that decision.
-        for (const t of descendantsOf(get().tasks, pending.taskId)) {
-          const st = t.status ?? 'todo';
-          if (st === 'done' || st === 'cancelled') continue;
-          patchTask(t.id, { status: 'done', done: true });
+        const swept = new Set<ID>();
+        for (const parent of pending.taskIds) {
+          for (const t of descendantsOf(get().tasks, parent)) {
+            const st = t.status ?? 'todo';
+            if (st === 'done' || st === 'cancelled') continue;
+            if (swept.has(t.id)) continue; // overlapping subtrees in a bulk sweep
+            swept.add(t.id);
+            patchTask(t.id, { status: 'done', done: true });
+          }
         }
         set({ pendingCascade: null });
       },

@@ -226,7 +226,9 @@ export interface RootState {
    * too (SUBTASKS_PLAN D5) until the user accepts or declines. Never blocks the parent's own status
    * change — that has already been applied by the time this is set.
    */
-  pendingCascade: { taskId: ID; count: number } | null;
+  /** One offer covering however many parents were just marked done — a bulk change must raise
+   *  a single prompt, not overwrite this slot once per task (NOTES_SPLIT_PLAN §N3.1). */
+  pendingCascade: { taskIds: ID[]; count: number } | null;
   /** Planner UI state. */
   plannerOpen: boolean;
   plannerDate: string; // 'YYYY-MM-DD' cursor
