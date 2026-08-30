@@ -44,3 +44,4 @@ knyazev.ca*
 *.sw?
 .claude/settings.local.json
 .selftest/
+.design/

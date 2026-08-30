@@ -51,6 +51,7 @@ interface Room {
   legacyDocJSON: unknown | null; // pre-CRDT content to seed from, if any
   seedClaimedBy: WebSocket | null;
   hasContent: boolean; // real content has flowed → seeding no longer needed
+  reconciledOnLoad: boolean; // the once-per-load ref repair has been started (see ydocJoin)
 }
 
 const rooms = new Map<string, Promise<Room>>();
@@ -108,6 +109,7 @@ async function loadRoom(tabId: string): Promise<Room> {
     legacyDocJSON: row?.docJSON ?? null,
     seedClaimedBy: null,
     hasContent: persistedState,
+    reconciledOnLoad: false,
   };
   // Server-local awareness state is meaningless; don't advertise the server as a peer.
   room.awareness.setLocalState(null);
@@ -486,7 +488,8 @@ function pruneRefs(doc: Y.Doc, orphans: Set<string>, remaining: Map<string, numb
  * no clients connected — the room is loaded, repaired, persisted, then released if still idle.
  */
 export async function reconcileBoard(tabId: string): Promise<void> {
-  const room = await getRoom(tabId);
+  const roomP = getRoom(tabId);
+  const room = await roomP;
   // Live ROOTS only (D3). A child ref found in the doc is now an orphan by definition and gets
   // pruned below — that is the lazy migration off the old flat model.
   const liveRows = await db
@@ -499,6 +502,16 @@ export async function reconcileBoard(tabId: string): Promise<void> {
         isNull(schema.tasks.parentTaskId),
       ),
     );
+  // The room can be torn down while that query is in flight: the last client leaving flushes the
+  // final state, drops the room from the map and destroys the Y.Doc. Carrying on would transact
+  // against a destroyed doc — which reads as EMPTY — and then persist that, writing a blank state
+  // over a good one. `rooms` no longer holding this exact promise is the signal that happened.
+  // Nothing is lost by bailing: the next open loads the room fresh and reconciles it then.
+  if (rooms.get(tabId) !== roomP) {
+    dlog('ydoc', `reconcile board=${sid(tabId)} ABORT (room torn down mid-query)`);
+    return;
+  }
+
   const liveIds = new Set(liveRows.map((r) => r.id));
   const rankById = new Map(liveRows.map((r) => [r.id, r.rank]));
   const { counts, nullIds } = collectDocRefs(room.doc);
@@ -590,6 +603,45 @@ export async function ydocJoin(tabId: string, ws: WebSocket, canWrite: boolean):
       room.seedClaimedBy = null;
     }
   }
+
+  scheduleJoinReconcile(room);
+}
+
+/**
+ * Repair this board's doc refs once per room load, triggered by the first join.
+ *
+ * The row↔ref invariant was only ever enforced where something called `reconcileBoard` explicitly:
+ * move, restore, import. Nothing called it on OPEN — so a ref that was never written (a task row
+ * created while no editor was mounted) and a ref a failed move/restore left behind were both
+ * permanent, despite the comments on those two call sites promising that "a later board-open
+ * reconcile heals it". There was no such reconcile. This is it.
+ *
+ * Two deliberate restraints:
+ *
+ *   NOT AWAITED by the join. The sync handshake has already gone out above; the repair reaches
+ *   every connected client as an ordinary doc update whenever it lands, which is what
+ *   `reconcileBoard` already relies on for the move/restore cases. Awaiting it would put a DB
+ *   round-trip in front of every board open for a repair that is almost always a no-op.
+ *
+ *   SKIPPED WHILE THE ROOM IS AWAITING A SEED. The two branches above hand exactly one client the
+ *   right to fill an empty Y.Doc from content only it has — the legacy `docJSON`, or its own
+ *   offline snapshot. Both replace the document wholesale. Reconciling first would append a ref
+ *   for every live row to the empty doc, and the seed would then land on top: every task twice.
+ *   `persistedState || hasContent` is precisely the negation of the condition those two branches
+ *   share, so this runs on every board that is not mid-seed.
+ *
+ * The flag is set BEFORE the call so two clients opening the same board at once can't both fire it.
+ * `reconcileBoard` releases an idle room when it finishes; that is safe here because the joining
+ * connection is already in `room.conns` by this point, so the room is not idle.
+ */
+function scheduleJoinReconcile(room: Room): void {
+  if (room.reconciledOnLoad) return;
+  if (!room.persistedState && !room.hasContent) return; // mid-seed; see above
+  room.reconciledOnLoad = true;
+  dlog('ydoc', `ydocJoin board=${sid(room.tabId)} → scheduling once-per-load ref reconcile`);
+  void reconcileBoard(room.tabId).catch((err) => {
+    console.error(`[ydoc] join reconcile failed for ${room.tabId}:`, err);
+  });
 }
 
 /**
