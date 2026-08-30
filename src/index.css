@@ -3453,3 +3453,19 @@ input, select, textarea { font: inherit; color: inherit; }
   padding: 0 5px;
   font-size: 0.94em;
 }
+
+/* "Make a task" over a selection in a note (NOTES_SPLIT_PLAN §I.6). */
+.selection-bubble-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-pop);
+  font-size: 12.5px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.selection-bubble-btn:hover { border-color: var(--ink); }

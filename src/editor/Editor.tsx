@@ -5,6 +5,7 @@ import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { useEffect, useMemo } from 'react';
 import { TaskMention } from './extensions/TaskMention';
 import { TaskMentionView } from './TaskMentionView';
+import { SelectionToTask } from './SelectionToTask';
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
 import { acquireYRoom, retainYRoom, releaseYRoom } from '../realtime/yProvider';
@@ -137,5 +138,10 @@ export function TabEditor({ tabId, autoFocus }: Props) {
   // node (NOTES_SPLIT_PLAN §N4). What remains is a collaborative rich-text editor, which is what
   // Yjs was ever good for.
   if (!editor) return null;
-  return <EditorContent editor={editor} className="prose-editor" />;
+  return (
+    <>
+      <EditorContent editor={editor} className="prose-editor" />
+      <SelectionToTask editor={editor} tabId={tabId} />
+    </>
+  );
 }
