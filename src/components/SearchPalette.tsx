@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
-import { MoveTaskMenu } from './common/MoveTaskMenu';
+import { TaskActionMenu } from './common/TaskActionMenu';
 import { extractDocText } from '../util/docText';
 
 interface Hit {
@@ -8,7 +8,7 @@ interface Hit {
   tabId: string;
   text: string;
   context?: string;
-  /** Task hits only — lets the row carry the "move to board" action (see MoveTaskMenu). */
+  /** Task hits only — lets the row carry the shared action menu. */
   taskId?: string;
 }
 
@@ -27,6 +27,7 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
   const projects = useStore((s) => s.projects);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const [q, setQ] = useState('');
+  const [menu, setMenu] = useState<{ taskId: string; tabId: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,11 +89,35 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
                 <span className="search-text">{h.text}</span>
                 {h.context && <span className="search-context">{h.context}</span>}
               </button>
-              {h.taskId && <MoveTaskMenu taskId={h.taskId} className="on-row" />}
+              {h.taskId && (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Task actions"
+                  title="Task actions"
+                  onClick={(e) => {
+                    const box = e.currentTarget.getBoundingClientRect();
+                    setMenu({ taskId: h.taskId!, tabId: h.tabId, x: box.left, y: box.bottom + 4 });
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden>
+                    <circle cx="3.5" cy="8" r="1.2" /><circle cx="8" cy="8" r="1.2" /><circle cx="12.5" cy="8" r="1.2" />
+                  </svg>
+                </button>
+              )}
             </div>
           ))}
         </div>
       </div>
+      {menu && (
+        <TaskActionMenu
+          ids={[menu.taskId]}
+          tabId={menu.tabId}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 }

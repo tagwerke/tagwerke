@@ -14,10 +14,8 @@ import type { Editor } from '@tiptap/react';
 import { TextSelection } from '@tiptap/pm/state';
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
-import { TaskMeta } from '../components/TaskMeta';
 import { StatusControl } from '../components/StatusControl';
-import { ActivityDrawer } from '../components/ActivityDrawer';
-import { MoveTaskMenu } from '../components/common/MoveTaskMenu';
+import { boardTaskPath, navigate } from '../util/router';
 import { consumeTaskFocus, focusEnd, peekTaskFocus } from './taskFocus';
 import { TaskTitleSuggest } from './TaskTitleSuggest';
 import { parseEmbeddedCommands } from './embeddedCommands';
@@ -87,9 +85,6 @@ export interface TaskLineProps {
 
 export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLineProps) {
   const task = useStore((s) => s.tasks[id]);
-  // Live comment count for the row's badge (COMMENTS_PLAN.md D9) — from the board payload,
-  // nudged by posts/deletes, so it never costs a fetch per row.
-  const commentCount = useStore((s) => s.commentCounts[id] ?? 0);
   const project = useStore((s) => {
     if (!task) return undefined;
     const tab = s.tabs[task.homeTabId];
@@ -97,7 +92,6 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
   });
   const toggleTaskDone = useStore((s) => s.toggleTaskDone);
   const setTaskStatus = useStore((s) => s.setTaskStatus);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const titleRef = useRef<HTMLDivElement>(null);
   // Where a drop would land, and how tall this row's own line is (the indicator is drawn against
   // the line, not the <li>, which is as tall as the whole family). Null = not a drop target now.
@@ -317,37 +311,25 @@ export function TaskLine({ id, tabId, editor, getPos, depth, children }: TaskLin
         onBlur={() => commitEmbeddedCommands(id, tabId)}
       />
       {editable ? <TaskTitleSuggest inputRef={titleRef} taskId={id} tabId={tabId} /> : null}
-      <TaskMeta taskId={id} />
-      {/* Trailing actions, revealed on row hover: move the task to another board, and its history.
-          The move lives here as well as on the card/list row so it is in the same place in every
-          view — and it is the only way to reach another board, since dragging can't leave this one. */}
-      {task && editable ? <MoveTaskMenu taskId={id} /> : null}
+      {/* The row's one destination. Until this, the Doc view was the ONLY surface with no way to
+          reach a task's page — everything else about a task lived inline on the row instead. */}
       {task ? (
-        /* ALWAYS a speech bubble, and always visible — the two things that made the first cut of
-           this unfindable. It used to show a history clock until a task had comments, which meant
-           the affordance for the FIRST comment on any task advertised the one thing it wasn't; and
-           it was hover-only, so on a phone it wasn't there at all. The change log lives behind the
-           same button, one step further in, which is the right depth for it. */
         <button
           type="button"
-          className={`icon-btn task-activity-btn ${commentCount ? 'has-comments' : ''}`}
+          className="icon-btn task-row-open"
           contentEditable={false}
-          aria-label={commentCount ? `Comments — ${commentCount === 1 ? '1 comment' : `${commentCount} comments`}` : 'Comment on this task'}
-          title={commentCount ? `${commentCount === 1 ? '1 comment' : `${commentCount} comments`} — click to read` : 'Comment · history'}
-          onClick={() => setHistoryOpen(true)}
+          aria-label="Open task"
+          title="Open task"
+          onClick={() => navigate(boardTaskPath(tabId, id))}
         >
-          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden>
-            <path
-              d="M2.2 4.2c0-.9.7-1.6 1.6-1.6h8.4c.9 0 1.6.7 1.6 1.6v5c0 .9-.7 1.6-1.6 1.6H6.6L3.4 13.2v-2.4h-.8c-.2 0-.4-.2-.4-.4z"
-              fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"
-            />
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
+            <path d="M6 3h7v7M13 3L4 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          {commentCount > 0 && <span className="task-comment-count">{commentCount}</span>}
         </button>
       ) : null}
-      {historyOpen && task ? (
-        <ActivityDrawer kind="task" id={id} boardId={task.homeTabId} title={task.text || 'task'} onClose={() => setHistoryOpen(false)} />
-      ) : null}
+      {/* The comment bubble and the change log left the row with everything else (§N3): both
+          live on the task's page now, interleaved, which is the right depth for them. What the row
+          keeps is the one thing it never had — a way to get there. */}
       {children}
     </li>
   );

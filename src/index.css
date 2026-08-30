@@ -3407,3 +3407,16 @@ input, select, textarea { font: inherit; color: inherit; }
   .work-board { flex-direction: column; }
   .wb-col { width: 100%; }
 }
+
+/* The row's two trailing affordances, after the strip (NOTES_SPLIT_PLAN §N3). */
+.task-row-menu, .task-row-open { opacity: 0; flex-shrink: 0; }
+.task-row:hover .task-row-menu,
+.task-row:hover .task-row-open,
+.task-item:hover .task-row-open,
+.task-row-menu:focus-visible,
+.task-row-open:focus-visible { opacity: 0.75; }
+.task-row-menu:hover, .task-row-open:hover { opacity: 1; }
+/* On touch there is no hover to reveal them, so they are simply always there. */
+@media (hover: none) {
+  .task-row-menu, .task-row-open { opacity: 0.6; }
+}
