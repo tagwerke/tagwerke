@@ -10,8 +10,6 @@
 import { nanoid } from 'nanoid';
 import { siblingsOf, useStore } from '../store';
 import { rankAfter, rankBetween } from '../../shared/rank';
-import { getEditor } from '../editor/registry';
-import { insertRefAfter } from '../editor/docRefs';
 import type { ID, TaskStatus } from '../types';
 
 /** Fields a `/command`, `@mention` or `!` sigil set on the line before it became a task. */
@@ -43,14 +41,7 @@ function gateStatus(tabId: ID, status: TaskStatus | undefined): TaskStatus | und
   return useStore.getState().tabs[tabId]?.settings?.requireReview ? 'in_review' : status;
 }
 
-/**
- * Create a task on a board and return its id.
- *
- * The document ref is written only when a Doc view for this board is actually mounted. When it is
- * not — the common case once the Table is the default — the row simply has no ref, and the
- * board-open reconcile (§N1.4, `server/realtime/ydoc.ts`) writes one the next time someone opens
- * the document. Both halves disappear in §N5 along with the refs themselves.
- */
+/** Create a task on a board and return its id. */
 export function createTaskInBoard(tabId: ID, opts: CreateTaskOptions): ID {
   const store = useStore.getState();
   const { text, fields, parentTaskId, after } = opts;
@@ -80,12 +71,6 @@ export function createTaskInBoard(tabId: ID, opts: CreateTaskOptions): ID {
     ...(fields?.priority !== undefined ? { priority: fields.priority ?? undefined } : {}),
     ...(fields?.assigneeId !== undefined ? { assigneeId: fields.assigneeId ?? undefined } : {}),
   });
-
-  // Only a ROOT has a slot in the prose (SUBTASKS_PLAN D2), and only if the doc is on screen.
-  if (!parentTaskId) {
-    const editor = getEditor(tabId);
-    if (editor?.isEditable) insertRefAfter(editor, anchor?.id ?? sibs[sibs.length - 1]?.id ?? null, id);
-  }
 
   return id;
 }

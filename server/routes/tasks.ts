@@ -9,7 +9,6 @@ import { lastKnownTitle, stateAsOf } from '../lib/taskHistory.ts';
 import { notify } from '../lib/notify.ts';
 import { boardChannel, publish } from '../lib/bus.ts';
 import { taskDTO } from '../lib/assembleState.ts';
-import { reconcileBoard } from '../realtime/ydoc.ts';
 import { isValidRank, rankAfter } from '../../shared/rank.ts';
 import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
 
@@ -474,10 +473,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
    *      constraint is ON UPDATE NO ACTION, which defers its check to the end of the statement, so
    *      parent and children land on the new board together. Two statements would fail whichever
    *      order they ran in.
-   *   2. THE DOC REFS FOLLOW. The document holds a ref for ROOT tasks only (D2), and the task is
-   *      leaving one document for another. `reconcileBoard` on each side is exactly the repair:
-   *      the source prunes a ref whose row is no longer its own, the target inserts one at the
-   *      task's rank. Same call the Trash restore uses.
+   *   2. NOTHING FOLLOWS IN THE DOCUMENTS. This step used to reconcile refs on both boards,
+   *      because a document owned a slot per root task. Since the notes split it does not: a note
+   *      may mention a task, and a mention that now points at another board's task still resolves
+   *      to the same task, which is what a reference is for.
    *   3. ASSIGNMENTS THAT NO LONGER HOLD ARE DROPPED. assignee/reviewer are constrained to members
    *      of the task's home board (SPEC §5), and the destination has a different roster. Rather
    *      than refuse the move (the assignment is the incidental detail; the move is the intent) we
@@ -550,16 +549,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           updatedAt: new Date(),
         })
         .where(and(inArray(schema.tasks.id, ids), isNull(schema.tasks.deletedAt)));
-
-      // Both documents are now wrong in opposite directions. Best-effort, like restore: a failure
-      // here leaves rows that are correct and a doc that a later board-open reconcile heals.
-      for (const tabId of [fromTabId, toTabId]) {
-        try {
-          await reconcileBoard(tabId);
-        } catch (err) {
-          req.log.error({ err, tabId }, 'move: board reconcile failed');
-        }
-      }
 
       const moved = await db.select().from(schema.tasks).where(inArray(schema.tasks.id, ids));
       const dtos = moved.map(taskDTO);
@@ -731,18 +720,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      // The row is live again, but the doc lost its ref when the task was deleted. Reconcile
-      // re-adds the id-only ref so the task reappears on the board (TASKS_AS_ENTITIES.md P4 —
-      // this is THE restore fix). Only roots get a ref now (D2), so a restored SUB-task reappears
-      // by virtue of its parent's node view rendering it, not by regaining a node of its own.
-      // Best-effort: if it fails, a later board-open reconcile heals it.
-      if (req.boardScope) {
-        try {
-          await reconcileBoard(req.boardScope);
-        } catch (err) {
-          req.log.error({ err, tabId: req.boardScope }, 'restore: board reconcile failed');
-        }
-      }
+      // A restored task needs nothing done to any document: the views read rows, and a note that
+      // mentioned it resolves again the moment the row is back. This used to re-insert a doc ref,
+      // which was the whole restore fix when the document owned a slot per task.
       req.auditHandled = true;
       recordAudit({
         actorId: req.user!.id, action: 'task_restore', targetType: 'task', targetId: id,

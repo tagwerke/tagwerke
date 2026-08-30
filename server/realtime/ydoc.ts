@@ -51,7 +51,6 @@ interface Room {
   legacyDocJSON: unknown | null; // pre-CRDT content to seed from, if any
   seedClaimedBy: WebSocket | null;
   hasContent: boolean; // real content has flowed → seeding no longer needed
-  reconciledOnLoad: boolean; // the once-per-load ref repair has been started (see ydocJoin)
 }
 
 const rooms = new Map<string, Promise<Room>>();
@@ -109,7 +108,6 @@ async function loadRoom(tabId: string): Promise<Room> {
     legacyDocJSON: row?.docJSON ?? null,
     seedClaimedBy: null,
     hasContent: persistedState,
-    reconciledOnLoad: false,
   };
   // Server-local awareness state is meaningless; don't advertise the server as a peer.
   room.awareness.setLocalState(null);
@@ -223,71 +221,11 @@ async function writeState(room: Room): Promise<boolean> {
   dlog('ydoc', `writeState board=${sid(room.tabId)} SAVED ydocState=${ydocState.length}ch`);
   room.persistedState = true;
 
-  // Additive existence backfill: guarantee a task ROW exists for every task NODE in the doc. Rows
-  // are otherwise created only by the client's store→REST diff, which can silently fail (offline,
-  // dropped request) — leaving a task visible in the board but missing from Kanban/My-Tasks. This
-  // is the mirror of the durability fix and closes the node→row gap from the single authority that
-  // already holds the doc. ON CONFLICT DO NOTHING makes it purely additive: it never touches an
-  // existing row (so it can't overwrite metadata or resurrect a soft-deleted task) and never
-  // deletes. Best-effort — a failure here must not fail the doc persist above.
-  if (docJSON) {
-    try {
-      await backfillRowsForDoc(room.tabId, docJSON);
-    } catch (err) {
-      console.error(`[ydoc] row backfill failed for ${room.tabId}:`, err);
-    }
-  }
+  // The row backfill that used to run here is gone with the task nodes it read (NOTES_SPLIT_PLAN
+  // §N5). A document holds prose and read-only mentions now, so there is no node that could imply
+  // a row that does not exist — and `docJSON` is only ever a render snapshot for previews and
+  // search, never a source of truth about tasks.
   return true;
-}
-
-/** Concatenated text of a taskItem's own first paragraph (its title line, excluding subtasks). */
-function taskItemText(taskItem: { content?: unknown[] }): string {
-  const para = (taskItem.content ?? []).find(
-    (c): c is { type: string; content?: unknown[] } =>
-      !!c && typeof c === 'object' && (c as { type?: string }).type === 'paragraph',
-  );
-  let text = '';
-  const walk = (nodes: unknown[]) => {
-    for (const n of nodes) {
-      const node = n as { type?: string; text?: string; content?: unknown[] };
-      if (node.type === 'text' && typeof node.text === 'string') text += node.text;
-      else if (Array.isArray(node.content)) walk(node.content);
-    }
-  };
-  if (para?.content) walk(para.content);
-  return text;
-}
-
-/** Walk ProseMirror JSON collecting every taskItem's {id, text}. */
-function collectTaskNodes(node: unknown, out: { id: string; text: string }[] = []): { id: string; text: string }[] {
-  if (!node || typeof node !== 'object') return out;
-  const n = node as { type?: string; attrs?: { id?: string }; content?: unknown[] };
-  if (n.type === 'taskItem' && n.attrs?.id) out.push({ id: n.attrs.id, text: taskItemText(n) });
-  if (Array.isArray(n.content)) for (const c of n.content) collectTaskNodes(c, out);
-  return out;
-}
-
-/** Insert a row for any doc task node that lacks one. Non-empty titles only (transient empty task
- *  lines aren't real tasks yet); the client creates those once typed. Idempotent + additive.
- *  Every doc node is a ROOT now (D2), so a null parent is right, and each gets an append rank so
- *  a row rescued here still lands in a defined place rather than sorting last forever. */
-async function backfillRowsForDoc(tabId: string, docJSON: unknown): Promise<void> {
-  const nodes = collectTaskNodes(docJSON).filter((t) => t.text.trim().length > 0);
-  if (!nodes.length) return;
-  const lastRoot = (
-    await db
-      .select({ rank: schema.tasks.rank })
-      .from(schema.tasks)
-      .where(and(eq(schema.tasks.homeTabId, tabId), isNull(schema.tasks.parentTaskId), isNotNull(schema.tasks.rank)))
-      .orderBy(desc(schema.tasks.rank))
-      .limit(1)
-  )[0];
-  let rank = lastRoot?.rank ?? null;
-  const values = nodes.map((t) => {
-    rank = rankAfter(rank);
-    return { id: t.id, homeTabId: tabId, text: t.text, rank };
-  });
-  await db.insert(schema.tasks).values(values).onConflictDoNothing({ target: schema.tasks.id });
 }
 
 async function persist(room: Room): Promise<void> {
@@ -302,7 +240,7 @@ async function persist(room: Room): Promise<void> {
       room.persistRetries = 0;
     } else {
       // The tabs row hasn't been created yet (POST /api/tabs still in flight on the outbox). Retry
-      // with backoff so the document lands the moment the row exists — this is what makes a brand-new
+      // with backoff so the document lands the moment the row exists â€” this is what makes a brand-new
       // board's first editing session durable instead of vanishing on the first refresh.
       schedulePersistRetry(room);
     }
@@ -356,195 +294,6 @@ export async function flushAllYdocRooms(): Promise<number> {
 // its parent's node view renders it from the rows. So the same sweep that has always pruned stale
 // refs now also prunes the child refs left over from the old flat model — every board migrates
 // itself the first time someone opens it, with no script and no rewrite of the Yjs bytes.
-
-/**
- * Every taskItem in the board's Y.Doc, as id → occurrence count. Idless nodes are counted
- * separately: they are unrepairable strays (no id means nothing to look up, so no row can ever be
- * made for them and no id can ever match them) and the walkers that used to `if (id)` past them
- * left them in the doc forever as blank rows. They get pruned.
- */
-function collectDocRefs(doc: Y.Doc): { counts: Map<string, number>; nullIds: number } {
-  const counts = new Map<string, number>();
-  let nullIds = 0;
-  const walk = (node: Y.XmlElement | Y.XmlFragment): void => {
-    for (let i = 0; i < node.length; i++) {
-      const child = node.get(i);
-      if (!(child instanceof Y.XmlElement)) continue;
-      if (child.nodeName === 'taskItem') {
-        const id = child.getAttribute('id');
-        if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
-        else nullIds++;
-      } else {
-        walk(child);
-      }
-    }
-  };
-  walk(doc.getXmlFragment(FRAGMENT));
-  return { counts, nullIds };
-}
-
-function makeRef(id: string): Y.XmlElement {
-  const el = new Y.XmlElement('taskItem');
-  el.setAttribute('id', id);
-  return el;
-}
-
-/** Append id-only task-ref atoms at the end of the doc (into the trailing taskList, or a new one). */
-function appendRefs(doc: Y.Doc, ids: string[]): void {
-  const frag = doc.getXmlFragment(FRAGMENT);
-  const last = frag.length ? frag.get(frag.length - 1) : null;
-  if (last instanceof Y.XmlElement && last.nodeName === 'taskList') {
-    last.push(ids.map(makeRef));
-  } else {
-    const list = new Y.XmlElement('taskList');
-    list.push(ids.map(makeRef));
-    frag.push([list]);
-  }
-}
-
-/** Every taskItem in the doc, in document order, with the container and index it sits at. */
-function locateRefs(doc: Y.Doc): { container: Y.XmlElement | Y.XmlFragment; index: number; id: string }[] {
-  const out: { container: Y.XmlElement | Y.XmlFragment; index: number; id: string }[] = [];
-  const walk = (node: Y.XmlElement | Y.XmlFragment): void => {
-    for (let i = 0; i < node.length; i++) {
-      const child = node.get(i);
-      if (!(child instanceof Y.XmlElement)) continue;
-      if (child.nodeName === 'taskItem') {
-        const id = child.getAttribute('id');
-        if (id) out.push({ container: node, index: i, id });
-      } else {
-        walk(child);
-      }
-    }
-  };
-  walk(doc.getXmlFragment(FRAGMENT));
-  return out;
-}
-
-/**
- * Put a missing root ref back at its RANK position among the refs already in the doc, instead of at
- * the end. Restoring a task from the Trash used to drop it at the bottom of the board no matter
- * where it had been; with an order that actually exists in the data we can put it back properly.
- * Falls back to appending when nothing sorts after it (it belongs last) or when ranks are missing.
- */
-function insertRefByRank(doc: Y.Doc, id: string, rank: string | null, rankById: Map<string, string | null>): void {
-  if (rank) {
-    for (const ref of locateRefs(doc)) {
-      const other = rankById.get(ref.id);
-      if (other != null && other > rank) {
-        ref.container.insert(ref.index, [makeRef(id)]);
-        return;
-      }
-    }
-  }
-  appendRefs(doc, [id]);
-}
-
-/**
- * Remove task-ref atoms the invariant says shouldn't be there, plus any taskList the removal
- * empties. Three classes:
- *   - no id           — an unrepairable stray (see collectDocRefs);
- *   - id in `orphans` — the backing row is gone or trashed;
- *   - a DUPLICATE id  — keep the earliest occurrence, drop the rest.
- * The de-dup belongs HERE and not in SyncPlugin, which resolves a duplicate id by minting a fresh
- * one — that turns one task moved by two people into a phantom second task. Yjs has no atomic
- * move (a move is delete+insert), so concurrent drags produce exactly this duplicate.
- * Walks in reverse so deletions don't shift indices still to be visited; since reverse order meets
- * the LAST occurrence first, decrementing `remaining` leaves the earliest one standing.
- */
-function pruneRefs(doc: Y.Doc, orphans: Set<string>, remaining: Map<string, number>): void {
-  const frag = doc.getXmlFragment(FRAGMENT);
-  const walk = (node: Y.XmlElement | Y.XmlFragment): void => {
-    for (let i = node.length - 1; i >= 0; i--) {
-      const child = node.get(i);
-      if (!(child instanceof Y.XmlElement)) continue;
-      if (child.nodeName !== 'taskItem') {
-        walk(child);
-        continue;
-      }
-      const id = child.getAttribute('id');
-      if (!id || orphans.has(id)) {
-        node.delete(i, 1);
-        continue;
-      }
-      const n = remaining.get(id) ?? 1;
-      if (n > 1) {
-        remaining.set(id, n - 1);
-        node.delete(i, 1);
-      }
-    }
-  };
-  walk(frag);
-  for (let i = frag.length - 1; i >= 0; i--) {
-    const child = frag.get(i);
-    if (child instanceof Y.XmlElement && child.nodeName === 'taskList' && child.length === 0) frag.delete(i, 1);
-  }
-}
-
-/**
- * Reconcile a board's doc refs with its live task rows: append a ref for every live row missing one
- * (restore / dropped create), prune every ref whose row is gone or trashed. Mutates the in-memory
- * Y.Doc (so connected editors get the change live over the socket) and persists. Safe to call with
- * no clients connected — the room is loaded, repaired, persisted, then released if still idle.
- */
-export async function reconcileBoard(tabId: string): Promise<void> {
-  const roomP = getRoom(tabId);
-  const room = await roomP;
-  // Live ROOTS only (D3). A child ref found in the doc is now an orphan by definition and gets
-  // pruned below — that is the lazy migration off the old flat model.
-  const liveRows = await db
-    .select({ id: schema.tasks.id, rank: schema.tasks.rank })
-    .from(schema.tasks)
-    .where(
-      and(
-        eq(schema.tasks.homeTabId, tabId),
-        isNull(schema.tasks.deletedAt),
-        isNull(schema.tasks.parentTaskId),
-      ),
-    );
-  // The room can be torn down while that query is in flight: the last client leaving flushes the
-  // final state, drops the room from the map and destroys the Y.Doc. Carrying on would transact
-  // against a destroyed doc — which reads as EMPTY — and then persist that, writing a blank state
-  // over a good one. `rooms` no longer holding this exact promise is the signal that happened.
-  // Nothing is lost by bailing: the next open loads the room fresh and reconciles it then.
-  if (rooms.get(tabId) !== roomP) {
-    dlog('ydoc', `reconcile board=${sid(tabId)} ABORT (room torn down mid-query)`);
-    return;
-  }
-
-  const liveIds = new Set(liveRows.map((r) => r.id));
-  const rankById = new Map(liveRows.map((r) => [r.id, r.rank]));
-  const { counts, nullIds } = collectDocRefs(room.doc);
-
-  // Sorted so a batch of restores lands in the right order relative to each other, not just
-  // relative to what was already there.
-  const missing = liveRows
-    .filter((r) => !counts.has(r.id))
-    .sort((a, b) => (a.rank && b.rank ? (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0) : a.rank ? -1 : b.rank ? 1 : 0));
-  const orphans = new Set([...counts.keys()].filter((id) => !liveIds.has(id)));
-  // Ids appearing more than once; pruneRefs drops all but the earliest of each.
-  const remaining = new Map([...counts].filter(([, n]) => n > 1));
-  const strays = nullIds > 0 || remaining.size > 0;
-
-  if (missing.length || orphans.size || strays) {
-    Y.transact(room.doc, () => {
-      for (const m of missing) insertRefByRank(room.doc, m.id, m.rank, rankById);
-      if (orphans.size || strays) pruneRefs(room.doc, orphans, remaining);
-    });
-    // doc.on('update') already fanned the change to connected editors; make sure it's durable now.
-    await persist(room);
-  }
-
-  // If nobody is editing this board, don't leave the room resident in memory.
-  if (room.conns.size === 0) {
-    if (room.persistTimer) {
-      clearTimeout(room.persistTimer);
-      room.persistTimer = null;
-    }
-    rooms.delete(tabId);
-    room.doc.destroy();
-  }
-}
 
 // ── Public API (called from ws.ts) ────────────────────────────────────────────────────────
 
@@ -603,45 +352,6 @@ export async function ydocJoin(tabId: string, ws: WebSocket, canWrite: boolean):
       room.seedClaimedBy = null;
     }
   }
-
-  scheduleJoinReconcile(room);
-}
-
-/**
- * Repair this board's doc refs once per room load, triggered by the first join.
- *
- * The row↔ref invariant was only ever enforced where something called `reconcileBoard` explicitly:
- * move, restore, import. Nothing called it on OPEN — so a ref that was never written (a task row
- * created while no editor was mounted) and a ref a failed move/restore left behind were both
- * permanent, despite the comments on those two call sites promising that "a later board-open
- * reconcile heals it". There was no such reconcile. This is it.
- *
- * Two deliberate restraints:
- *
- *   NOT AWAITED by the join. The sync handshake has already gone out above; the repair reaches
- *   every connected client as an ordinary doc update whenever it lands, which is what
- *   `reconcileBoard` already relies on for the move/restore cases. Awaiting it would put a DB
- *   round-trip in front of every board open for a repair that is almost always a no-op.
- *
- *   SKIPPED WHILE THE ROOM IS AWAITING A SEED. The two branches above hand exactly one client the
- *   right to fill an empty Y.Doc from content only it has — the legacy `docJSON`, or its own
- *   offline snapshot. Both replace the document wholesale. Reconciling first would append a ref
- *   for every live row to the empty doc, and the seed would then land on top: every task twice.
- *   `persistedState || hasContent` is precisely the negation of the condition those two branches
- *   share, so this runs on every board that is not mid-seed.
- *
- * The flag is set BEFORE the call so two clients opening the same board at once can't both fire it.
- * `reconcileBoard` releases an idle room when it finishes; that is safe here because the joining
- * connection is already in `room.conns` by this point, so the room is not idle.
- */
-function scheduleJoinReconcile(room: Room): void {
-  if (room.reconciledOnLoad) return;
-  if (!room.persistedState && !room.hasContent) return; // mid-seed; see above
-  room.reconciledOnLoad = true;
-  dlog('ydoc', `ydocJoin board=${sid(room.tabId)} → scheduling once-per-load ref reconcile`);
-  void reconcileBoard(room.tabId).catch((err) => {
-    console.error(`[ydoc] join reconcile failed for ${room.tabId}:`, err);
-  });
 }
 
 /**

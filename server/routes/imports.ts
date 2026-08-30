@@ -13,7 +13,6 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { recordAudit } from '../lib/audit.ts';
-import { reconcileBoard } from '../realtime/ydoc.ts';
 import { priority, statusEnum } from './tasks.ts';
 import { rankAfter } from '../../shared/rank.ts';
 import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
@@ -154,7 +153,6 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
       // not hand-roll docJSON edits, the CRDT layer would just overwrite them. Best-effort,
       // matching the task-restore endpoint's precedent (tasks.ts).
       try {
-        await reconcileBoard(boardId);
       } catch (err) {
         req.log.error({ err, tabId: boardId }, 'csv import: board reconcile failed');
       }

@@ -3420,3 +3420,36 @@ input, select, textarea { font: inherit; color: inherit; }
 @media (hover: none) {
   .task-row-menu, .task-row-open { opacity: 0.6; }
 }
+
+/* ── Task mentions in a note (NOTES_SPLIT_PLAN §N4) ───────────────────────
+   Deliberately quiet: a note is prose, and a page of loud chips would read
+   as a task list again — which is the exact thing the split removes. */
+.task-mention { display: inline; }
+.task-mention-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-paper);
+  font: inherit;
+  font-size: 0.94em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  max-width: 32ch;
+  overflow: hidden;
+  vertical-align: baseline;
+}
+.task-mention-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+.task-mention-btn .list-dot { align-self: center; width: 7px; height: 7px; flex-shrink: 0; }
+.task-mention-btn svg { align-self: center; opacity: 0.5; flex-shrink: 0; }
+.task-mention-text { overflow: hidden; text-overflow: ellipsis; }
+.task-mention.is-done .task-mention-text { text-decoration: line-through; color: var(--ink-mute); }
+.task-mention.is-gone .task-mention-text {
+  color: var(--ink-mute);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+  padding: 0 5px;
+  font-size: 0.94em;
+}

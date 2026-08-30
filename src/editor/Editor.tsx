@@ -3,13 +3,8 @@ import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { useEffect, useMemo } from 'react';
-import { TaskItem } from './extensions/TaskItem';
-import { TaskList } from './extensions/TaskList';
-import { SyncPlugin } from './extensions/SyncPlugin';
-import { TaskNav } from './extensions/TaskNav';
-import { EmptyLineAdd } from './extensions/EmptyLineAdd';
-import { TaskDropTarget } from './extensions/TaskDropTarget';
-import { TaskItemView } from './TaskItemView';
+import { TaskMention } from './extensions/TaskMention';
+import { TaskMentionView } from './TaskMentionView';
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
 import { acquireYRoom, retainYRoom, releaseYRoom } from '../realtime/yProvider';
@@ -23,12 +18,15 @@ interface Props {
   autoFocus?: boolean;
 }
 
-/** True if a stored ProseMirror doc holds anything worth recovering (text or a task ref). Guards
- *  the recovery seed so an empty local snapshot never triggers a pointless (or racy) re-seed. */
+/** True if a stored ProseMirror doc holds anything worth recovering (text or a task mention).
+ *  Guards the recovery seed so an empty local snapshot never triggers a pointless (or racy)
+ *  re-seed. `taskMention` is checked as well as text because a note can legitimately be nothing
+ *  but a list of mentions — after the notes split that is what a converted task list becomes, and
+ *  reading such a board as "empty" would refuse to recover the one document most worth recovering. */
 function docHasContent(json: unknown): boolean {
   const node = json as { type?: string; text?: string; content?: unknown[] } | null;
   if (!node || typeof node !== 'object') return false;
-  if (node.type === 'taskItem') return true;
+  if (node.type === 'taskMention') return true;
   if (node.type === 'text' && (node.text ?? '').length > 0) return true;
   return Array.isArray(node.content) && node.content.some(docHasContent);
 }
@@ -72,19 +70,11 @@ export function TabEditor({ tabId, autoFocus }: Props) {
           heading: { levels: [1, 2, 3] },
           undoRedo: false, // Collaboration supplies Yjs-based undo/redo instead
         }),
-        TaskList,
-        TaskItem.extend({
+        TaskMention.extend({
           addNodeView() {
-            // stopEvent: the title lives in a contentEditable widget inside this atom's node view;
-            // ProseMirror must NOT handle its keyboard/selection (the widget owns them). See
-            // TaskItemView + TASKS_AS_ENTITIES.md P2.
-            return ReactNodeViewRenderer(TaskItemView, { stopEvent: () => true });
+            return ReactNodeViewRenderer(TaskMentionView);
           },
-        }).configure({ tabId }),
-        SyncPlugin.configure({ tabId }),
-        TaskNav,
-        EmptyLineAdd,
-        TaskDropTarget,
+        }),
         Collaboration.configure({ document: doc, field: 'default' }),
         CollaborationCaret.configure({
           provider,
@@ -142,8 +132,10 @@ export function TabEditor({ tabId, autoFocus }: Props) {
     });
   }, [editor, provider, recoverySource]);
 
-  // The @/slash suggestion engine now lives per-title-widget (TaskTitleSuggest, rendered by
-  // TaskItemView), since the title is a contentEditable bound to the entity — not ProseMirror text.
+  // No task machinery left: the document holds prose and read-only mentions, so the sync plugin,
+  // the drag/drop target, the task navigation and the "- " input rule all went with the taskItem
+  // node (NOTES_SPLIT_PLAN §N4). What remains is a collaborative rich-text editor, which is what
+  // Yjs was ever good for.
   if (!editor) return null;
   return <EditorContent editor={editor} className="prose-editor" />;
 }

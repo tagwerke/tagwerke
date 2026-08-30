@@ -77,8 +77,13 @@ export function TaskTitleSuggest({ inputRef, taskId, tabId }: { inputRef: React.
   const [highlight, setHighlight] = useState(0);
   const modeRef = useRef<Mode | null>(null);
   const hlRef = useRef(0);
-  modeRef.current = mode;
-  hlRef.current = highlight;
+  // Mirrored into refs so the capture-phase key handler — registered once, below — reads the
+  // CURRENT popup state rather than the values captured when it was attached. Written in an
+  // effect, not during render, which is where a ref write is actually allowed.
+  useEffect(() => {
+    modeRef.current = mode;
+    hlRef.current = highlight;
+  }, [mode, highlight]);
 
   useEffect(() => {
     const el = inputRef.current;
