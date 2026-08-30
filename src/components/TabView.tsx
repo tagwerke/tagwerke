@@ -5,16 +5,12 @@ import { hexToRgba } from '../util/color';
 import { usePresence } from '../realtime/usePresence';
 import { Avatar } from './common/Avatar';
 import { BoardPanel } from './BoardPanel';
-import { BoardList } from './BoardList';
-import { BoardKanban } from './BoardKanban';
-import { BoardCalendar } from './BoardCalendar';
-import { SprintsPage } from './SprintsPage';
+import { BoardWork } from './board/BoardWork';
 import { InfoPane } from './InfoPane';
 import { useHelpBadge } from '../help/useHelpBadge';
-import type { BoardView, ID } from '../types';
+import { asBoardView, BOARD_VIEWS, type BoardView, type ID } from '../types';
 
-const VIEW_LABEL: Record<BoardView, string> = { doc: 'Doc', list: 'List', kanban: 'Kanban', calendar: 'Calendar', sprints: 'Sprints' };
-const VIEWS: BoardView[] = ['doc', 'list', 'kanban', 'calendar', 'sprints'];
+const VIEW_LABEL: Record<BoardView, string> = { table: 'Table', kanban: 'Kanban', notes: 'Notes' };
 
 /** A sprint filter for List/Kanban: a specific sprint id, `null` for backlog, or 'all' for no
  *  filter. Not persisted — reopening a board (or the Sprints page's own "view all") clears it. */
@@ -42,6 +38,7 @@ export function TabView({ tabId }: { tabId: string }) {
   const renameTab = useStore((s) => s.renameTab);
   const setTabStarred = useStore((s) => s.setTabStarred);
   const boardView = useStore((s) => s.boardView);
+  const boardPanel = useStore((s) => s.boardPanel);
   const setBoardView = useStore((s) => s.setBoardView);
   const sprints = useStore((s) => s.sprintsByBoard[tabId]);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -82,7 +79,9 @@ export function TabView({ tabId }: { tabId: string }) {
     '--page-accent-soft': hexToRgba(accent, 0.1),
   } as React.CSSProperties;
   const isBoard = tab.type !== 'today';
-  const view = isBoard ? boardView : 'doc';
+  // Normalised, never trusted: an older client, a restored session or a stale link must land
+  // on the table rather than on a view that no longer exists (§N2.4).
+  const view: BoardView = isBoard ? asBoardView(boardView) : 'notes';
 
   return (
     <main className="tab-view tab-open" style={style}>
@@ -136,7 +135,7 @@ export function TabView({ tabId }: { tabId: string }) {
             {hasNewHelp && pane !== 'help' && <span className="help-btn-dot" aria-label="new" />}
           </button>
           <div className="seg board-views">
-            {VIEWS.map((v) => (
+            {BOARD_VIEWS.map((v) => (
               <button key={v} className={view === v ? 'on' : ''} onClick={() => setBoardView(v)}>{VIEW_LABEL[v]}</button>
             ))}
           </div>
@@ -147,25 +146,26 @@ export function TabView({ tabId }: { tabId: string }) {
         <div className="board-content">
           {pane === 'help' ? (
             <InfoPane kind="help" onClose={() => setPane(null)} />
-          ) : view === 'doc' ? (
+          ) : view === 'notes' ? (
             <div className="tab-view-body"><TabEditor tabId={tab.id} autoFocus /></div>
-          ) : view === 'list' ? (
-            <BoardList tabId={tab.id} sprintFilter={sprintFilter} />
-          ) : view === 'kanban' ? (
-            <BoardKanban tabId={tab.id} sprintFilter={sprintFilter} />
-          ) : view === 'sprints' ? (
-            <SprintsPage
-              tabId={tab.id}
-              onOpenSprint={(id) => {
-                setSprintFilter(id);
-                setBoardView('list');
-              }}
-            />
           ) : (
-            <BoardCalendar tabId={tab.id} />
+            /* Table and Kanban are one component, two layouts — so grouping, filters and the
+               scope switch survive a switch between them (§N2.1). `view` is normalised by
+               asBoardView, so there is no fall-through branch to land a deleted view in. */
+            <BoardWork tabId={tab.id} layout={view === 'kanban' ? 'board' : 'table'} sprintFilter={sprintFilter} />
           )}
         </div>
-        {isBoard && panelOpen && <BoardPanel tabId={tab.id} tabName={tab.name} />}
+        {isBoard && panelOpen && (
+          <BoardPanel
+            tabId={tab.id}
+            tabName={tab.name}
+            initialTab={boardPanel ?? undefined}
+            onOpenSprint={(id) => {
+              setSprintFilter(id);
+              setBoardView('table');
+            }}
+          />
+        )}
       </div>
     </main>
   );

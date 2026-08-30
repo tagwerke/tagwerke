@@ -154,6 +154,8 @@ interface Actions {
   deleteTab(id: ID): void;
   setActiveTab(id: ID | null): void;
   setBoardView(view: BoardView): void;
+  /** Which board-panel tab a URL asked for, or null. Cleared once the panel has opened it. */
+  setBoardPanel(panel: 'sprints' | null): void;
 
   // Sprints (SPRINTS_PLAN.md). Rename/delete/setCurrent, matching renameTab/deleteTab/
   // setTabStarred's shape: optimistic local mutate + durable-outbox persist.
@@ -276,7 +278,8 @@ function makeInitial(): RootState {
     tabOrder: [sampleTabId, personalTabId],
     starredRowOrder: [sampleTabId],
     activeTabId: null,
-    boardView: 'doc',
+    boardView: 'table',
+    boardPanel: null,
     openTaskId: null,
     pendingCascade: null,
     plannerOpen: false,
@@ -462,7 +465,7 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         // Opening a board lands on the doc view; leaving resets too (harmless). Any board /
         // space / home selection also leaves the calendar (they share the main content area)
         // and closes an open task page — it belonged to wherever we're navigating away from.
-        set({ activeTabId: id, boardView: 'doc', plannerOpen: false, openTaskId: null });
+        set({ activeTabId: id, boardView: 'table', plannerOpen: false, openTaskId: null, boardPanel: null });
       },
       offerCascadeFor(ids) {
         // The bulk counterpart of offerCascade: ONE offer for the whole selection. Calling the
@@ -503,6 +506,9 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       },
       dismissCascade() {
         set({ pendingCascade: null });
+      },
+      setBoardPanel(panel) {
+        set({ boardPanel: panel });
       },
       setBoardView(view) {
         set({ boardView: view });

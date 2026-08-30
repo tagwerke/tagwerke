@@ -3308,3 +3308,102 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-menu-swatch.status-in_review { background: #7c3aed; border-color: #7c3aed; }
 .task-menu-swatch.status-done { background: var(--accent); border-color: var(--accent); }
 .task-menu-swatch.status-cancelled { background: var(--ink-mute); border-color: var(--ink-mute); }
+
+/* ── The work view: one component, two layouts (NOTES_SPLIT_PLAN §N2) ────── */
+.board-work { display: flex; flex-direction: column; gap: 10px; padding: 14px clamp(16px, 3vw, 40px) 40px; min-width: 0; }
+.work-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.work-spacer { flex: 1; }
+.work-count, .work-note { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
+.work-select { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-mute); }
+.work-select-label { text-transform: uppercase; letter-spacing: 0.09em; font-size: 10px; }
+.work-select select {
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  background: var(--bg-elev); padding: 3px 6px; font-size: 12px; color: var(--ink);
+}
+
+/* Table. A grid per row rather than a <table> so a row stays one draggable unit. */
+.work-table { display: flex; flex-direction: column; min-width: 0; }
+.wt-head, .wt-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 96px 110px 90px 54px 92px 130px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px;
+}
+.wt-head { height: 28px; border-bottom: 1px solid var(--line-strong); }
+.wt-th {
+  border: 0; background: none; padding: 0; text-align: left;
+  font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-mute);
+}
+.wt-th.is-sorted { color: var(--ink); }
+.wt-group-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 6px 5px;
+  font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-mute);
+}
+.wt-group-n { font-family: var(--mono); }
+.wt-row { min-height: 36px; border-bottom: 1px solid var(--line); position: relative; }
+.wt-row:hover { background: var(--bg-paper); }
+.wt-row.is-selected { background: rgba(255, 106, 61, 0.08); }
+.wt-row[data-drop='before']::before,
+.wt-row[data-drop='after']::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 2px; background: var(--pop);
+}
+.wt-row[data-drop='before']::before { top: -1px; }
+.wt-row[data-drop='after']::after { bottom: -1px; }
+.wt-cb { display: flex; align-items: center; justify-content: center; }
+.wt-title-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wt-title {
+  flex: 1; min-width: 0; border: 0; background: none; padding: 0; text-align: left;
+  font: inherit; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wt-title:hover { text-decoration: underline; text-underline-offset: 2px; }
+.wt-row.is-done .wt-title { text-decoration: line-through; color: var(--ink-mute); }
+.wt-cell {
+  border: 0; background: none; padding: 3px 4px; border-radius: var(--r-sm);
+  text-align: left; min-width: 0; overflow: hidden; color: inherit;
+}
+.wt-cell:not(:disabled):hover { background: var(--line); }
+.wt-cell.is-static { padding: 3px 4px; }
+.wt-mono { font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); }
+.wt-mono.is-overdue { color: var(--pop); }
+.wt-parent {
+  border: 0; background: none; padding: 0; font-family: var(--mono); font-size: 11px;
+  color: var(--ink-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%; text-align: left;
+}
+.wt-parent:hover { color: var(--ink); }
+
+/* Board layout. */
+.work-board { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
+.wb-col { flex: 1 1 0; min-width: 200px; display: flex; flex-direction: column; gap: 8px; }
+.wb-col.is-over { background: var(--bg-paper); border-radius: var(--r-sm); }
+.wb-col-head {
+  display: flex; align-items: center; gap: 7px; padding: 0 2px 6px;
+  border-bottom: 1px solid var(--line-strong);
+  font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-mute);
+}
+.wb-col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-col-n { margin-left: auto; font-family: var(--mono); }
+.wb-col-stack { display: flex; flex-direction: column; gap: 8px; }
+.wb-col-stack .quick-add { height: 32px; margin-bottom: 0; padding: 0 9px; }
+.wb-col-stack .quick-add-hint { display: none; }
+
+/* Bulk bar: fixed, because a selection outlives the scroll position that made it. */
+.work-bulk {
+  position: sticky; bottom: 12px; align-self: center;
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px; border-radius: 999px;
+  background: var(--bg-elev); border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-pop);
+}
+.work-bulk-n { font-family: var(--mono); font-size: 11.5px; }
+
+@media (max-width: 720px) {
+  /* A table does not fit 390px; the row layout is the honest fallback (§A). */
+  .wt-head { display: none; }
+  .wt-row { grid-template-columns: 26px minmax(0, 1fr) 78px; min-height: 52px; }
+  .wt-row > .wt-cell:nth-of-type(n + 2), .wt-row > .wt-cell.is-static { display: none; }
+  .work-board { flex-direction: column; }
+  .wb-col { width: 100%; }
+}
