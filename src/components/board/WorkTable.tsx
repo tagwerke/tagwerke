@@ -71,7 +71,7 @@ export function WorkTable({
     setRenaming({ id, text: seed ?? useStore.getState().tasks[id]?.text ?? '' });
   }, []);
 
-  const { cursor, setCursor, onKeyDown } = useTableCursor(
+  const { cursor, setCursor, onKeyDown, moveRow } = useTableCursor(
     flatIds,
     {
       openCell: openCellByIndex,
@@ -101,12 +101,21 @@ export function WorkTable({
   const allOnScreen = flatIds.length > 0 && flatIds.every((id) => selection.has(id));
   const someOnScreen = flatIds.some((id) => selection.has(id));
 
-  const commitRename = (): void => {
+  /**
+   * End the rename and give the keyboard back to the table.
+   *
+   * The refocus is the whole point. Closing the input unmounts it, and focus falls to <body> —
+   * so the table's key handler stopped receiving anything and the cursor appeared frozen. A blur
+   * exit passes `refocus: false`, because there the user has deliberately clicked somewhere else
+   * and stealing focus back would fight them.
+   */
+  const endRename = (commit: boolean, refocus = true): void => {
     if (!renaming) return;
     const text = renaming.text.trim();
     // An emptied title is an editing state, not a value — the same rule the board title follows.
-    if (text) useStore.getState().setTaskText(renaming.id, text);
+    if (commit && text) useStore.getState().setTaskText(renaming.id, text);
     setRenaming(null);
+    if (refocus) rootRef.current?.focus({ preventScroll: true });
   };
   const [dropOn, setDropOn] = useState<{ id: ID; place: 'before' | 'after' } | null>(null);
   const memberName = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
@@ -273,10 +282,17 @@ export function WorkTable({
                         autoFocus
                         aria-label="Task title"
                         onChange={(e) => setRenaming({ id: t.id, text: e.target.value })}
-                        onBlur={commitRename}
+                        onBlur={() => endRename(true, false)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
-                          if (e.key === 'Escape') { e.preventDefault(); setRenaming(null); }
+                          if (e.key === 'Enter') { e.preventDefault(); endRename(true); }
+                          else if (e.key === 'Escape') { e.preventDefault(); endRename(false); }
+                          else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                            // Commit and keep going, the way leaving a line in a document does —
+                            // otherwise the only way out of an edit is a key that stops you dead.
+                            e.preventDefault();
+                            endRename(true);
+                            moveRow(e.key === 'ArrowDown' ? 1 : -1);
+                          }
                           e.stopPropagation(); // the table's own keys must not fire while typing
                         }}
                       />
@@ -288,10 +304,11 @@ export function WorkTable({
                         type="button"
                         className="wt-title"
                         title="Click to edit"
-                        onClick={() => {
-                          if (cursor?.row === t.id && cursor.col === COL.title) startRename(t.id);
-                          else putCursor(t.id, COL.title);
-                        }}
+                        // A single click only parks the cursor. It used to start the rename when
+                        // the cursor was already on this cell — but the row's own mousedown had
+                        // just put it there, so the FIRST click dropped you into an input you had
+                        // not asked for, with left/right moving a caret instead of cells.
+                        onClick={() => putCursor(t.id, COL.title)}
                         onDoubleClick={() => startRename(t.id)}
                       >
                         {t.text || <em className="muted">(empty)</em>}
