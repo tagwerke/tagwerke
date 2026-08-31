@@ -13,13 +13,13 @@ import { useStore } from '../../store';
 import { focusQuickAdd } from '../../tasks/quickAddFocus';
 import { formatDateChip, todayISO } from '../../util/dates';
 import type { FocusField } from '../../tasks/actions';
-import { COLUMNS, type ColumnDef } from './workColumns';
+import { COL, COLUMNS, columnAt, type ColumnDef } from './workColumns';
 import type { Group, Sort, SortKey } from './workView';
 import type { ID, Member, Sprint, Task } from '../../types';
 
 export function WorkTable({
-  tabId, groups, sort, onSort, selection, onSelect, onOpenMenu, onOpenTask, canReorder, onReorder,
-  onNest, onUnnest, onDelete, onToggleDone, members, sprints, tasksById, editable, nesting,
+  tabId, groups, sort, onSort, selection, onSelect, onSelectAll, onOpenMenu, onOpenTask, canReorder, onReorder,
+  onNest, onUnnest, onDelete, members, sprints, tasksById, editable, nesting,
 }: {
   tabId: ID;
   groups: Group[];
@@ -29,6 +29,8 @@ export function WorkTable({
   onSelect: (id: ID, mode: 'toggle' | 'range' | 'only') => void;
   onOpenMenu: (ids: ID[], x: number, y: number, field?: FocusField) => void;
   onOpenTask: (id: ID) => void;
+  /** Tri-state over the rows on screen: select all of them, or clear the selection. */
+  onSelectAll: (select: boolean) => void;
   /**
    * Nesting is only shown when the rows on screen are a contiguous outline — no grouping, rank
    * order. Under any other arrangement a child can appear with its parent nowhere above it, and an
@@ -38,7 +40,6 @@ export function WorkTable({
   onNest: (id: ID) => void;
   onUnnest: (id: ID) => void;
   onDelete: (id: ID) => void;
-  onToggleDone: (id: ID) => void;
   nesting: {
     depthOf: (id: ID) => number;
     hasChildren: (id: ID) => boolean;
@@ -62,24 +63,43 @@ export function WorkTable({
   const openCellByIndex = useCallback((taskId: ID, col: number) => {
     const el = rootRef.current?.querySelector(`[data-row="${CSS.escape(taskId)}"] [data-col="${col}"]`);
     const box = el?.getBoundingClientRect();
-    onOpenMenu([taskId], box?.left ?? 0, (box?.bottom ?? 0) + 4, COLUMNS[col - 1]?.field);
+    onOpenMenu([taskId], box?.left ?? 0, (box?.bottom ?? 0) + 4, columnAt(col)?.field);
   }, [onOpenMenu]);
+
+  /** Click and keyboard both land here, so a rename begins the same way whichever started it. */
+  const startRename = useCallback((id: ID, seed?: string) => {
+    setRenaming({ id, text: seed ?? useStore.getState().tasks[id]?.text ?? '' });
+  }, []);
 
   const { cursor, setCursor, onKeyDown } = useTableCursor(
     flatIds,
-    COLUMNS.length,
     {
       openCell: openCellByIndex,
-      renameStart: (id) => setRenaming({ id, text: useStore.getState().tasks[id]?.text ?? '' }),
+      renameStart: startRename,
+      openTask: onOpenTask,
+      toggleSelect: (id) => onSelect(id, 'toggle'),
       nest: onNest,
       unnest: onUnnest,
       remove: onDelete,
-      toggleDone: onToggleDone,
       focusAdd: () => focusQuickAdd(tabId),
     },
     editable,
     rootRef,
   );
+
+  /**
+   * Put the cursor where the pointer went AND give the table the keyboard. Nothing used to focus
+   * the container, so its key handler never ran and the whole cursor was unreachable
+   * (TABLE_EDITING_PLAN §0). Not relying on the clicked button taking focus: Safari does not focus
+   * buttons on click, so it has to be explicit.
+   */
+  const putCursor = useCallback((row: ID, col: number) => {
+    setCursor({ row, col });
+    rootRef.current?.focus({ preventScroll: true });
+  }, [setCursor]);
+
+  const allOnScreen = flatIds.length > 0 && flatIds.every((id) => selection.has(id));
+  const someOnScreen = flatIds.some((id) => selection.has(id));
 
   const commitRename = (): void => {
     if (!renaming) return;
@@ -116,13 +136,27 @@ export function WorkTable({
   return (
     <div
       className="work-table"
-      role="table"
+      role="grid"
+      aria-label="Tasks"
       ref={rootRef}
       tabIndex={0}
       onKeyDown={(e) => { if (!renaming) onKeyDown(e); }}
     >
       <div className="wt-head" role="row">
-        <span className="wt-cb" />
+        {/* A header of its own for column one. Without it `TITLE` was the leftmost label and read
+            as naming the checkbox column too — and a table with a bulk bar should have had
+            select-all from the start (§T3). */}
+        <span className="wt-cb">
+          {editable && (
+            <input
+              type="checkbox"
+              checked={allOnScreen}
+              ref={(el) => { if (el) el.indeterminate = someOnScreen && !allOnScreen; }}
+              aria-label={allOnScreen ? 'Clear selection' : 'Select all tasks shown'}
+              onChange={() => onSelectAll(!allOnScreen)}
+            />
+          )}
+        </span>
         <button type="button" className={`wt-th ${sort.key === 'title' ? 'is-sorted' : ''}`} onClick={() => onSort('title')}>
           Title{sort.key === 'title' && (sort.dir === 'asc' ? ' ↑' : ' ↓')}
         </button>
@@ -132,6 +166,7 @@ export function WorkTable({
           </button>
         ))}
         <span className="wt-th">Parent</span>
+        <span className="wt-th wt-open-th" aria-hidden />
       </div>
 
       {groups.map((g) => {
@@ -152,10 +187,11 @@ export function WorkTable({
                 <div
                   key={t.id}
                   role="row"
+                  aria-selected={selection.has(t.id)}
                   data-row={t.id}
                   className={`wt-row ${selection.has(t.id) ? 'is-selected' : ''} ${done ? 'is-done' : ''} ${cursor?.row === t.id ? 'is-cursor' : ''}`}
                   data-drop={dropOn?.id === t.id ? dropOn.place : undefined}
-                  onMouseDown={() => setCursor({ row: t.id, col: 0 })}
+                  onMouseDown={() => putCursor(t.id, COL.title)}
                   draggable={canReorder && editable}
                   onDragStart={(e) => { setDragId(t.id); e.dataTransfer.effectAllowed = 'move'; }}
                   onDragEnd={() => { setDragId(null); setDropOn(null); }}
@@ -184,7 +220,10 @@ export function WorkTable({
                     onOpenMenu(ids, e.clientX, e.clientY);
                   }}
                 >
-                  <span className="wt-cb">
+                  <span
+                    className={`wt-cb ${cursor?.row === t.id && cursor.col === COL.select ? 'is-focused' : ''}`}
+                    data-col={COL.select}
+                  >
                     {editable && (
                       <input
                         type="checkbox"
@@ -193,6 +232,7 @@ export function WorkTable({
                         onChange={() => undefined}
                         onClick={(e) => {
                           e.stopPropagation();
+                          putCursor(t.id, COL.select);
                           onSelect(t.id, e.shiftKey ? 'range' : 'toggle');
                         }}
                       />
@@ -200,8 +240,8 @@ export function WorkTable({
                   </span>
 
                   <span
-                    className={`wt-title-cell ${cursor?.row === t.id && cursor.col === 0 ? 'is-focused' : ''}`}
-                    data-col="0"
+                    className={`wt-title-cell ${cursor?.row === t.id && cursor.col === COL.title ? 'is-focused' : ''}`}
+                    data-col={COL.title}
                     style={depth ? { paddingLeft: depth * 18 } : undefined}
                   >
                     {/* A sub-task says so at the far left, so it reads as nested even where the
@@ -241,7 +281,19 @@ export function WorkTable({
                         }}
                       />
                     ) : (
-                      <button type="button" className="wt-title" onClick={() => onOpenTask(t.id)} title="Open task">
+                      /* Not a link any more. A click parks the cursor here; a second click, a
+                         double-click, Enter, or simply typing starts the rename. Opening the task
+                         is the arrow at the end of the row, and only that (§T2). */
+                      <button
+                        type="button"
+                        className="wt-title"
+                        title="Click to edit"
+                        onClick={() => {
+                          if (cursor?.row === t.id && cursor.col === COL.title) startRename(t.id);
+                          else putCursor(t.id, COL.title);
+                        }}
+                        onDoubleClick={() => startRename(t.id)}
+                      >
                         {t.text || <em className="muted">(empty)</em>}
                       </button>
                     )}
@@ -251,10 +303,11 @@ export function WorkTable({
                     <button
                       key={c.key}
                       type="button"
-                      data-col={ci + 1}
-                      className={`wt-cell ${cursor?.row === t.id && cursor.col === ci + 1 ? 'is-focused' : ''}`}
+                      data-col={COL.fieldFirst + ci}
+                      className={`wt-cell ${cursor?.row === t.id && cursor.col === COL.fieldFirst + ci ? 'is-focused' : ''}`}
                       disabled={!editable || !c.field}
                       onClick={(e) => {
+                        putCursor(t.id, COL.fieldFirst + ci);
                         const ids = selection.has(t.id) ? [...selection] : [t.id];
                         const box = e.currentTarget.getBoundingClientRect();
                         onOpenMenu(ids, box.left, box.bottom + 4, c.field);
@@ -264,11 +317,26 @@ export function WorkTable({
                     </button>
                   ))}
 
-                  <span className="wt-cell is-static">
-                    {parent
-                      ? <button type="button" className="wt-parent" onClick={() => onOpenTask(parent.id)}>{parent.text || '(empty)'}</button>
-                      : <span className="wt-mono muted">—</span>}
+                  {/* Text, not a link: the arrow is the only way out of a row, a parent included. */}
+                  <span
+                    className={`wt-cell is-static ${cursor?.row === t.id && cursor.col === COL.parent ? 'is-focused' : ''}`}
+                    data-col={COL.parent}
+                  >
+                    <span className={`wt-mono ${parent ? '' : 'muted'}`}>{parent ? parent.text || '(untitled)' : '—'}</span>
                   </span>
+
+                  <button
+                    type="button"
+                    data-col={COL.open}
+                    className={`wt-cell wt-open ${cursor?.row === t.id && cursor.col === COL.open ? 'is-focused' : ''}`}
+                    aria-label="Open task"
+                    title="Open task"
+                    onClick={() => { putCursor(t.id, COL.open); onOpenTask(t.id); }}
+                  >
+                    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
+                      <path d="M6 3h7v7M13 3L4 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
                 </div>
               );
             })}

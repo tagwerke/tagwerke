@@ -45,6 +45,9 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
       // Never steal the key from something already taking text.
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return;
       if (el instanceof HTMLElement && el.isContentEditable) return;
+      // Nor from the table: with a cursor on a title, a letter starts a rename, and the table is
+      // neither an input nor contentEditable so the checks above miss it (§T2.3).
+      if (el instanceof HTMLElement && el.closest('.work-table')) return;
       e.preventDefault();
       inputRef.current?.focus();
     };
