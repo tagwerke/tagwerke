@@ -77,7 +77,15 @@ export function useTableCursor(
     if (!cursor) return;
     const sel = cursor.row === 'add' ? '[data-add-row]' : `[data-row="${CSS.escape(cursor.row)}"]`;
     containerRef.current?.querySelector(sel)?.scrollIntoView({ block: 'nearest' });
-    if (cursor.row === 'add') h.current.focusAdd();
+    if (cursor.row === 'add') return h.current.focusAdd();
+
+    // A visible cursor with the keyboard somewhere else is the "frozen" state: the cursor is
+    // clearly on a row and nothing responds. It happens whenever something inside the table
+    // unmounts under the caret — a rename closing, a row deleted, a menu going away — and focus
+    // falls to <body>. Only claimed when focus is not already inside, so an open rename input and
+    // a focused cell both keep it.
+    const root = containerRef.current;
+    if (root && !root.contains(document.activeElement)) root.focus({ preventScroll: true });
   }, [cursor, containerRef]);
 
   const move = useCallback((delta: number) => {
@@ -141,5 +149,5 @@ export function useTableCursor(
     return false;
   }, [cursor, enabled, move]);
 
-  return { cursor, setCursor, onKeyDown };
+  return { cursor, setCursor, onKeyDown, moveRow: move };
 }
