@@ -26,6 +26,7 @@
     "prune-audit": "tsx server/scripts/prune-audit.ts",
     "verify:rank": "tsx server/scripts/verify-rank.ts",
     "verify:notes-split": "tsx server/scripts/verify-notes-split.ts",
+    "verify:table-keys": "node scripts/verify-table-keys.mjs",
     "migrate:notes-split": "tsx server/scripts/migrate-notes-split.ts",
     "backfill:task-rank": "tsx server/scripts/backfill-task-rank.ts",
     "erase-user": "tsx server/scripts/erase-user.ts",

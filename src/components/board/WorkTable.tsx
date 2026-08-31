@@ -57,6 +57,7 @@ export function WorkTable({
   const rootRef = useRef<HTMLDivElement>(null);
   const [dragId, setDragId] = useState<ID | null>(null);
   const [renaming, setRenaming] = useState<{ id: ID; text: string } | null>(null);
+  const endingRef = useRef(false);
   const flatIds = useMemo(() => groups.flatMap((g) => g.tasks.map((t) => t.id)), [groups]);
 
   /** Open the menu over a cell the KEYBOARD chose, so it lands on the cell rather than the pointer. */
@@ -110,7 +111,13 @@ export function WorkTable({
    * and stealing focus back would fight them.
    */
   const endRename = (commit: boolean, refocus = true): void => {
-    if (!renaming) return;
+    // Guard against the exit re-entering through blur. Handing focus back to the table blurs the
+    // input, and React fires that blur handler with the `renaming` value from its own render — so
+    // an Escape would set renaming to null, steal focus, and then the stale blur would commit the
+    // text it had just thrown away. Escape has to mean reverted.
+    if (!renaming || endingRef.current) return;
+    endingRef.current = true;
+    queueMicrotask(() => { endingRef.current = false; });
     const text = renaming.text.trim();
     // An emptied title is an editing state, not a value — the same rule the board title follows.
     if (commit && text) useStore.getState().setTaskText(renaming.id, text);
