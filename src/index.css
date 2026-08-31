@@ -3343,7 +3343,7 @@ input, select, textarea { font: inherit; color: inherit; }
   display: grid;
   /* The title gets a floor and the largest share; the field columns are sized to their content
      ("In progress", a name, "12 Sep", "!!!") rather than to a round number. */
-  grid-template-columns: 24px minmax(200px, 4fr) 96px 92px 74px 40px 78px minmax(80px, 1.4fr);
+  grid-template-columns: 24px minmax(200px, 4fr) 96px 92px 74px 40px 78px minmax(80px, 1.4fr) 28px;
   align-items: center;
   gap: 8px;
   padding: 0 6px;
@@ -3619,7 +3619,40 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .dd.is-compact .dd-panel { left: 0; right: auto; min-width: 170px; }
 
+/* Parent is the first thing to go when there is not room for everything; the open button is the
+   last, because it is the only way out of a row. */
 @media (max-width: 1240px) {
-  .wt-head > :last-child, .wt-row > :last-child { display: none; }
-  .wt-head, .wt-row { grid-template-columns: 24px minmax(180px, 4fr) 96px 92px 74px 40px 78px; }
+  .wt-head > :nth-last-child(2), .wt-row > :nth-last-child(2) { display: none; }
+  .wt-head, .wt-row { grid-template-columns: 24px minmax(180px, 4fr) 96px 92px 74px 40px 78px 28px; }
 }
+
+/* ── The table as an editor (TABLE_EDITING_PLAN) ──────────────────────────
+   The title is edited in place and `↗` is the only way out of a row, so the
+   title stops looking like a link and the arrow gets a column of its own. */
+.wt-title { cursor: text; }
+.wt-title:hover { text-decoration: none; background: var(--line); border-radius: 3px; }
+.wt-open {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-mute);
+  padding: 0;
+  /* Quiet, but never hidden. It is the ONLY way from a row to its task now that the title is an
+     editor, and a hover-only affordance is one nobody finds — the lesson the comment button
+     already taught (COMMENTS_PLAN §8). */
+  opacity: 0.4;
+}
+.wt-row:hover .wt-open,
+.wt-open:focus-visible,
+.wt-open.is-focused { opacity: 1; }
+.wt-open:hover { color: var(--ink); background: var(--line); }
+
+/* The cursor reads the same wherever it lands, including the cells that hold no control. */
+.wt-cb.is-focused,
+.wt-cell.is-static.is-focused {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  border-radius: 3px;
+}
+/* Column one's own header. Both it and the row's checkbox centre in the same 24px track, so the
+   two read as one column and TITLE labels only the title. */
+.wt-head .wt-cb { display: flex; align-items: center; justify-content: center; }
+.wt-open-th { padding: 0; }

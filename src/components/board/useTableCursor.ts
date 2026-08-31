@@ -5,16 +5,26 @@
 // spreadsheet-correct and wrong here — you would arrow through six cells to get down one line, and
 // the common motion by far is down the list, not across a record.
 //
+// The cursor visits EVERY column, select and parent and open included. A cell you can read is a
+// cell you can land on; skipping the ones with nothing to set would make left and right jump
+// unpredictably.
+//
+// There are no letter shortcuts. There were — `s a d p r` jumped to a field — and they went with
+// TABLE_EDITING_PLAN §T2.1: once the arrows move between cells, a second invisible way to reach
+// the same cell is a surface nobody finds, and it was the only thing standing between the title
+// column and being able to just type into it.
+//
 // The last row of the table is the add line, and the cursor falls into it. That is what makes this
 // feel like a document rather than a grid: you arrow to the bottom, keep going, and you are typing
-// the next task. Enter there adds it and leaves you in place for another.
+// the next task.
 //
 // One deliberate accessibility trade. In an ARIA grid, Tab exits the widget and arrows move within
-// it; here Tab nests, because nesting by Tab is the gesture people brought from the document and
-// the whole point of this pass is that they keep it. Escape releases the cursor, at which point Tab
-// behaves normally again — so the keyboard is never a trap, it just has a mode.
+// it; here Tab nests, because nesting by Tab is the gesture people brought from the document.
+// Escape releases the cursor, at which point Tab behaves normally again — so the keyboard is never
+// a trap, it just has a mode.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { COL, COL_LAST } from './workColumns';
 import type { ID } from '../../types';
 
 /** `'add'` is the quick-add line: a real stop on the same track, not a special case bolted on. */
@@ -22,29 +32,30 @@ export type CursorRow = ID | 'add';
 
 export interface TableCursor {
   row: CursorRow;
-  /** 0 is the title; 1..colCount are the field cells, left to right. */
   col: number;
 }
 
 export interface TableCursorHandlers {
-  /** Enter on a field cell, or one of the letter keys. */
+  /** Enter on a field cell. */
   openCell(taskId: ID, col: number): void;
-  /** Enter on the title. */
-  renameStart(taskId: ID): void;
+  /** Enter on the title, or the first character of a typed rename. */
+  renameStart(taskId: ID, seed?: string): void;
+  openTask(taskId: ID): void;
+  toggleSelect(taskId: ID): void;
   nest(taskId: ID): void;
   unnest(taskId: ID): void;
   remove(taskId: ID): void;
-  toggleDone(taskId: ID): void;
   /** Put the caret in the quick-add line when the cursor lands on it. */
   focusAdd(): void;
 }
 
-/** Letter keys that jump straight to a field, by column index (§I.2). */
-const LETTER_TO_COL: Record<string, number> = { s: 1, a: 2, d: 3, p: 4, r: 5 };
+/** A key that should start typing into a title rather than doing anything else. */
+function isTypingKey(e: React.KeyboardEvent): boolean {
+  return e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey;
+}
 
 export function useTableCursor(
   rowIds: ID[],
-  colCount: number,
   handlers: TableCursorHandlers,
   enabled: boolean,
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -72,7 +83,7 @@ export function useTableCursor(
   const move = useCallback((delta: number) => {
     setCursor((cur) => {
       // No cursor yet: the first arrow enters the list at whichever end you came from.
-      if (!cur) return { row: rowIds[delta > 0 ? 0 : rowIds.length - 1] ?? 'add', col: 0 };
+      if (!cur) return { row: rowIds[delta > 0 ? 0 : rowIds.length - 1] ?? 'add', col: COL.title };
       const track: CursorRow[] = [...rowIds, 'add'];
       const i = track.indexOf(cur.row);
       const next = track[Math.min(track.length - 1, Math.max(0, i + delta))];
@@ -95,18 +106,12 @@ export function useTableCursor(
 
     if (e.key === 'ArrowRight') {
       e.preventDefault();
-      setCursor({ ...cur, col: Math.min(colCount, cur.col + 1) });
+      setCursor({ ...cur, col: Math.min(COL_LAST, cur.col + 1) });
       return true;
     }
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
       setCursor({ ...cur, col: Math.max(0, cur.col - 1) });
-      return true;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (cur.col === 0) h.current.renameStart(cur.row);
-      else h.current.openCell(cur.row, cur.col);
       return true;
     }
     if (e.key === 'Tab') {
@@ -115,18 +120,26 @@ export function useTableCursor(
       else h.current.nest(cur.row);
       return true;
     }
-    if (e.key === ' ') { e.preventDefault(); h.current.toggleDone(cur.row); return true; }
-    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); h.current.remove(cur.row); return true; }
+    if (e.key === 'Delete') { e.preventDefault(); h.current.remove(cur.row); return true; }
 
-    const col = LETTER_TO_COL[e.key.toLowerCase()];
-    if (col !== undefined && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (e.key === 'Enter' || (e.key === ' ' && cur.col === COL.select)) {
       e.preventDefault();
-      setCursor({ ...cur, col });
-      h.current.openCell(cur.row, col);
+      if (cur.col === COL.select) h.current.toggleSelect(cur.row);
+      else if (cur.col === COL.title) h.current.renameStart(cur.row);
+      else if (cur.col === COL.open) h.current.openTask(cur.row);
+      else if (cur.col < COL.parent) h.current.openCell(cur.row, cur.col);
+      // Parent has nothing to open: it is text, and `↗` is the only way out of a row.
+      return true;
+    }
+
+    // Typing on a title starts the rename with what you typed, the way a document line would.
+    if (cur.col === COL.title && isTypingKey(e)) {
+      e.preventDefault();
+      h.current.renameStart(cur.row, e.key);
       return true;
     }
     return false;
-  }, [cursor, enabled, colCount, move]);
+  }, [cursor, enabled, move]);
 
   return { cursor, setCursor, onKeyDown };
 }

@@ -257,7 +257,7 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
           onNest={(id) => runAction('nest', id)}
           onUnnest={(id) => runAction('unnest', id)}
           onDelete={(id) => runAction('delete', id)}
-          onToggleDone={(id) => useStore.getState().toggleTaskDone(id)}
+          onSelectAll={(select) => setSelection(select ? new Set(visibleIds) : new Set())}
           nesting={isOutline ? {
             depthOf: (id) => taskDepth(tasksById, id),
             hasChildren: (id) => childrenOf(tasksById, id).length > 0,
