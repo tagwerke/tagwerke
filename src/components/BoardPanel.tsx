@@ -11,11 +11,20 @@ import { EventsPanel } from './EventsPanel';
 import { BoardActivity } from './BoardActivity';
 import { ActivityDrawer } from './ActivityDrawer';
 import { TrashPanel } from './TrashPanel';
+import { SprintsPage } from './SprintsPage';
 
-type PanelTab = 'members' | 'events' | 'activity';
+type PanelTab = 'members' | 'events' | 'activity' | 'sprints';
 
-export function BoardPanel({ tabId, tabName }: { tabId: string; tabName: string }) {
-  const [tab, setTab] = useState<PanelTab>('members');
+export function BoardPanel({ tabId, tabName, initialTab, onOpenSprint }: {
+  tabId: string;
+  tabName: string;
+  initialTab?: PanelTab;
+  /** Filter the work view to a sprint — the one thing the sprints page ever did to a view. */
+  onOpenSprint?: (id: string) => void;
+}) {
+  // Sprints moved in here from the view switcher (§N2.3): its main action was always to set a
+  // filter on another view, which makes it a management page, not a view of the tasks.
+  const [tab, setTab] = useState<PanelTab>(initialTab ?? 'members');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
 
@@ -24,12 +33,14 @@ export function BoardPanel({ tabId, tabName }: { tabId: string; tabName: string 
       <div className="board-panel-tabs">
         <button className={tab === 'members' ? 'on' : ''} onClick={() => setTab('members')}>Members</button>
         <button className={tab === 'events' ? 'on' : ''} onClick={() => setTab('events')}>Events</button>
+        <button className={tab === 'sprints' ? 'on' : ''} onClick={() => setTab('sprints')}>Sprints</button>
         <button className={tab === 'activity' ? 'on' : ''} onClick={() => setTab('activity')}>Activity</button>
       </div>
 
       <div className="board-panel-body">
         {tab === 'members' && <SharePanel embedded tabId={tabId} tabName={tabName} onClose={() => {}} />}
         {tab === 'events' && <EventsPanel embedded tabId={tabId} tabName={tabName} onClose={() => {}} />}
+        {tab === 'sprints' && <SprintsPage tabId={tabId} onOpenSprint={(id) => { if (id) onOpenSprint?.(id); }} />}
         {tab === 'activity' && (
           <div className="activity-tab">
             <BoardActivity tabId={tabId} />

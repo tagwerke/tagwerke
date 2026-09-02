@@ -1,7 +1,7 @@
 // Static reference copy for the in-board Help pane (InfoPane, kind="help"). Plain data, not user
 // content — no schema, no persistence, just code, since it's documentation rather than a document.
-// Keep this in sync with the actual command set in editor/suggestEngine.ts + editor/embeddedCommands.ts
-// when either changes — nothing enforces that automatically.
+// Keep this in sync with tasks/actions.ts — the one list of what can be done to a task —
+// when it changes. Nothing enforces that automatically.
 //
 // Content is split into three tiers, shown in this order (see InfoPane.tsx):
 //   HELP_BASICS + HELP_DETAILS — the required reading for a brand-new user: how to make a task,
@@ -20,15 +20,14 @@ export interface HelpBasic { heading: string; body?: string; steps?: string[] }
 export const HELP_BASICS: HelpBasic[] = [
   {
     heading: 'What this is',
-    body: 'A board is a page for your tasks. Each line is one task.',
+    body: 'A board holds your tasks. Table shows them all, Kanban shows where they are stuck, and Notes is for thinking that has no task yet.',
   },
   {
     heading: 'Make your first task',
     steps: [
-      'Click the empty line on the board.',
-      'Type `-` then a space.',
+      'Click the "Add a task" line at the top (or just press `n`).',
       'Type what you need to do.',
-      'Press Enter to start the next one.',
+      'Press Enter. The line stays put for the next one.',
     ],
   },
   {
@@ -38,22 +37,27 @@ export const HELP_BASICS: HelpBasic[] = [
 ];
 
 /** One "add details" card: a real field on a task, and the click-first way to set it — verified
- *  against TaskMeta.tsx / TaskTitleSuggest.tsx, not guessed. Priority and assignee don't have a
- *  standing button the way the due date does; typing `!`/`@` opens a small list you click into. */
+ *  against the shared action menu (tasks/actions.ts) and the quick-add parser, not guessed. Since
+ *  the notes split there is one place every field lives, so every card here says the same thing
+ *  two ways: click the cell, or type the command while adding. */
 export interface HelpDetail { heading: string; body: string }
 
 export const HELP_DETAILS: HelpDetail[] = [
   {
     heading: 'Due date',
-    body: 'Under the task, click `+date` and pick a day. Click the date again later to change it.',
+    body: 'Click the Due cell in the Table and pick a day — or type `/due friday` while adding the task.',
   },
   {
     heading: 'Priority',
-    body: 'Type `!` right after the text — `!` for low, `!!` for medium, `!!!` for high — then click the level in the list that pops up.',
+    body: 'Click the Pri cell, or type `!` while adding — `!` low, `!!` medium, `!!!` high.',
   },
   {
     heading: 'Assignee',
-    body: 'Type `@` and a name, then click them in the list that pops up.',
+    body: 'Click the Assignee cell, or type `@` and a name while adding.',
+  },
+  {
+    heading: 'Everything else',
+    body: 'Right-click any task — or click the `⋯` on the row — for the full list: status, sprint, reviewer, move to another board, delete. The same menu opens from a cell, already on that field.',
   },
 ];
 
@@ -97,12 +101,27 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
   {
-    title: 'Writing a task',
+    title: 'Adding tasks',
     rows: [
-      { cmd: 'Enter', desc: 'Create the next task' },
-      { cmd: 'Shift + Enter', desc: 'Escape back to plain text (not a task)' },
-      { cmd: 'Tab / Shift+Tab', desc: 'Nest a task under the one above / un-nest it' },
-      { cmd: 'Type it all at once', desc: '"Fix login bug /p1 /due friday @sam" works too — commands anywhere in the title are picked up the moment you click away' },
+      { cmd: 'n', desc: 'Jump to the "Add a task" line' },
+      { cmd: 'Enter', desc: 'Add it, and stay put for the next one' },
+      { cmd: 'Shift + Enter', desc: 'Add it and open its page' },
+      { cmd: 'Type it all at once', desc: '"Fix login bug /p1 /due friday @sam" works — the commands are stripped out and applied' },
+    ],
+  },
+  {
+    title: 'On a task',
+    rows: [
+      { cmd: 'Right-click / `⋯`', desc: 'Everything you can do to it' },
+      { cmd: 'Click a cell', desc: 'The same menu, already on that field' },
+      { cmd: 'Click the title', desc: 'Open the task — description, sub-tasks, comments, history' },
+    ],
+  },
+  {
+    title: 'Notes',
+    rows: [
+      { cmd: 'Select text', desc: 'Then "Make a task" — the words become a task and a link to it stays in the note' },
+      { cmd: 'A task in a note', desc: 'Shows its live title and status; click to open it. Deleting the link never deletes the task' },
     ],
   },
 ];
@@ -112,6 +131,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 export interface HelpUpdate { id: string; date: string; title: string; body: string }
 
 export const HELP_UPDATES: HelpUpdate[] = [
+  {
+    id: '2026-08-30-notes-split',
+    date: '2026-08-30',
+    title: 'Tasks left the document',
+    body: 'A board now has three views: Table, Kanban and Notes. Tasks are added on the "Add a task" line (or press "n") instead of by typing "-" in the document, and a row shows its status, its title and a way to open it — everything else moved to the task page and to one menu you reach by right-clicking any task. The old Doc view is Notes: prose, with links to tasks rather than the tasks themselves. Select some text there and "Make a task" turns it into one. List and the board Calendar are gone — the Table with "Group: Status" is the old List, and the Calendar tab in the sidebar is the real one. Sprints moved into the board panel on the right.',
+  },
   {
     id: '2026-07-22-commands',
     date: '2026-07-22',

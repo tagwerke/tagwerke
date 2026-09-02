@@ -122,15 +122,20 @@ function Workspace() {
     if (st.activeTabId !== id) {
       // A different (or no) board: full reset, same as setActiveTab, but landing on whatever
       // sub-route the URL actually names instead of always defaulting to doc.
-      useStore.setState({ activeTabId: id, boardView: wantSprints ? 'sprints' : 'doc', openTaskId: taskId, plannerOpen: false });
+      // Sprints is a board-PANEL tab now, not a view (§N2.3), so the old URL opens the board
+      // with that panel rather than landing on a view that no longer exists.
+      useStore.setState({
+        activeTabId: id, boardView: 'table', openTaskId: taskId, plannerOpen: false,
+        boardPanel: wantSprints ? 'sprints' : null,
+      });
       return;
     }
     // Same board: only reconcile the pieces the URL disagrees with — e.g. opening/closing the
     // task page must not reset which of list/kanban/calendar was showing underneath it.
-    const patch: { openTaskId?: string | null; boardView?: typeof st.boardView } = {};
+    const patch: { openTaskId?: string | null; boardPanel?: typeof st.boardPanel } = {};
     if (st.openTaskId !== taskId) patch.openTaskId = taskId;
-    const wantBoardView = wantSprints ? 'sprints' : st.boardView === 'sprints' ? 'doc' : st.boardView;
-    if (wantBoardView !== st.boardView) patch.boardView = wantBoardView;
+    const wantPanel = wantSprints ? 'sprints' : null;
+    if (wantPanel !== st.boardPanel) patch.boardPanel = wantPanel;
     if (Object.keys(patch).length) useStore.setState(patch);
   }, [path]);
   // store → URL: when the open board, calendar, sprints page, or open task changes from
@@ -143,6 +148,7 @@ function Workspace() {
         s.activeTabId === prev.activeTabId &&
         s.plannerOpen === prev.plannerOpen &&
         s.boardView === prev.boardView &&
+        s.boardPanel === prev.boardPanel &&
         s.openTaskId === prev.openTaskId
       )
         return;
@@ -150,7 +156,7 @@ function Workspace() {
       if (s.plannerOpen) want = CALENDAR_PATH;
       else if (!s.activeTabId) want = '/';
       else if (s.openTaskId) want = boardTaskPath(s.activeTabId, s.openTaskId);
-      else if (s.boardView === 'sprints') want = boardSprintsPath(s.activeTabId);
+      else if (s.boardPanel === 'sprints') want = boardSprintsPath(s.activeTabId);
       else want = boardPath(s.activeTabId);
       if (window.location.pathname !== want) window.history.pushState(null, '', want);
     });

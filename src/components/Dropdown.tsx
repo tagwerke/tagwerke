@@ -16,9 +16,11 @@ interface Props {
   searchPlaceholder?: string;
   /** Custom ranking for a search query; defaults to label-substring filter over `options`. */
   rank?: (query: string) => DropdownOption[];
+  /** Variant hook on the root — `is-chip` is the small inline form used as a board's eyebrow. */
+  className?: string;
 }
 
-export function Dropdown({ value, options, onChange, placeholder, searchable, searchPlaceholder, rank }: Props) {
+export function Dropdown({ value, options, onChange, placeholder, searchable, searchPlaceholder, rank, className }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(() =>
@@ -71,7 +73,7 @@ export function Dropdown({ value, options, onChange, placeholder, searchable, se
   };
 
   return (
-    <div className={`dd ${open ? 'open' : ''}`} ref={rootRef}>
+    <div className={`dd ${className ?? ''} ${open ? 'open' : ''}`} ref={rootRef}>
       <button
         type="button"
         className="dd-trigger"

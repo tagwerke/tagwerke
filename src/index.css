@@ -2572,10 +2572,12 @@ input, select, textarea { font: inherit; color: inherit; }
 .list-caret { font-size: 9px; color: var(--ink-mute); transition: transform 0.12s; }
 .list-caret.collapsed { transform: rotate(-90deg); }
 .list-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+/* One status palette, shared with the doc indicator and the action menu's swatches (§D). These
+   are the indicator's values, because those are the ones the app has trained everyone on. */
 .list-dot.status-todo { background: var(--ink-mute); }
-.list-dot.status-in_progress { background: #2d8fce; }
-.list-dot.status-in_review { background: var(--pop); }
-.list-dot.status-done { background: #1f8a76; }
+.list-dot.status-in_progress { background: #2563eb; }
+.list-dot.status-in_review { background: #7c3aed; }
+.list-dot.status-done { background: var(--accent); }
 .list-dot.status-cancelled { background: var(--line-strong); }
 .list-group-name { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ink-soft); }
 .list-group-n { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--ink-mute); }
@@ -3195,3 +3197,462 @@ input, select, textarea { font: inherit; color: inherit; }
   .task-item:hover > .task-drag-handle,
   .task-item:focus-within > .task-drag-handle { display: none; }
 }
+
+/* ── Quick-add (NOTES_SPLIT_PLAN §N1) ─────────────────────────────────────
+   The line a task is typed into now that the document is not the only way in.
+   Dashed on purpose: it reads as a slot waiting to be filled rather than a
+   field with a value, which is what tells you it is an entry point at a glance. */
+.quick-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 11px;
+  margin-bottom: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-paper);
+  color: var(--ink-mute);
+}
+.quick-add:focus-within { border-style: solid; border-color: var(--pop); color: var(--ink-soft); }
+.quick-add-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: var(--ink);
+}
+.quick-add-input::placeholder { color: var(--ink-mute); }
+.quick-add-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+/* A Kanban column is narrow and its status is already the column header. */
+.kb-col-stack .quick-add { height: 32px; margin-bottom: 8px; padding: 0 9px; }
+.kb-col-stack .quick-add-input { font-size: 13px; }
+.kb-col-stack .quick-add-hint { display: none; }
+
+/* ── The one task menu (NOTES_SPLIT_PLAN §N3) ─────────────────────────────
+   Drawn once and shown two ways: a full action list from a row, or opened
+   straight into one field's choices from a table cell. */
+.task-menu {
+  min-width: 210px;
+  max-width: 280px;
+  max-height: 60vh;
+  overflow: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-pop);
+  outline: none;
+}
+.task-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-paper);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  position: sticky;
+  top: 0;
+}
+.task-menu-back {
+  border: 0; background: none; padding: 0; display: flex; align-items: center;
+  color: var(--ink-mute);
+}
+.task-menu-back:hover { color: var(--ink); }
+.task-menu-query {
+  margin-left: auto; font-family: var(--mono); text-transform: none;
+  letter-spacing: 0; color: var(--ink); font-size: 11px;
+}
+.task-menu-list { list-style: none; margin: 0; padding: 4px; }
+.task-menu-empty { padding: 8px 8px 10px; font-size: 12px; }
+.task-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--ink);
+}
+.task-menu-item.is-active { background: var(--bg-paper); }
+.task-menu-item.is-danger { color: var(--pop); }
+.task-menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-menu-hint,
+.task-menu-key {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+.task-menu-more, .task-menu-tick { color: var(--ink-mute); flex-shrink: 0; }
+.task-menu-item.is-selected .task-menu-label { font-weight: 600; }
+.task-menu-swatch {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  border: 1.5px solid var(--line-strong);
+}
+/* One status palette (§D): these are the doc indicator's values, which the list dot now shares. */
+.task-menu-swatch.status-todo { background: transparent; }
+.task-menu-swatch.status-in_progress { background: #2563eb; border-color: #2563eb; }
+.task-menu-swatch.status-in_review { background: #7c3aed; border-color: #7c3aed; }
+.task-menu-swatch.status-done { background: var(--accent); border-color: var(--accent); }
+.task-menu-swatch.status-cancelled { background: var(--ink-mute); border-color: var(--ink-mute); }
+
+/* ── The work view: one component, two layouts (NOTES_SPLIT_PLAN §N2) ────── */
+.board-work { display: flex; flex-direction: column; min-width: 0; padding-bottom: 40px; }
+.work-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: nowrap;
+  padding: 4px clamp(16px, 3vw, 32px) 12px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.work-table, .work-board, .board-work > .view-placeholder { padding: 10px clamp(16px, 3vw, 32px) 0; }
+.work-board { padding-bottom: 8px; }
+.work-spacer { flex: 1; }
+.work-note { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
+/* A count is something you read, not something you set, so it sits under the rows it counts
+   rather than in the row of controls — where it was what pushed the view switcher onto a
+   second line as soon as the board panel was open. */
+.work-count {
+  font-family: var(--mono); font-size: 11px; color: var(--ink-mute);
+  padding: 10px clamp(16px, 3vw, 32px) 0;
+}
+.work-control, .work-toolbar .seg, .work-toolbar .list-mode { flex-shrink: 0; }
+.work-control { display: inline-flex; align-items: center; gap: 6px; }
+.work-control-label {
+  text-transform: uppercase; letter-spacing: 0.09em;
+  font-size: 10px; font-weight: 700; color: var(--ink-mute);
+}
+
+/* Table. A grid per row rather than a <table> so a row stays one draggable unit. */
+.work-table { display: flex; flex-direction: column; min-width: 0; }
+.wt-head, .wt-row {
+  display: grid;
+  /* The title gets a floor and the largest share; the field columns are sized to their content
+     ("In progress", a name, "12 Sep", "!!!") rather than to a round number. */
+  grid-template-columns: 24px minmax(200px, 4fr) 96px 92px 74px 40px 78px minmax(80px, 1.4fr) 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+}
+.wt-head { height: 28px; border-bottom: 1px solid var(--line-strong); }
+.wt-th {
+  border: 0; background: none; padding: 0; text-align: left;
+  font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-mute);
+}
+.wt-th.is-sorted { color: var(--ink); }
+.wt-group-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 6px 5px;
+  font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-mute);
+}
+.wt-group-n { font-family: var(--mono); }
+.wt-row { min-height: 36px; border-bottom: 1px solid var(--line); position: relative; }
+.wt-row:hover { background: var(--bg-paper); }
+.wt-row.is-selected { background: rgba(255, 106, 61, 0.08); }
+.wt-row[data-drop='before']::before,
+.wt-row[data-drop='after']::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 2px; background: var(--pop);
+}
+.wt-row[data-drop='before']::before { top: -1px; }
+.wt-row[data-drop='after']::after { bottom: -1px; }
+.wt-cb { display: flex; align-items: center; justify-content: center; }
+.wt-title-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wt-title {
+  flex: 1; min-width: 0; border: 0; background: none; padding: 0; text-align: left;
+  font: inherit; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wt-title:hover { text-decoration: underline; text-underline-offset: 2px; }
+.wt-row.is-done .wt-title { text-decoration: line-through; color: var(--ink-mute); }
+.wt-cell {
+  border: 0; background: none; padding: 3px 4px; border-radius: var(--r-sm);
+  text-align: left; min-width: 0; overflow: hidden; color: inherit;
+}
+.wt-cell:not(:disabled):hover { background: var(--line); }
+.wt-cell.is-static { padding: 3px 4px; }
+.wt-mono {
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wt-mono.is-overdue { color: var(--pop); }
+.wt-parent {
+  border: 0; background: none; padding: 0; font-family: var(--mono); font-size: 11px;
+  color: var(--ink-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%; text-align: left;
+}
+.wt-parent:hover { color: var(--ink); }
+
+/* Board layout. */
+.work-board { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
+.wb-col { flex: 1 1 0; min-width: 200px; display: flex; flex-direction: column; gap: 8px; }
+.wb-col.is-over { background: var(--bg-paper); border-radius: var(--r-sm); }
+.wb-col-head {
+  display: flex; align-items: center; gap: 7px; padding: 0 2px 6px;
+  border-bottom: 1px solid var(--line-strong);
+  font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-mute);
+}
+.wb-col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-col-n { margin-left: auto; font-family: var(--mono); }
+.wb-col-stack { display: flex; flex-direction: column; gap: 8px; }
+.wb-col-stack .quick-add { height: 32px; margin-bottom: 0; padding: 0 9px; }
+.wb-col-stack .quick-add-hint { display: none; }
+
+/* Bulk bar: fixed, because a selection outlives the scroll position that made it. */
+.work-bulk {
+  position: sticky; bottom: 12px; align-self: center;
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px; border-radius: 999px;
+  background: var(--bg-elev); border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-pop);
+}
+.work-bulk-n { font-family: var(--mono); font-size: 11.5px; }
+
+@media (max-width: 720px) {
+  /* A table does not fit 390px; the row layout is the honest fallback (§A). */
+  .wt-head { display: none; }
+  .wt-row { grid-template-columns: 26px minmax(0, 1fr) 78px; min-height: 52px; }
+  .wt-row > .wt-cell:nth-of-type(n + 2), .wt-row > .wt-cell.is-static { display: none; }
+  .work-board { flex-direction: column; }
+  .wb-col { width: 100%; }
+}
+
+/* The row's two trailing affordances, after the strip (NOTES_SPLIT_PLAN §N3). */
+.task-row-menu, .task-row-open { opacity: 0; flex-shrink: 0; }
+.task-row:hover .task-row-menu,
+.task-row:hover .task-row-open,
+.task-item:hover .task-row-open,
+.task-row-menu:focus-visible,
+.task-row-open:focus-visible { opacity: 0.75; }
+.task-row-menu:hover, .task-row-open:hover { opacity: 1; }
+/* On touch there is no hover to reveal them, so they are simply always there. */
+@media (hover: none) {
+  .task-row-menu, .task-row-open { opacity: 0.6; }
+}
+
+/* ── Task mentions in a note (NOTES_SPLIT_PLAN §N4) ───────────────────────
+   Deliberately quiet: a note is prose, and a page of loud chips would read
+   as a task list again — which is the exact thing the split removes. */
+.task-mention { display: inline; }
+.task-mention-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-paper);
+  font: inherit;
+  font-size: 0.94em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  max-width: 32ch;
+  overflow: hidden;
+  vertical-align: baseline;
+}
+.task-mention-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+.task-mention-btn .list-dot { align-self: center; width: 7px; height: 7px; flex-shrink: 0; }
+.task-mention-btn svg { align-self: center; opacity: 0.5; flex-shrink: 0; }
+.task-mention-text { overflow: hidden; text-overflow: ellipsis; }
+.task-mention.is-done .task-mention-text { text-decoration: line-through; color: var(--ink-mute); }
+.task-mention.is-gone .task-mention-text {
+  color: var(--ink-mute);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+  padding: 0 5px;
+  font-size: 0.94em;
+}
+
+/* "Make a task" over a selection in a note (NOTES_SPLIT_PLAN §I.6). */
+.selection-bubble-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-pop);
+  font-size: 12.5px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.selection-bubble-btn:hover { border-color: var(--ink); }
+
+/* ── Outline nesting and the in-table add row ─────────────────────────────
+   Indentation appears only in the Outline grouping, where the rows on screen
+   really are a contiguous tree; grouped by anything else a child can show up
+   with its parent nowhere above it, and the Parent crumb carries it instead. */
+.wt-twisty {
+  width: 14px; height: 14px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; background: none; padding: 0;
+  color: var(--ink-mute);
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+.wt-twisty.is-closed { transform: rotate(0deg); }
+.wt-twisty.is-leaf { visibility: hidden; }
+.wt-twisty:hover { color: var(--ink); }
+/* A hairline back to the parent, so an indent reads as descent rather than padding. */
+.wt-title-cell { position: relative; }
+.wt-status { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.wt-status .list-dot { flex-shrink: 0; }
+
+.wt-row.is-add { border-bottom: none; min-height: 40px; align-items: center; }
+.wt-row.is-add .quick-add {
+  grid-column: 2 / -1;
+  margin-bottom: 0;
+  border-style: dashed;
+  background: transparent;
+}
+.wt-row.is-add .quick-add:focus-within { background: var(--bg-paper); }
+
+/* The parent the add line is about to write under — Tab sets it, Shift+Tab steps back out. */
+.quick-add-under {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 22ch;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+/* ── Board header ─────────────────────────────────────────────────────────
+   One definition, up at .board-head — this section only adds what is new.
+   The board's own controls (?, star, panel) sit together on the right; the
+   app's navigation left with the top strip entirely. */
+.board-head-title { gap: 5px; }
+.board-head-right { gap: 6px; }
+
+/* ── The table cursor: moving through rows like a document ────────────────── */
+.work-table:focus { outline: none; }
+.wt-row.is-cursor { background: var(--bg-paper); box-shadow: inset 2px 0 0 var(--pop); }
+.wt-title-cell.is-focused,
+.wt-cell.is-focused {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  border-radius: 3px;
+}
+.wt-title-input {
+  flex: 1; min-width: 0;
+  border: 0; border-bottom: 1px solid var(--pop);
+  background: transparent; padding: 0 0 1px;
+  font: inherit; color: inherit; outline: none;
+}
+/* A sub-task says so at the far left, where the eye lands before it reads the indent. */
+.wt-sub-mark { color: var(--ink-mute); flex-shrink: 0; opacity: 0.7; }
+
+/* The add line is a row, not a box floating in the table. */
+.wt-row.is-add .quick-add {
+  border: 0;
+  background: transparent;
+  height: 100%;
+  padding: 0;
+}
+.wt-row.is-add { border-bottom: 1px solid var(--line); }
+.wt-row.is-add:hover { background: var(--bg-paper); }
+
+/* ── The project chip ─────────────────────────────────────────────────────
+   A board's project was a label; it is a choice now, so it has to look like
+   one — but at the size of the label it replaces, not the size of a form
+   control. Same 10px uppercase eyebrow, with a dot for the project's colour
+   and a caret that only shows up on hover, so the header stays quiet until
+   you go looking. */
+.dd.is-chip { display: inline-flex; }
+.dd.is-chip .dd-trigger {
+  width: auto;
+  gap: 5px;
+  padding: 2px 6px;
+  border-color: transparent;
+  background: transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--page-accent, var(--pop));
+}
+.dd.is-chip .dd-trigger:hover,
+.dd.is-chip.open .dd-trigger { background: var(--page-accent-soft, var(--line)); border-color: transparent; }
+.dd.is-chip .dd-dot { width: 6px; height: 6px; }
+.dd.is-chip .dd-caret { width: 8px; height: 8px; opacity: 0; }
+.dd.is-chip .dd-trigger:hover .dd-caret,
+.dd.is-chip .dd-trigger:focus-visible .dd-caret,
+.dd.is-chip.open .dd-caret { opacity: 1; }
+/* The trigger is chip-sized; the list it opens is not, or the project names would be unreadable. */
+.dd.is-chip .dd-panel { left: 0; right: auto; min-width: 200px; }
+
+/* Leaving a board, in the app strip rather than in the board. */
+.topbar-back { padding: 0 12px 0 10px; }
+
+/* A dropdown sized for a toolbar rather than a form. Same component as the field-sized one — the
+   board's controls should not be a second implementation of choosing from a list. */
+.dd.is-compact { display: inline-flex; }
+.dd.is-compact .dd-trigger {
+  width: auto;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+}
+.dd.is-compact .dd-panel { left: 0; right: auto; min-width: 170px; }
+
+/* Parent is the first thing to go when there is not room for everything; the open button is the
+   last, because it is the only way out of a row. */
+@media (max-width: 1240px) {
+  .wt-head > :nth-last-child(2), .wt-row > :nth-last-child(2) { display: none; }
+  .wt-head, .wt-row { grid-template-columns: 24px minmax(180px, 4fr) 96px 92px 74px 40px 78px 28px; }
+}
+
+/* ── The table as an editor (TABLE_EDITING_PLAN) ──────────────────────────
+   The title is edited in place and `↗` is the only way out of a row, so the
+   title stops looking like a link and the arrow gets a column of its own. */
+.wt-title { cursor: text; }
+.wt-title:hover { text-decoration: none; background: var(--line); border-radius: 3px; }
+.wt-open {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-mute);
+  padding: 0;
+  /* Quiet, but never hidden. It is the ONLY way from a row to its task now that the title is an
+     editor, and a hover-only affordance is one nobody finds — the lesson the comment button
+     already taught (COMMENTS_PLAN §8). */
+  opacity: 0.4;
+}
+.wt-row:hover .wt-open,
+.wt-open:focus-visible,
+.wt-open.is-focused { opacity: 1; }
+.wt-open:hover { color: var(--ink); background: var(--line); }
+
+/* The cursor reads the same wherever it lands, including the cells that hold no control. */
+.wt-cb.is-focused,
+.wt-cell.is-static.is-focused {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  border-radius: 3px;
+}
+/* Column one's own header. Both it and the row's checkbox centre in the same 24px track, so the
+   two read as one column and TITLE labels only the title. */
+.wt-head .wt-cb { display: flex; align-items: center; justify-content: center; }
+.wt-open-th { padding: 0; }

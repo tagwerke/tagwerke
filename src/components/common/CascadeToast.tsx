@@ -16,7 +16,12 @@ export function CascadeToast() {
   const pending = useStore((s) => s.pendingCascade);
   const applyCascadeDone = useStore((s) => s.applyCascadeDone);
   const dismissCascade = useStore((s) => s.dismissCascade);
-  const label = useStore((s) => (s.pendingCascade ? s.tasks[s.pendingCascade.taskId]?.text : undefined));
+  // One parent names itself; a bulk sweep counts instead — there is no honest single title.
+  const label = useStore((s) => {
+    const p = s.pendingCascade;
+    if (!p) return undefined;
+    return p.taskIds.length === 1 ? s.tasks[p.taskIds[0]]?.text : `${p.taskIds.length} tasks`;
+  });
 
   // Time out on its own: an unanswered offer is a decline, not a decision to nag about.
   useEffect(() => {
@@ -31,7 +36,7 @@ export function CascadeToast() {
   return (
     <div className="cascade-toast" role="status">
       <div className="cascade-toast-text">
-        <strong>{label || 'Task'}</strong> is done, but {n} sub-task{n === 1 ? '' : 's'} {n === 1 ? 'is' : 'are'} still open.
+        <strong>{label || 'Task'}</strong> {pending.taskIds.length === 1 ? 'is' : 'are'} done, but {n} sub-task{n === 1 ? '' : 's'} {n === 1 ? 'is' : 'are'} still open.
       </div>
       <div className="cascade-toast-actions">
         <button type="button" className="btn-quiet" onClick={dismissCascade}>
