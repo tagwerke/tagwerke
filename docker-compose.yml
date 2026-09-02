@@ -74,8 +74,13 @@ services:
       # Automatic backups land here, on the host — outside the db volume on
       # purpose, so losing one never loses both. Copy them off-site yourself.
       - ./backups:/app/backups
+    # APP_BIND picks which host address the port appears on. The default publishes
+    # on every interface, which is what a plain self-host needs — you reach the app at
+    # http://<your-server>:5174. Behind a reverse proxy (Traefik, Caddy, nginx) the proxy
+    # talks to the container over the compose network and nothing else should reach this
+    # port, so set APP_BIND=127.0.0.1 there.
     ports:
-      - "${APP_PORT:-5174}:5174"
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-5174}:5174"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:5174/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
