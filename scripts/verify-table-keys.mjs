@@ -148,6 +148,36 @@ await page.keyboard.press('ArrowDown');
 await sleep(250);
 check('still navigable after an edit', (await state()).row !== beforeMove, '');
 
+// The add line is a stop on the same track, so you can arrow into it and back out. Leaving it used
+// to take the whole app down: the cursor effect returned focusAdd()'s boolean, React kept it as the
+// cleanup, and called it on the next run. Nothing failed until you pressed Up.
+let onAdd = false;
+for (let i = 0; i < 15 && !onAdd; i++) {
+  await page.keyboard.press('ArrowDown');
+  await sleep(150);
+  onAdd = await page.evaluate(() => !!document.querySelector('.wt-row.is-add.is-cursor'));
+}
+check('arrowing down reaches the add line', onAdd, '');
+
+await page.keyboard.press('ArrowUp');
+await sleep(500);
+const alive = await page.evaluate(() => ({
+  root: document.getElementById('root')?.childElementCount ?? -1,
+  table: !!document.querySelector('.work-table'),
+}));
+check('arrowing back out of the add line does not blank the app', alive.root > 0 && alive.table, JSON.stringify(alive));
+check('the keyboard leaves the add box on the way out', (await state()).inTable, `active=${(await state()).active}`);
+
+await page.keyboard.type('Q', { delay: 20 });
+await sleep(400);
+const afterAdd = await page.evaluate(() => ({
+  renaming: !!document.querySelector('.wt-title-input'),
+  quickAdd: document.querySelector('.quick-add-input')?.value ?? null,
+}));
+check('typing then renames the row, not the add box', afterAdd.renaming && !afterAdd.quickAdd, JSON.stringify(afterAdd));
+await page.keyboard.press('Escape');
+await sleep(300);
+
 await page.keyboard.press('ArrowRight');
 await sleep(200);
 await page.keyboard.press('Enter');

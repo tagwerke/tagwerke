@@ -77,15 +77,23 @@ export function useTableCursor(
     if (!cursor) return;
     const sel = cursor.row === 'add' ? '[data-add-row]' : `[data-row="${CSS.escape(cursor.row)}"]`;
     containerRef.current?.querySelector(sel)?.scrollIntoView({ block: 'nearest' });
-    if (cursor.row === 'add') return h.current.focusAdd();
+    // Call it, do not return it: focusAdd answers with a boolean, and an effect that returns a
+    // non-function makes React treat it as the cleanup. It only bites on the way OUT of the add
+    // line, when React calls that value and `true` is not a function — taking the tree with it.
+    if (cursor.row === 'add') { h.current.focusAdd(); return; }
 
     // A visible cursor with the keyboard somewhere else is the "frozen" state: the cursor is
     // clearly on a row and nothing responds. It happens whenever something inside the table
     // unmounts under the caret — a rename closing, a row deleted, a menu going away — and focus
     // falls to <body>. Only claimed when focus is not already inside, so an open rename input and
     // a focused cell both keep it.
+    // The add line's input counts as somewhere else, even though it sits inside the table: on the
+    // way out of it the cursor is on a row while the caret is still in the box, so what you type
+    // is filed as a new task instead of renaming the row you are looking at.
+    const active = document.activeElement;
+    const inAddLine = active instanceof Element && !!active.closest('.quick-add');
     const root = containerRef.current;
-    if (root && !root.contains(document.activeElement)) root.focus({ preventScroll: true });
+    if (root && (inAddLine || !root.contains(active))) root.focus({ preventScroll: true });
   }, [cursor, containerRef]);
 
   const move = useCallback((delta: number) => {
