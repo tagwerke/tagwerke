@@ -72,6 +72,7 @@ function emitRenames(
 // clobber a concurrently-set status/assignee. `done`/`owner` are no longer client-edited.
 type TaskPatch = {
   text?: string;
+  description?: string | null;
   status?: Task['status'];
   assigneeId?: ID | null;
   reviewerId?: ID | null;
@@ -84,6 +85,9 @@ type TaskPatch = {
 function changedFields(p: Task, t: Task): TaskPatch | null {
   const patch: TaskPatch = {};
   if (p.text !== t.text) patch.text = t.text;
+  // The task page's body. An explicit null is what CLEARS it server-side — an omitted description
+  // means "preserve" there (routes/tasks.ts), so a cleared box has to send the null.
+  if ((p.description ?? null) !== (t.description ?? null)) patch.description = t.description ?? null;
   if ((p.status ?? 'todo') !== (t.status ?? 'todo')) patch.status = t.status ?? 'todo';
   if ((p.assigneeId ?? null) !== (t.assigneeId ?? null)) patch.assigneeId = t.assigneeId ?? null;
   if ((p.reviewerId ?? null) !== (t.reviewerId ?? null)) patch.reviewerId = t.reviewerId ?? null;
@@ -100,6 +104,10 @@ function fullBody(t: Task) {
   return {
     homeTabId: t.homeTabId,
     text: t.text,
+    // Present-only, unlike the fields below. PUT is ALSO the doc-sync write path, which carries
+    // no description; sending an explicit null from a client that never loaded one would wipe it,
+    // where omitting it preserves (routes/tasks.ts). Clearing goes through the PATCH diff above.
+    ...(t.description != null ? { description: t.description } : {}),
     status: t.status ?? 'todo',
     assigneeId: t.assigneeId ?? null,
     reviewerId: t.reviewerId ?? null,
