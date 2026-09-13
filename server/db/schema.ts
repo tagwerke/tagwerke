@@ -549,3 +549,51 @@ export const pushSubscriptions = pgTable(
   },
   (t) => [index('push_subs_user_idx').on(t.userId)],
 );
+
+// Uploaded files (DOCUMENTS_PLAN.md). The BYTES live in S3-compatible object storage, never here —
+// only this row does. That is the 2026-09-13 revision: storing them as chunked bytea kept pg_dump
+// complete but cost a chunk table, content-addressed keys and refcount races, which is too much
+// engineering for an upload layer. Consequence to remember: a restored dump brings back rows whose
+// objects live in whatever bucket the instance was configured for.
+//
+// Shape mirrors `task_comments` deliberately — denormalized board scope for authorization and the
+// realtime channel, soft-delete tombstone so Trash/restore works, and an author FK that survives
+// user erasure.
+export const documents = pgTable(
+  'documents',
+  {
+    // Client-generated (nanoid), so a POST replayed from the offline outbox inserts once.
+    id: text('id').primaryKey(),
+    // Board scope. Authorization and the realtime channel both need it, and it is what makes a
+    // document reachable at all; never client-supplied on write, it comes from the URL (D7).
+    tabId: text('tab_id')
+      .notNull()
+      .references(() => tabs.id, { onDelete: 'cascade' }),
+    // Optional attachment point. SET NULL, not cascade: deleting a task must not silently destroy
+    // the file someone uploaded to it — it falls back to being a board-level document.
+    taskId: text('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    // Opaque random object key. NOT derived from the content: nothing about the bytes leaks through
+    // the key, and two identical uploads stay independent objects, so deleting one can never strand
+    // the other. Unique because it is what we hand the bucket.
+    storageKey: text('storage_key').notNull().unique(),
+    filename: text('filename').notNull(),
+    // Sniffed server-side, never the client's declared type — it decides the download's
+    // Content-Type, and a lie there is how an upload becomes stored XSS.
+    mime: text('mime').notNull(),
+    size: bigint('size', { mode: 'number' }).notNull(),
+    // Integrity only, not identity (see storageKey). Null if hashing was skipped.
+    sha256: text('sha256'),
+    // Real FK, like task_comments.authorId: a document is user-facing content, not a forensic
+    // record. Erasing a user blanks the byline; audit_log keeps the trail.
+    uploadedBy: text('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    // Soft delete: the row is tombstoned and the OBJECT IS KEPT, because Trash must restore. The
+    // retention prune is what finally deletes the object, then the row (DOCUMENTS_PLAN §6).
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedBy: text('deleted_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('documents_tab_idx').on(t.tabId, t.createdAt), // the board's file list
+    index('documents_task_idx').on(t.taskId), // a task's attachments
+  ],
+);

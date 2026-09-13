@@ -19,6 +19,7 @@ import { tabRoutes } from './routes/tabs.ts';
 import { taskRoutes } from './routes/tasks.ts';
 import { sprintRoutes } from './routes/sprints.ts';
 import { importRoutes } from './routes/imports.ts';
+import { documentRoutes } from './routes/documents.ts';
 import { memberRoutes } from './routes/members.ts';
 import { eventRoutes } from './routes/events.ts';
 import { adminRoutes } from './routes/admin.ts';
@@ -36,6 +37,7 @@ import { flushAllYdocRooms } from './realtime/ydoc.ts';
 import { startBackupScheduler } from './jobs/backup.ts';
 import { startSprintRolloverScheduler } from './jobs/sprints.ts';
 import { mailStatus, verifyEmailTransport } from './lib/email.ts';
+import { blobstore, missingConfig } from './lib/blobstore.ts';
 
 const PORT = Number(process.env.PORT ?? 5174);
 // Bind all interfaces by default so the container is reachable; override with HOST.
@@ -112,6 +114,7 @@ await app.register(tabRoutes);
 await app.register(taskRoutes);
 await app.register(sprintRoutes);
 await app.register(importRoutes);
+await app.register(documentRoutes);
 await app.register(memberRoutes);
 await app.register(eventRoutes);
 await app.register(sudoRoutes);
@@ -178,7 +181,15 @@ process.on('SIGINT', () => void shutdown('SIGINT'));
 // boot, where a deploy actually shows it. Fire-and-forget: a slow or unreachable relay must
 // never delay serving requests.
 function reportMailHealth(): void {
-  const status = mailStatus();
+  // Documents are opt-in (DOCUMENTS_PLAN D4). Say which keys are missing rather than letting an
+// operator discover the 503 from a failed upload.
+if (blobstore()) {
+  app.log.info(`document storage ready — bucket "${process.env.S3_BUCKET}" at ${process.env.S3_ENDPOINT}`);
+} else {
+  app.log.info(`document upload is off (set ${missingConfig().join(', ')} to enable) — see .env.example`);
+}
+
+const status = mailStatus();
   if (!status.ok) {
     app.log.warn(`email is NOT configured — /api/auth/forgot will answer 503. ${status.detail}`);
     return;
