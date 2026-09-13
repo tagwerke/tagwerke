@@ -13,7 +13,13 @@ import { api, enqueue } from './client';
 import { saveSnapshot } from '../offline/snapshot';
 import type { ID, RootState, Task } from '../types';
 
-const DEBOUNCE_MS = 400;
+// Trailing debounce on the whole diff pass — raised from 400ms to 2s (2026-09-12) to stop a typed
+// field emitting a PATCH and an audit row at every pause for thought. This governs EVERY write that
+// flows through diff(): task field edits, reorders, and board/project renames, so a status change
+// now reaches collaborators up to 2s later. Unload and tab-hide still force an immediate flush(),
+// and the outbox is durable once submitted — the exposure is only a hard crash inside the window,
+// which also delays saveSnapshot() below.
+const DEBOUNCE_MS = 2000;
 
 interface Snap {
   tasks: Record<ID, Task>;
