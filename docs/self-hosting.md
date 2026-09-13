@@ -251,6 +251,75 @@ docker compose start app   # boot re-verifies migrations against the restored sc
 Point-in-time recovery (WAL archiving) is beyond this guide; the database is standard
 Postgres 17, so standard tooling (`pgBackRest`, `wal-g`) applies if you need it.
 
+## Document storage (file uploads)
+
+File upload is **off by default**. The rest of the app works normally without it; the upload
+endpoints simply answer `503`, and the server log says which variables are missing at boot.
+
+Turning it on means pointing Tagwerke at an **S3-compatible bucket**. It does not care which
+one — the difference is a single URL:
+
+| Where | `S3_ENDPOINT` | Notes |
+|---|---|---|
+| **Garage** | `http://garage:3900` | Self-hosted, lightweight, built for exactly this. **Recommended if you want nothing to leave your network.** |
+| **MinIO** | `http://minio:9000` | Self-hosted, more widely known, heavier. |
+| **Cloudflare R2** | `https://<account-id>.r2.cloudflarestorage.com` | Hosted. Set `S3_REGION=auto`. No egress fees. |
+| **AWS S3** | `https://s3.<region>.amazonaws.com` | Hosted. |
+
+```bash
+# In .env
+S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+S3_BUCKET=tagwerke-documents
+S3_REGION=auto                 # 'auto' for R2; a real region elsewhere
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+# Path style works everywhere; virtual-host style needs per-bucket DNS. Leave this alone
+# unless your provider requires otherwise.
+S3_FORCE_PATH_STYLE=true
+
+# Optional limits (bytes). Defaults: 100 MiB per file, 5 GiB per board.
+MAX_UPLOAD_BYTES=104857600
+BOARD_QUOTA_BYTES=5368709120
+```
+
+Create the bucket yourself — Tagwerke never creates one, so a typo in `S3_BUCKET` fails loudly
+instead of silently writing into a new bucket. Restart the app and the boot log confirms it:
+
+```
+document storage ready — bucket "tagwerke-documents" at https://...
+```
+
+### Three things to get right
+
+1. **Scope the credentials to this bucket only.** The access key in `.env` should not be able
+   to list, read or delete any other bucket. On R2 that is an API token scoped to one bucket;
+   on AWS it is an IAM policy naming one ARN.
+2. **Your database backup no longer contains everything.** `pg_dump` captures each document's
+   metadata but not its bytes. Restoring only the database gives you boards whose files 404.
+   Back the bucket up too — provider versioning or lifecycle replication is usually enough —
+   and add restoring it to your drill. (With uploads off, the dump is still complete.)
+3. **Residency follows the bucket, not the app.** A hosted bucket makes that provider a
+   sub-processor of your users' file contents, and a US-owned provider is reachable under the
+   CLOUD Act even for an EU-region bucket. If that matters, run Garage or MinIO yourself. See
+   [data-residency.md](data-residency.md#sub-processors).
+
+### Deleting files
+
+Deleting a document moves it to Trash; the bytes stay in the bucket so it can be restored.
+Deleting a **board** removes its files from the bucket immediately. Trashed documents are
+purged — object first, then row — by the retention command, alongside trashed tasks and old
+audit rows:
+
+```bash
+docker compose exec app npm run prune-audit -- --dry   # report only
+docker compose exec app npm run prune-audit            # audit > 12mo, trash > 30d
+```
+
+If an object cannot be deleted (bucket unreachable, credentials rotated), its row is kept so
+the next run retries rather than losing track of the file. `npm run erase-user` likewise
+deletes the files on any board it removes, and reports any it could not.
+
+
 ## Upgrades
 
 Installer deployment (`/opt/tagwerke`): edit `TAGWERKE_VERSION` in `.env`, then

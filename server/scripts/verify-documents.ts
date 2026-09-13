@@ -33,6 +33,7 @@ const { db, schema } = await import('../db/client.ts');
 const { documentRoutes } = await import('../routes/documents.ts');
 const { createSession } = await import('../auth/session.ts');
 const { configFromEnv, s3Blobstore } = await import('../lib/blobstore.ts');
+const { tabRoutes } = await import('../routes/tabs.ts');
 
 let failures = 0;
 function check(label: string, ok: boolean, detail?: unknown): void {
@@ -56,7 +57,9 @@ async function seed(): Promise<{ cookieHeader: string; outsiderCookie: string }>
   ]);
   await db.insert(schema.tabs).values({ id: tabId, name: 'verify-documents board' });
   // Only the first user is a member; the second exists to prove the ACL actually refuses.
-  await db.insert(schema.boardMembers).values({ tabId, userId, role: 'editor' });
+  // Admin, not editor: board deletion requires it, and admin outranks editor so every
+  // editor-gated route below is still exercised at its real threshold.
+  await db.insert(schema.boardMembers).values({ tabId, userId, role: 'admin' });
   return {
     cookieHeader: await createSession(userId),
     outsiderCookie: await createSession(otherId),
@@ -111,6 +114,9 @@ async function objectCount(): Promise<number> {
 const app = Fastify({ logger: false });
 await app.register(cookie, { secret: process.env.SESSION_SECRET! });
 await app.register(documentRoutes);
+// Registered so board deletion can be exercised through the REAL route: it is the most common
+// way document rows disappear, and the objects have to go with them.
+await app.register(tabRoutes);
 await app.ready();
 
 function signed(sessionId: string): string {
@@ -259,6 +265,22 @@ try {
     headers: { cookie: signed(cookieHeader) },
   });
   check('the bytes survived the round trip through Trash', Buffer.compare(afterRes.rawPayload, pdf) === 0);
+
+  console.log('\ndeleting the board takes its objects with it:');
+  const beforeBoardDelete = await objectCount();
+  const boardDel = await app.inject({
+    method: 'DELETE',
+    url: `/api/tabs/${tabId}`,
+    headers: { cookie: signed(cookieHeader) },
+  });
+  check('board delete returns 200', boardDel.statusCode === 200, boardDel.body);
+  const remaining = await db.select().from(schema.documents).where(eq(schema.documents.tabId, tabId));
+  check('document rows cascade away', remaining.length === 0, remaining.length);
+  const afterBoardDelete = await objectCount();
+  check('and the objects are gone from the bucket too', afterBoardDelete < beforeBoardDelete, {
+    before: beforeBoardDelete,
+    after: afterBoardDelete,
+  });
 
   console.log('\naudit trail:');
   const rows = await db

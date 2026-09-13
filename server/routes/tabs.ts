@@ -5,6 +5,7 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
+import { storageKeysForBoard, purgeObjects } from '../lib/documentGc.ts';
 import { publish, userChannel } from '../lib/bus.ts';
 import { dlog, sid } from '../lib/dlog.ts';
 import { applyBoardAccessChange } from '../realtime/connections.ts';
@@ -216,10 +217,19 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
         .select({ userId: schema.boardMembers.userId })
         .from(schema.boardMembers)
         .where(eq(schema.boardMembers.tabId, id));
-      // Deleting the tab cascades its tasks, memberships, events, and the time_blocks
+      // Uploaded files live in a bucket, which no FK cascade can reach, so their keys have to be
+      // read BEFORE the rows vanish. The objects themselves are deleted after the row delete
+      // commits — see lib/documentGc.ts for why that order is the safe one.
+      const docKeys = await storageKeysForBoard(id);
+      // Deleting the tab cascades its tasks, memberships, events, documents, and the time_blocks
       // that reference it (all FK on delete cascade). (Delete requires admin via preHandler,
       // so the per-board restrictDelete guardrail is already satisfied.)
       await db.delete(schema.tabs).where(eq(schema.tabs.id, id));
+      // Awaited, but it cannot throw (purgeObjects reports failures instead): the board IS gone, so
+      // a storage hiccup must never turn a completed delete into an error the user would retry.
+      // Waiting rather than firing-and-forgetting means the bytes are actually gone by the time the
+      // client refreshes, and any failure is logged inside this request rather than orphaned.
+      await purgeObjects(docKeys, req.log);
       // A deleted board is NOT broadcast by the ws onResponse hook (it skips tab entities), so
       // without this every other open session keeps showing the board until a manual refresh.
       // Notify each member's personal feed — their client repulls state and drops it live, the

@@ -9,6 +9,13 @@
 // Deleting the user cascades sessions / projects / board_members / time_blocks (owned) /
 // event_attendance / board_activity, and sets-null tasks.assigneeId + others' time_blocks.
 //
+// DOCUMENTS: a file uploaded to a SHARED board survives with its byline nulled, exactly like the
+// user's tasks and comments — it is content the remaining members still depend on, and removing it
+// would delete other people's working material. Files on a board that this erasure DELETES (they
+// were its only member) are removed from object storage too; FK cascade takes the rows but cannot
+// reach a bucket. If that distinction is wrong for a particular erasure request, delete the board's
+// documents in the app first, then run this.
+//
 //   npm run erase-user -- --email a@b.com           # PREVIEW only (no changes)
 //   npm run erase-user -- --email a@b.com --confirm  # actually erase
 //
@@ -18,6 +25,7 @@ import 'dotenv/config';
 import { nanoid } from 'nanoid';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { db, schema, pool } from '../db/client.ts';
+import { storageKeysForBoards, purgeObjects } from '../lib/documentGc.ts';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -38,6 +46,24 @@ async function adminCount(tx: Tx, tabId: string): Promise<number> {
   return n;
 }
 
+
+/**
+ * Boards the erasure will DELETE rather than hand over: the ones where this user is the only
+ * member left. Subsumes the admin-count check in the transaction — if another admin exists then
+ * another member exists, so the board is handed over, not deleted.
+ */
+async function soleMemberBoards(uid: string, adminBoards: { tabId: string }[]): Promise<string[]> {
+  const out: string[] = [];
+  for (const { tabId } of adminBoards) {
+    const [other] = await db
+      .select({ userId: schema.boardMembers.userId })
+      .from(schema.boardMembers)
+      .where(and(eq(schema.boardMembers.tabId, tabId), ne(schema.boardMembers.userId, uid)))
+      .limit(1);
+    if (!other) out.push(tabId);
+  }
+  return out;
+}
 async function main() {
   const email = arg('email');
   if (!email) throw new Error('usage: npm run erase-user -- --email <email> [--confirm]');
@@ -55,11 +81,19 @@ async function main() {
   if (!flag('confirm')) {
     console.log(`\n  [preview] would erase ${user.email} (${uid})`);
     console.log(`    admin on ${adminBoards.length} board(s); sole-admin boards will be promoted or deleted`);
+    const previewKeys = await storageKeysForBoards(await soleMemberBoards(uid, adminBoards));
+    console.log(`    ${previewKeys.length} uploaded file(s) on sole-member board(s) will be deleted from object storage`);
+    console.log('    files on SHARED boards are kept, with the uploader byline cleared');
     console.log('    cascades: sessions, projects, board_members, time_blocks, event_attendance, board_activity');
     console.log('    audit: actor pseudonymized to a tombstone; email scrubbed from payloads');
     console.log('\n  re-run with --confirm to apply\n');
     return;
   }
+
+  // Read BEFORE the transaction deletes the rows — afterwards there is nothing left to read the
+  // keys from. The objects are removed only after the transaction COMMITS: an S3 delete cannot be
+  // rolled back, so doing it inside would destroy files for an erasure that then failed.
+  const doomedKeys = await storageKeysForBoards(await soleMemberBoards(uid, adminBoards));
 
   await db.transaction(async (tx) => {
     // 1. Keep every board admin-ed. For boards where the user is the SOLE admin, promote the
@@ -96,6 +130,15 @@ async function main() {
       WHERE "payload" ? 'email' AND lower("payload"->>'email') = ${user.email.toLowerCase()}
     `);
   });
+
+  const purged = await purgeObjects(doomedKeys, console);
+  if (doomedKeys.length > 0) {
+    console.log(`  deleted ${purged.deleted}/${doomedKeys.length} uploaded file(s) from object storage`);
+    if (purged.failed.length > 0) {
+      console.error(`  ${purged.failed.length} object(s) could NOT be deleted — remove them by hand (keys logged above)`);
+      process.exitCode = 1;
+    }
+  }
 
   console.log(`\n  erased ${user.email} (${uid}); audit trail preserved (pseudonymized)\n`);
 }

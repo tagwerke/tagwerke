@@ -8,16 +8,23 @@ the document to hand to a security reviewer or attach to a DPA. It describes the
 
 **All of your data stays on the machine you run Tagwerke on. Nothing is sent to Tagwerke's
 authors, to any analytics service, or to any third party. The application makes no
-outbound network calls during normal operation** — with two optional, self-configured
-exceptions (your SMTP server and your OIDC identity provider, if you enable them; see
-below). If you run it on a server in your own jurisdiction, your data is in your
+outbound network calls during normal operation** — with three optional, self-configured
+exceptions (your SMTP server, your OIDC identity provider, and the object-storage bucket
+used for file uploads, if you enable them; see below). Each one talks only to an endpoint
+**you** choose: point the bucket at storage you run and nothing leaves your infrastructure
+at all. If you run it on a server in your own jurisdiction, your data is in your
 jurisdiction, under your legal control.
 
 ## Where data lives
 
 - **Everything is in one PostgreSQL database** — users, sessions, boards/tabs, tasks,
   planner time blocks, calendar events, invites, board membership, the audit log, and
-  passkey credentials. There is no second datastore.
+  passkey credentials.
+- **Uploaded files are the one exception, and only if you enable them.** Set `S3_*` and the
+  BYTES of uploaded documents go to the S3-compatible bucket you configure; the database
+  keeps only the metadata row (filename, size, type, who uploaded it, which board). With
+  `S3_*` unset — the default — file upload is off entirely and Postgres really is the only
+  datastore. See [self-hosting.md](self-hosting.md#document-storage-file-uploads).
 - In the Docker Compose setup, Postgres writes to a **local named volume**
   (`tagwerke-db`) on your host disk. It does not leave the box.
 - The database container is **not published to the host network** (no `ports:` on the
@@ -36,8 +43,13 @@ jurisdiction, under your legal control.
   configuration.
 - **Optional outbound, only if you enable it:** (1) **SMTP** — password-reset emails go
   to the mail server *you* configure (`SMTP_HOST`); (2) **OIDC SSO** — login redirects
-  and token exchange go to the identity provider *you* configure from the admin console.
-  Both are off by default; neither sends task/board content anywhere.
+  and token exchange go to the identity provider *you* configure from the admin console;
+  (3) **Object storage** — if `S3_*` is set, uploaded files are written to and read from
+  the bucket endpoint *you* configure. All three are off by default. SMTP and OIDC send no
+  task/board content anywhere; object storage, by its nature, holds the file contents your
+  users upload, which is why the endpoint is yours to choose. A self-hosted **Garage** or
+  **MinIO** on your own network keeps this inside your perimeter; a hosted bucket
+  (Cloudflare R2, AWS S3) makes that provider a sub-processor — see below.
 - The only other time the network reaches the public internet is when you *first
   build/pull* the Docker images (`node`, `postgres`, npm packages). You can do this on a
   connected machine and move the images to an isolated network.
@@ -68,6 +80,12 @@ jurisdiction, under your legal control.
 
 ## Backup, restore, and portability
 
+- **If you enable file uploads, your database backup is no longer the whole instance.**
+  `pg_dump` captures every document's metadata row but not its bytes, which live in your
+  bucket. A restore therefore brings back boards whose files 404 until the bucket is
+  restored too. **Back the bucket up yourself** (most providers offer versioning or
+  lifecycle replication), and add that step to your restore drill. With `S3_*` unset there
+  is nothing extra to do — the dump is complete.
 - Your data is a standard PostgreSQL database — back it up and move it with ordinary
   `pg_dump` / `pg_restore`. **Automatic daily backups are built in and on by default**
   (full dump of every table, written only to a local folder on your server, optionally
@@ -98,8 +116,19 @@ jurisdiction, under your legal control.
 
 None by design. Tagwerke's authors process none of your data — you are the operator. The
 only parties that touch data in a self-hosted deployment are the ones **you** choose to
-configure: your SMTP provider (reset emails: recipient addresses only) and your OIDC
-identity provider (authentication identities only).
+configure: your SMTP provider (reset emails: recipient addresses only), your OIDC identity
+provider (authentication identities only), and — if you enable file uploads — your object
+storage provider.
+
+**Object storage deserves particular attention in a DPA.** Unlike the other two, it holds
+the actual contents of files your users upload, not just addresses or identities. If you
+point `S3_ENDPOINT` at a hosted service (Cloudflare R2, AWS S3, Backblaze), that provider
+becomes a sub-processor of the file contents and must appear in your records of
+processing. The same CLOUD Act reasoning as backups applies: a US-owned provider is
+reachable by US authorities even for an EU-region bucket. To have **no** sub-processor for
+file contents, run [Garage](https://garagehq.deuxfleurs.fr/) or MinIO on your own
+infrastructure and point `S3_ENDPOINT` at it — the application cannot tell the difference,
+and nothing leaves your network.
 
 ## Current limitations (honest)
 
