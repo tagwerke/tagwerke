@@ -4,12 +4,23 @@
 // NOT rebuilt here — ActivityDrawer already has them interleaved, just embedded inline instead of
 // as its overlay popover.
 
-import { useRef } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStore, childrenOf } from '../store';
-import { StatusControl, STATUS_ORDER, STATUS_LABEL } from './StatusControl';
+import { StatusControl } from './StatusControl';
 import { ActivityDrawer } from './ActivityDrawer';
+import { flush as flushPersist } from '../api/persist';
 import { navigate, boardTaskPath, boardPath } from '../util/router';
 import type { ID, TaskStatus } from '../types';
+
+/** One row of the field rail. Only here to say the label/control wrapper once. */
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="task-page-field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
 
 export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
   const task = useStore((s) => s.tasks[taskId]);
@@ -19,9 +30,54 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
   const sprints = useStore((s) => s.sprintsByBoard[boardId]);
   const setTaskMeta = useStore((s) => s.setTaskMeta);
   const setTaskText = useStore((s) => s.setTaskText);
+  const setTaskStatus = useStore((s) => s.setTaskStatus);
   const toggleTaskDone = useStore((s) => s.toggleTaskDone);
   const editable = tab?.role === 'editor' || tab?.role === 'admin';
   const titleOnFocus = useRef('');
+  // The description is held locally WHILE FOCUSED and committed on blur. Writing per keystroke
+  // replaced the task object in the store, which re-rendered this page and the ActivityDrawer
+  // embedded below it on every character. Non-null means "someone is typing in this field, their
+  // text wins"; null means the store is the truth, so a peer's edit lands the moment you are not
+  // in the box — no effect, and nothing to clobber. The id is carried because navigating to a
+  // sub-task swaps `taskId` under a mounted page (App.tsx), so a stale draft must not follow.
+  const [draft, setDraft] = useState<{ id: ID; text: string } | null>(null);
+  // Durability net for that draft. persist.ts guarantees a store edit survives a reload or a tab
+  // close (it flushes on beforeunload/visibilitychange), but it can only flush what reached the
+  // store — text sitting in React state is invisible to it. Without this, typing a description and
+  // hitting refresh loses it, which is precisely the failure the last round of description work was
+  // about. The ref shadows the state so the listeners can stay registered once; the cleanup also
+  // covers an unmount that never fired blur (closing the page from a keyboard shortcut, or the task
+  // being deleted under us).
+  const draftRef = useRef<{ id: ID; text: string } | null>(null);
+  const putDraft = (next: { id: ID; text: string } | null) => {
+    draftRef.current = next;
+    setDraft(next);
+  };
+  useEffect(() => {
+    const commit = () => {
+      const d = draftRef.current;
+      if (!d) return;
+      const live = useStore.getState().tasks[d.id];
+      if (live && d.text !== (live.description ?? '')) {
+        useStore.getState().setTaskMeta(d.id, { description: d.text });
+        // Order matters on the unload path: persist.ts registered its own beforeunload/hidden
+        // flush at module load, so it has ALREADY run by the time we get here and would never see
+        // this write. Flush again ourselves rather than relying on listener order.
+        flushPersist();
+      }
+      draftRef.current = null;
+    };
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') commit();
+    };
+    window.addEventListener('beforeunload', commit);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      window.removeEventListener('beforeunload', commit);
+      document.removeEventListener('visibilitychange', onHide);
+      commit();
+    };
+  }, []);
 
   const children = childrenOf(tasks, taskId);
   const close = () => navigate(boardPath(boardId));
@@ -51,11 +107,14 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
       <div className="task-page-body">
         <div className="task-page-main">
           <div className="task-page-title-row">
+            {/* Same two calls TaskRow makes. setTaskMeta used to be wired here instead, which
+                skipped the requireReview gate and the sub-task cascade offer — a board's approval
+                rule held on a row but not on the task's own page. */}
             <StatusControl
               status={status}
               disabled={!editable}
               onToggle={() => toggleTaskDone(task.id)}
-              onPick={(s) => setTaskMeta(task.id, { status: s })}
+              onPick={(s) => setTaskStatus(task.id, s)}
             />
             <input
               className="task-page-title"
@@ -71,10 +130,17 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
 
           <textarea
             className="task-page-description"
-            value={task.description ?? ''}
+            value={draft?.id === task.id ? draft.text : task.description ?? ''}
             disabled={!editable}
             placeholder="Description — add detail, context, links…"
-            onChange={(e) => setTaskMeta(task.id, { description: e.target.value })}
+            onFocus={() => putDraft({ id: task.id, text: task.description ?? '' })}
+            onChange={(e) => putDraft({ id: task.id, text: e.target.value })}
+            onBlur={(e) => {
+              putDraft(null);
+              // persist.ts already debounces the network at 400ms; this guard is only so an
+              // in-and-out of the field does not churn the store for nothing.
+              if (e.target.value !== (task.description ?? '')) setTaskMeta(task.id, { description: e.target.value });
+            }}
           />
 
           {children.length > 0 && (
@@ -97,17 +163,9 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
         </div>
 
         <aside className="task-page-fields">
-          <label className="task-page-field">
-            <span>Status</span>
-            <select value={status} disabled={!editable} onChange={(e) => setTaskMeta(task.id, { status: e.target.value as TaskStatus })}>
-              {STATUS_ORDER.map((s) => (
-                <option key={s} value={s}>{STATUS_LABEL[s]}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="task-page-field">
-            <span>Assignee</span>
+          {/* No Status field here: the StatusControl in the title row is the one status affordance,
+              shared with board rows and the Planner. */}
+          <Field label="Assignee">
             <select
               value={task.assigneeId ?? ''}
               disabled={!editable}
@@ -118,10 +176,9 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
-          </label>
+          </Field>
 
-          <label className="task-page-field">
-            <span>Reviewer</span>
+          <Field label="Reviewer">
             <select
               value={task.reviewerId ?? ''}
               disabled={!editable}
@@ -132,10 +189,9 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
-          </label>
+          </Field>
 
-          <label className="task-page-field">
-            <span>Priority</span>
+          <Field label="Priority">
             <select
               value={task.priority ?? ''}
               disabled={!editable}
@@ -146,20 +202,18 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
               <option value="2">!!</option>
               <option value="3">!!!</option>
             </select>
-          </label>
+          </Field>
 
-          <label className="task-page-field">
-            <span>Date</span>
+          <Field label="Date">
             <input
               type="date"
               value={task.date ?? ''}
               disabled={!editable}
               onChange={(e) => setTaskMeta(task.id, { date: e.target.value || undefined })}
             />
-          </label>
+          </Field>
 
-          <label className="task-page-field">
-            <span>Sprint</span>
+          <Field label="Sprint">
             <select
               value={task.sprintId ?? ''}
               disabled={!editable}
@@ -170,7 +224,7 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
                 <option key={sp.id} value={sp.id}>{sp.label}{sp.isCurrent ? ' (current)' : ''}</option>
               ))}
             </select>
-          </label>
+          </Field>
         </aside>
       </div>
     </main>
