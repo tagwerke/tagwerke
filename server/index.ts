@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
+import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -29,6 +30,7 @@ import { orgRoutes, ORG_ID } from './routes/org.ts';
 import { activityRoutes } from './routes/activity.ts';
 import { notificationRoutes } from './routes/notifications.ts';
 import { registerAuditHook } from './lib/audit.ts';
+import { helmetOptions } from './lib/security.ts';
 import { registerWebsocket } from './ws.ts';
 import { flushAllYdocRooms } from './realtime/ydoc.ts';
 import { startBackupScheduler } from './jobs/backup.ts';
@@ -76,6 +78,10 @@ await db
 // BACKUP_DISABLED=true (see server/jobs/backup.ts + docs/self-hosting.md).
 await startBackupScheduler(app.log);
 startSprintRolloverScheduler(app.log);
+
+// Security headers. Registered before everything else so it covers the API, the static bundle and
+// the SPA fallback alike. Policy and rationale live in lib/security.ts.
+await app.register(helmet, helmetOptions(isProd));
 
 await app.register(cookie, { secret });
 
