@@ -22,6 +22,8 @@
     "invite": "tsx server/scripts/create-invite.ts",
     "seed-users": "tsx server/scripts/seed-users.ts",
     "reset-pw": "tsx server/scripts/reset-password.ts",
+    "promote-admin": "tsx server/scripts/promote-admin.ts",
+    "list-users": "tsx server/scripts/list-users.ts",
     "mail:test": "tsx server/scripts/test-email.ts",
     "prune-audit": "tsx server/scripts/prune-audit.ts",
     "verify:rank": "tsx server/scripts/verify-rank.ts",
