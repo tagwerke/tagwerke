@@ -18,7 +18,7 @@ import { pendingTaskIds } from '../offline/outbox';
 import { useNotifications } from '../notifications/useNotifications';
 import { useComments } from '../comments/useComments';
 import { dlog, sid } from '../util/dlog';
-import type { Comment, ID, Notification, Task } from '../types';
+import type { Comment, DocumentDTO, ID, Notification, Task } from '../types';
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
@@ -243,6 +243,19 @@ function handleMessage(raw: string): void {
       // (COMMENTS_PLAN.md D1/D2). The store dedupes by id, so our own echo lands as a no-op.
       const m = msg as { action?: 'create' | 'update' | 'delete'; comment?: Comment };
       if (m.action && m.comment?.id) useComments.getState().receive(m.action, m.comment);
+      return;
+    }
+    case 'document': {
+      // A file attached/deleted on the open board, or an extraction run that finished
+      // Rows, not document content — so its own frame, exactly like 'comment' above.
+      //
+      // The payload is deliberately optional because two producers emit this frame and they know
+      // different things: routes/documents.ts has the row in hand and sends it, while
+      // lib/extractItems.ts fires minutes after its request ended and sends only the id. The store
+      // re-reads the row when the payload is absent, so both are handled; do not "tidy" this into
+      // a required `document` without changing the pipeline first.
+      const m = msg as { action?: 'create' | 'delete' | 'extracted'; document?: DocumentDTO; documentId?: ID };
+      if (m.action) useStore.getState().receiveDocument(m.action, m.document, m.documentId);
       return;
     }
     case 'notification': {

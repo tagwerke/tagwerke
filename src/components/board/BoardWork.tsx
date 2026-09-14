@@ -16,6 +16,7 @@ import { boardTaskPath, navigate } from '../../util/router';
 import type { DraftFields } from '../../tasks/createTask';
 import type { SprintFilter } from '../TabView';
 import { ViewSwitcher } from './ViewSwitcher';
+import { DocumentStrip } from '../documents/DocumentStrip';
 import { Dropdown } from '../Dropdown';
 import type { BoardView, ID, Member, Sprint } from '../../types';
 
@@ -188,6 +189,24 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
     const after = place === 'before' ? seq[i] : seq[i + 1];
     store.moveTask(dragId, { before: before?.id, after: after?.id });
   }, [groups]);
+
+  // Files is a view of the board, not a layout of its tasks — so it takes the whole surface and
+  // keeps only the switcher, the way the Notes view does. It is answered HERE rather than beside
+  // Notes in TabView because 'files' already routes through this component (anything that isn't
+  // Notes does), and splitting the answer across two files is how a fourth view ends up rendering
+  // a table on one path and a strip on the other. The early return sits below every hook, so the
+  // hook order is identical on both paths.
+  if (view === 'files') {
+    return (
+      <div className="board-work">
+        <div className="work-toolbar">
+          <span className="work-spacer" />
+          <ViewSwitcher view={view} onChange={onViewChange} />
+        </div>
+        <DocumentStrip variant="board" boardId={tabId} />
+      </div>
+    );
+  }
 
   const total = visible.length;
   const doneCount = visible.filter((t) => t.status === 'done').length;

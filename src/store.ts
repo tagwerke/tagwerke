@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
-import type { BlockFilter, BoardSettings, BoardView, CalendarEvent, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task, TaskStatus } from './types';
+import type { BlockFilter, BoardSettings, BoardView, CalendarEvent, DocumentDTO, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task, TaskStatus } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { dlog, sid } from './util/dlog';
-import { api, enqueue } from './api/client';
+import { api, ApiError, enqueue } from './api/client';
 import { compareRank, rankAfter, rankBetween } from '../shared/rank';
 import { MAX_TASK_DEPTH } from '../shared/tree';
 
@@ -226,6 +226,37 @@ interface Actions {
   reset(): void;
 }
 
+/**
+ * Files attached to a board (CONTRACT_TO_PROJECT_PLAN §5a). Deliberately NOT part of RootState:
+ * a board's file list is fetched on demand — only when its Files view or a task page on it opens —
+ * and `hydrate()` replaces RootState wholesale, which has no business discarding a list that
+ * nothing in /api/state carries. Same reasoning as the comment threads in useComments; it lives
+ * here rather than in its own store only because there is no second surface that needs it.
+ *
+ * ONE list per board, holding the board's task-attached files too (the list route returns them —
+ * `?taskId=` only narrows it). The task page filters client-side, so a task strip and a board
+ * strip open in the same session cannot disagree, and a live frame updates both at once.
+ */
+interface DocumentsSlice {
+  /** Loaded file lists, keyed by board id, newest first (the list route's own order). */
+  documentsByBoard: Record<ID, DocumentDTO[]>;
+  /** Boards whose list is being fetched right now. */
+  documentsLoading: Record<ID, boolean>;
+  /** Last load/delete error per board, shown inline on the strip. */
+  documentsError: Record<ID, string | null>;
+
+  /** Pull a board's files. Authoritative — it replaces whatever was held for that board. */
+  loadDocuments(boardId: ID): Promise<void>;
+  /** Put a freshly uploaded row in front. Called after the upload RESOLVES, never before (D1). */
+  addDocument(doc: DocumentDTO): void;
+  /** Delete a file: optimistic locally, durable-outbox on the wire, like any other small write. */
+  removeDocument(boardId: ID, id: ID): Promise<void>;
+  /** Set (or clear) a board's inline error — the strip's upload failures surface through here. */
+  setDocumentsError(boardId: ID, error: string | null): void;
+  /** Apply a live `document` frame from the socket. Idempotent; ignores boards never loaded. */
+  receiveDocument(action: 'create' | 'delete' | 'extracted', doc?: DocumentDTO, documentId?: ID): void;
+}
+
 interface DocLike { type: string; text?: string; attrs?: Record<string, unknown>; content?: DocLike[] }
 
 const initialFilter: Filter = {
@@ -291,7 +322,7 @@ function makeInitial(): RootState {
   };
 }
 
-export const useStore = create<RootState & Actions>()((set, get) => {
+export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get) => {
   // Patch one task in place, no-op if it no longer exists.
   const patchTask = (id: ID, patch: Partial<Task>) =>
     set((s) => (s.tasks[id] ? { tasks: { ...s.tasks, [id]: { ...s.tasks[id], ...patch } } } : s));
@@ -327,6 +358,9 @@ export const useStore = create<RootState & Actions>()((set, get) => {
 
   return {
       ...makeInitial(),
+      documentsByBoard: {},
+      documentsLoading: {},
+      documentsError: {},
 
       createProject(name, color) {
         const id = nanoid();
@@ -763,6 +797,111 @@ export const useStore = create<RootState & Actions>()((set, get) => {
         });
       },
 
+      // ── Documents (CONTRACT_TO_PROJECT_PLAN §5a) ────────────────────────────
+      async loadDocuments(boardId) {
+        set((s) => ({
+          documentsLoading: { ...s.documentsLoading, [boardId]: true },
+          documentsError: { ...s.documentsError, [boardId]: null },
+        }));
+        try {
+          const { documents } = await api.documents.list(boardId);
+          set((s) => ({
+            documentsByBoard: { ...s.documentsByBoard, [boardId]: documents },
+            documentsLoading: { ...s.documentsLoading, [boardId]: false },
+          }));
+        } catch (e) {
+          set((s) => ({
+            documentsLoading: { ...s.documentsLoading, [boardId]: false },
+            documentsError: {
+              ...s.documentsError,
+              [boardId]: e instanceof ApiError ? e.message.replace(/^.*-> \d+\s*/, '') || 'couldn’t load files' : 'couldn’t load files',
+            },
+          }));
+        }
+      },
+
+      addDocument(doc) {
+        set((s) => {
+          const list = s.documentsByBoard[doc.tabId];
+          // A board nobody has looked at has no list to add to; loadDocuments will fetch the
+          // real one, which includes this row. Materializing a one-item list here would read as
+          // "this board has exactly one file", which is a lie.
+          if (!list) return s;
+          if (list.some((d) => d.id === doc.id)) return s; // our own echo, or a duplicate frame
+          return { documentsByBoard: { ...s.documentsByBoard, [doc.tabId]: [doc, ...list] } };
+        });
+      },
+
+      async removeDocument(boardId, id) {
+        set((s) => {
+          const list = s.documentsByBoard[boardId];
+          if (!list) return s;
+          return {
+            documentsByBoard: { ...s.documentsByBoard, [boardId]: list.filter((d) => d.id !== id) },
+            documentsError: { ...s.documentsError, [boardId]: null },
+          };
+        });
+        // The outbox owns delivery and retry. A server rejection drops the op and triggers the
+        // session's authoritative re-pull — which does NOT carry documents, so the row reappears
+        // only on the next loadDocuments. Acceptable: the delete is soft and restorable.
+        await api.documents.remove(id);
+      },
+
+      setDocumentsError(boardId, error) {
+        set((s) => ({ documentsError: { ...s.documentsError, [boardId]: error } }));
+      },
+
+      receiveDocument(action, doc, documentId) {
+        if (action === 'delete') {
+          const id = documentId;
+          if (!id) return;
+          set((s) => {
+            // The frame carries no board, so find the list holding it. Only loaded boards are
+            // searched, which is all that can be showing it.
+            const boardId = Object.keys(s.documentsByBoard).find((b) => s.documentsByBoard[b].some((d) => d.id === id));
+            if (!boardId) return s;
+            return {
+              documentsByBoard: {
+                ...s.documentsByBoard,
+                [boardId]: s.documentsByBoard[boardId].filter((d) => d.id !== id),
+              },
+            };
+          });
+          return;
+        }
+        if (!doc?.id) {
+          // The two servers that publish 'extracted' do not agree on the payload: text extraction
+          // sends the whole row, the commitment run sends only an id (its route answered 202
+          // minutes earlier). Re-read the row in the second case rather than ignoring the frame —
+          // itemCounts moving is the entire point of it. Only for a board we are already holding;
+          // one nobody has open costs nothing.
+          if (action === 'extracted' && documentId && Object.values(get().documentsByBoard).some((l) => l.some((d) => d.id === documentId))) {
+            void api.documents
+              .get(documentId)
+              .then(({ document }) => get().receiveDocument('extracted', document))
+              .catch(() => {
+                /* transient — reopening the board re-reads the list anyway */
+              });
+          }
+          return;
+        }
+        if (action === 'create') {
+          get().addDocument(doc);
+          return;
+        }
+        // 'extracted': a run finished and the row's textStatus/itemCounts moved. Replace in
+        // place rather than re-sorting — the file did not change position in the list.
+        set((s) => {
+          const list = s.documentsByBoard[doc.tabId];
+          if (!list) return s;
+          const i = list.findIndex((d) => d.id === doc.id);
+          if (i === -1) return s;
+          const next = list.slice();
+          next[i] = doc;
+          return { documentsByBoard: { ...s.documentsByBoard, [doc.tabId]: next } };
+        });
+      },
+
       cleanupEmptyTasks() {
         const { tasks, tabs } = get();
         const emptyIds = new Set<ID>();
@@ -840,7 +979,9 @@ export const useStore = create<RootState & Actions>()((set, get) => {
       },
 
       reset() {
-        set(makeInitial());
+        // makeInitial() only covers RootState, and `set` merges — so the lazily-fetched file
+        // lists have to be named explicitly or they would survive a reset into the next session.
+        set({ ...makeInitial(), documentsByBoard: {}, documentsLoading: {}, documentsError: {} });
       },
   };
 });

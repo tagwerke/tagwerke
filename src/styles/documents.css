@@ -1,0 +1,195 @@
+/* Document strip: the file list on a board's Files view and on a task page.
+   Owned by the attachment-strip work. The review panel's styles live in document-panel.css so the
+   two surfaces can be edited independently. Reuse the app's existing custom properties and class
+   idioms from index.css rather than introducing a parallel design language. */
+
+/* ── The card ──────────────────────────────────────────────────────────────
+   Bordered on both variants on purpose: the border is what says "this whole area takes a file",
+   and an invisible drop target is one nobody discovers. */
+.doc-strip {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-paper);
+  padding: 10px 12px;
+  transition: border-color .12s ease, background .12s ease;
+}
+.doc-strip.is-task { margin-bottom: 20px; }
+.doc-strip.is-board { margin: 10px clamp(16px, 3vw, 32px); padding: 14px 16px; }
+
+/* Mid-drag. Same treatment as .btn.ghost.has-filter — the accent border plus a wash of it — so a
+   pending drop reads as the app's own "this is live" state and not as an error. */
+.doc-strip.is-dragging {
+  border-color: var(--pop);
+  background: rgba(255, 106, 61, 0.06);
+}
+
+.doc-strip-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.doc-strip-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-right: auto;
+}
+
+.doc-strip-error {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #a8581f;
+}
+
+.doc-strip-empty {
+  margin: 0;
+  padding: 16px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-mute);
+}
+
+/* ── Rows ──────────────────────────────────────────────────────────────── */
+.doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.doc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+.doc-row:first-child { border-top: 0; }
+.doc-strip.is-board .doc-row { min-height: 48px; }
+
+/* The row's clickable body. A button rather than a click handler on the <li>, so the keyboard and
+   a screen reader get the same "open this file" the mouse does — and so the download link and the
+   delete button next to it are not nested inside another control. */
+.doc-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  text-align: left;
+  color: var(--ink);
+}
+.doc-row-open { cursor: pointer; border-radius: var(--r-sm); }
+.doc-row-open:hover { background: var(--line); }
+
+.doc-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+
+/* Extraction state and commitment counts. Never hover-only: a file that can't be read has to say
+   so where it is read, which is the lesson the hover-only comment button already taught
+   (COMMENTS_PLAN §8). */
+.doc-note {
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+.doc-note.is-bad { color: #a8581f; }
+.doc-note.is-found {
+  color: var(--ink-soft);
+  font-weight: 600;
+  background: rgba(255, 106, 61, 0.10);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+/* ── Upload in flight ──────────────────────────────────────────────────── */
+.doc-progress {
+  flex: 1 1 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.doc-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--pop);
+  transition: width .1s linear;
+}
+/* An upload in flight is deliberately NOT dressed as a finished row: it is dimmer, it has no
+   download or delete, and it disappears only when the server has actually taken the file (D1). */
+.doc-row.is-upload .doc-name { color: var(--ink-soft); }
+.doc-row.is-failed { color: var(--ink-soft); }
+
+/* ── Row actions ───────────────────────────────────────────────────────── */
+.doc-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.doc-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--r-sm);
+  color: var(--ink-mute);
+  text-decoration: none;
+}
+.doc-action:hover { color: var(--ink); background: var(--line); }
+.doc-delete:hover { color: var(--pop); }
+
+/* Offscreen rather than display:none so focus and assistive tech behave predictably; the visible
+   control is the button in UploadButton, which forwards its click here. */
+.doc-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Phones ────────────────────────────────────────────────────────────────
+   There is no drag-and-drop on a phone, so the picker button is the only way in and the row's
+   controls are the only way out — both have to be thumb-sized. The last time a touch affordance
+   was left to the desktop layout, reordering silently stopped working on phones (MOBILE_PWA.md). */
+@media (max-width: 720px) {
+  .doc-strip.is-board { margin: 10px 12px; padding: 12px; }
+  .doc-row { min-height: 48px; }
+  .doc-action { width: 40px; height: 40px; }
+  /* Name on its own line, everything else wrapping under it — a long filename must never push the
+     download and delete controls off the side of the screen. */
+  .doc-name { flex: 1 1 100%; }
+  .doc-meta { white-space: normal; }
+}

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStore, childrenOf } from '../store';
 import { StatusControl } from './StatusControl';
 import { ActivityDrawer } from './ActivityDrawer';
+import { DocumentStrip } from './documents/DocumentStrip';
 import { flush as flushPersist } from '../api/persist';
 import { navigate, boardTaskPath, boardPath } from '../util/router';
 import type { ID, TaskStatus } from '../types';
@@ -158,6 +159,11 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
               </ul>
             </div>
           )}
+
+          {/* Files sit between the write-up and the conversation, which is where they belong in
+              the reading order: what this task is, what is attached to it, what was said about
+              it. The strip handles its own viewer/editor gate. */}
+          <DocumentStrip variant="task" boardId={boardId} taskId={task.id} />
 
           <ActivityDrawer kind="task" id={task.id} boardId={boardId} title={task.text} onClose={close} embedded />
         </div>

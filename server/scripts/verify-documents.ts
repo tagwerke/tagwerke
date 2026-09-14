@@ -218,6 +218,55 @@ try {
     hdl.headers['content-disposition'],
   );
 
+  console.log('\nextraction runs automatically on upload:');
+  // The pure extractor has verify:extraction. What is only testable HERE is the wiring: that the
+  // upload reply does not wait for it, and that the row is updated afterwards.
+  const note = Buffer.from('Agency shall deliver three concepts. Excluded: print production.');
+  const nm = multipartBody('brief.txt', note, 'application/octet-stream');
+  const nup = await app.inject({
+    method: 'POST',
+    url: `/api/boards/${tabId}/documents`,
+    headers: { ...nm.headers, cookie: signed(cookieHeader) },
+    payload: nm.payload,
+  });
+  const ndoc = nup.json();
+  check('the upload replies immediately, before extraction', ndoc.textStatus === 'pending', ndoc.textStatus);
+
+  // Poll rather than sleep a fixed amount: extraction is fast for a small file but the point is
+  // that it is asynchronous, and a fixed wait would be either flaky or needlessly slow.
+  let settled = ndoc;
+  for (let i = 0; i < 100; i++) {
+    const r = await app.inject({
+      method: 'GET',
+      url: `/api/documents/${ndoc.id}`,
+      headers: { cookie: signed(cookieHeader) },
+    });
+    settled = r.json().document ?? r.json();
+    if (settled.textStatus !== 'pending') break;
+    await new Promise((r2) => setTimeout(r2, 50));
+  }
+  check('the row settles on ok', settled.textStatus === 'ok', settled.textStatus);
+  check('and records how much text it found', settled.textChars === note.length, {
+    got: settled.textChars,
+    want: note.length,
+  });
+
+  const withText = await app.inject({
+    method: 'GET',
+    url: `/api/documents/${ndoc.id}?includeText=1`,
+    headers: { cookie: signed(cookieHeader) },
+  });
+  check('?includeText=1 returns the extracted text', withText.json().text === note.toString(), withText.json().text);
+
+  const listed = await app.inject({
+    method: 'GET',
+    url: `/api/boards/${tabId}/documents`,
+    headers: { cookie: signed(cookieHeader) },
+  });
+  const listedNote = listed.json().documents.find((d: { id: string }) => d.id === ndoc.id);
+  check('the board listing carries extraction state', listedNote?.textStatus === 'ok', listedNote?.textStatus);
+  check('and item counts for the strip', typeof listedNote?.itemCounts?.proposed === 'number', listedNote?.itemCounts);
+
   console.log('\nsize cap:');
   const before = await objectCount();
   const huge = Buffer.alloc(8192, 0x42);
@@ -251,7 +300,14 @@ try {
     url: `/api/boards/${tabId}/documents`,
     headers: { cookie: signed(cookieHeader) },
   });
-  check('and leaves the list', listAfter.json().documents?.length === 1, listAfter.json());
+  // Assert the deleted document is ABSENT, not that some total is N: a count breaks every time a
+  // fixture is added above (which is exactly what happened when the extraction checks landed), and
+  // it was never what this check was about.
+  check(
+    'and leaves the list',
+    !listAfter.json().documents?.some((d: { id: string }) => d.id === doc.id),
+    listAfter.json().documents?.map((d: { id: string }) => d.id),
+  );
 
   const res = await app.inject({
     method: 'POST',

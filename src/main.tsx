@@ -1,6 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
+// Split out of index.css (3.6k lines) so the two document surfaces can be worked on
+// independently. Loaded after it, so these may override the base styles.
+import './styles/documents.css';
+import './styles/document-panel.css';
 import App from './App.tsx';
 import { dlog } from './util/dlog';
 

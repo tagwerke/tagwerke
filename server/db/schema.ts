@@ -563,7 +563,9 @@ export const pushSubscriptions = pgTable(
 export const documents = pgTable(
   'documents',
   {
-    // Client-generated (nanoid), so a POST replayed from the offline outbox inserts once.
+    // Server-generated (nanoid). Unlike task_comments, this does NOT need to be client-generated
+    // for replay safety: uploads deliberately bypass the offline outbox (DOCUMENTS_PLAN D1), so
+    // there is no queued POST that could be replayed twice.
     id: text('id').primaryKey(),
     // Board scope. Authorization and the realtime channel both need it, and it is what makes a
     // document reachable at all; never client-supplied on write, it comes from the URL (D7).

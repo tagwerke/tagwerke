@@ -10,12 +10,13 @@
 //      `attachment` (§5). Serving an uploaded .svg or .html inline would execute it on this origin
 //      with the viewer's session cookie. That is the whole reason P0 shipped first.
 
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance, FastifyRequest } from 'fastify';
 import { createHash } from 'node:crypto';
+import type { Readable } from 'node:stream';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import multipart from '@fastify/multipart';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
@@ -24,6 +25,7 @@ import { recordAudit } from '../lib/audit.ts';
 import { publish, boardChannel } from '../lib/bus.ts';
 import { blobstore } from '../lib/blobstore.ts';
 import { sniffMime, safeFilename, SNIFF_BYTES, FALLBACK_MIME } from '../lib/mime.ts';
+import { canExtract, extractText, TEXT_EXTRACT_MAX_BYTES } from '../lib/textExtract.ts';
 
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES ?? 100 * 1024 * 1024);
 const BOARD_QUOTA_BYTES = Number(process.env.BOARD_QUOTA_BYTES ?? 5 * 1024 * 1024 * 1024);
@@ -56,11 +58,23 @@ interface DocumentRow {
   mime: string;
   size: number;
   sha256: string | null;
+  textStatus: string;
+  textChars: number | null;
   uploadedBy: string | null;
   createdAt: Date;
 }
 
-function documentDTO(d: DocumentRow): Record<string, unknown> {
+interface ItemCounts {
+  proposed: number;
+  accepted: number;
+}
+
+/** A document nobody has extracted commitments from yet. Not a magic value — the honest answer. */
+const NO_ITEMS: ItemCounts = { proposed: 0, accepted: 0 };
+
+/** Matches `DocumentDTO` in src/types.ts. Additive only: the strip, the panel and the realtime
+ *  frame all read this one shape, so a field that appears in one place must appear in all. */
+function documentDTO(d: DocumentRow, itemCounts: ItemCounts = NO_ITEMS): Record<string, unknown> {
   return {
     id: d.id,
     tabId: d.tabId,
@@ -71,7 +85,47 @@ function documentDTO(d: DocumentRow): Record<string, unknown> {
     sha256: d.sha256 ?? undefined,
     uploadedBy: d.uploadedBy ?? undefined,
     createdAt: d.createdAt instanceof Date ? d.createdAt.getTime() : undefined,
+    textStatus: d.textStatus,
+    textChars: d.textChars ?? undefined,
+    itemCounts,
   };
+}
+
+/**
+ * Proposed/accepted item counts for a set of documents, in ONE grouped query.
+ *
+ * The board Files view lists every document at once, so the obvious per-row count is an N+1 that
+ * grows with the board. `text_content` is deliberately never selected here — a list of twenty
+ * contracts would be twenty megabytes of prose nothing on screen displays.
+ */
+async function itemCountsFor(documentIds: string[]): Promise<Map<string, ItemCounts>> {
+  const counts = new Map<string, ItemCounts>();
+  if (documentIds.length === 0) return counts;
+
+  const rows = await db
+    .select({
+      documentId: schema.documentItems.documentId,
+      status: schema.documentItems.status,
+      n: sql<string>`count(*)`,
+    })
+    .from(schema.documentItems)
+    .where(inArray(schema.documentItems.documentId, documentIds))
+    .groupBy(schema.documentItems.documentId, schema.documentItems.status);
+
+  for (const row of rows) {
+    const entry = counts.get(row.documentId) ?? { proposed: 0, accepted: 0 };
+    // `rejected` is counted by neither: the UI shows what is outstanding and what is confirmed,
+    // and a rejection is the absence of both.
+    if (row.status === 'proposed') entry.proposed = Number(row.n);
+    else if (row.status === 'accepted') entry.accepted = Number(row.n);
+    counts.set(row.documentId, entry);
+  }
+  return counts;
+}
+
+async function documentDTOWithCounts(row: DocumentRow): Promise<Record<string, unknown>> {
+  const counts = await itemCountsFor([row.id]);
+  return documentDTO(row, counts.get(row.id) ?? NO_ITEMS);
 }
 
 /** Resolver for routes keyed by a `:id` that is a DOCUMENT id: looks up its owning board. */
@@ -131,6 +185,109 @@ function meter(): { stream: Transform; size(): number; digest(): string; head():
     digest: () => hash.digest('hex'),
     head: () => Buffer.concat(chunks),
   };
+}
+
+/**
+ * Pull text out of a freshly uploaded document and write it back to the row.
+ *
+ * D2: this runs AFTER the reply has gone out and never blocks it. Extraction is cheap and
+ * deterministic — no model, no network beyond the bucket — but a 200-page PDF is still seconds of
+ * CPU, and the uploader asked for an upload, not a parse. The row carries `text_status = 'pending'`
+ * from its column default until this finishes, which is exactly what the UI renders.
+ *
+ * The bytes are RE-FETCHED from the bucket rather than teed out of the upload stream. Teeing looks
+ * cheaper and is not: the common case is a file we will not read at all (an image, a video, a
+ * 90 MiB zip), and teeing pays full memory for it before finding that out. Re-fetching keeps the
+ * upload path's memory flat and makes this function re-runnable later, which a "re-extract" button
+ * and any future OCR pass both need.
+ */
+function startExtraction(row: DocumentRow & { storageKey: string }, log: FastifyBaseLogger): void {
+  // The whole point is to not be awaited, so nothing above catches a rejection. An unhandled one
+  // takes the process down under Node's default policy — the crash would be in a request that
+  // already returned 200, which is about as hard to diagnose as this gets.
+  void extractInBackground(row, log).catch((err) => {
+    log.error({ err, documentId: row.id }, 'text extraction failed outside its own handler');
+  });
+}
+
+async function extractInBackground(
+  row: DocumentRow & { storageKey: string },
+  log: FastifyBaseLogger,
+): Promise<void> {
+  // Both of these are re-checked inside extractText(). Deciding them here is purely about not
+  // streaming a 4 GiB video out of object storage to conclude that we cannot read it.
+  if (row.size > TEXT_EXTRACT_MAX_BYTES) {
+    await finishExtraction(row, { status: 'too_large', detail: `${row.size} bytes` }, log);
+    return;
+  }
+  if (!canExtract(row.mime, row.filename)) {
+    await finishExtraction(row, { status: 'unsupported', detail: row.mime }, log);
+    return;
+  }
+
+  const store = blobstore();
+  if (!store) return; // Storage vanished between the upload and now; leave the row `pending`.
+
+  let buf: Buffer;
+  try {
+    buf = await readAll(await store.get(row.storageKey), TEXT_EXTRACT_MAX_BYTES);
+  } catch (err) {
+    // A bucket read failing is OUR fault, not the file's, so it is logged as an error as well as
+    // recorded on the row — `failed` alone would send the user hunting for a corrupt document.
+    log.error({ err, documentId: row.id }, 'could not read document bytes for extraction');
+    await finishExtraction(row, { status: 'failed', detail: 'could not read the stored file' }, log);
+    return;
+  }
+
+  await finishExtraction(row, await extractText(buf, row.mime, row.filename), log);
+}
+
+async function finishExtraction(
+  row: DocumentRow & { storageKey: string },
+  result: { status: string; text?: string; chars?: number; detail?: string },
+  log: FastifyBaseLogger,
+): Promise<void> {
+  const [updated] = await db
+    .update(schema.documents)
+    .set({
+      textStatus: result.status,
+      textContent: result.text ?? null,
+      textChars: result.chars ?? null,
+      extractedAt: new Date(),
+    })
+    .where(eq(schema.documents.id, row.id))
+    .returning();
+  // The document was hard-deleted while we were parsing it (its board went away, most likely).
+  if (!updated) return;
+
+  if (result.status !== 'ok') {
+    log.info({ documentId: row.id, status: result.status, detail: result.detail }, 'no text extracted');
+  }
+  // No actorId: extraction has no actor, and a client that skips its own echoes must not skip this.
+  publish(boardChannel(updated.tabId), {
+    v: 1,
+    type: 'document',
+    action: 'extracted',
+    documentId: updated.id,
+    document: await documentDTOWithCounts(updated),
+  });
+}
+
+/** Buffer a stream, refusing to grow past `limit`. */
+async function readAll(stream: Readable, limit: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of stream as AsyncIterable<Buffer>) {
+    total += chunk.length;
+    // Belt and braces: the caller already checked `documents.size`. This is what stops a row whose
+    // size disagrees with its object from turning into unbounded memory.
+    if (total > limit) {
+      stream.destroy();
+      throw new Error(`stored object exceeds ${limit} bytes`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
 
 export async function documentRoutes(app: FastifyInstance): Promise<void> {
@@ -237,13 +394,15 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
         })
         .returning();
 
-      const dto = documentDTO(row);
+      // A brand-new document has no items by construction, so this needs no query.
+      const dto = documentDTO(row, NO_ITEMS);
       recordAudit({
         actorId: userId, action: 'document_upload', targetType: 'document', targetId: id,
         scopeId: tabId, method: 'POST', status: 200,
         payload: { filename, mime, size, taskId: taskId ?? null },
       });
       publish(boardChannel(tabId), { v: 1, type: 'document', action: 'create', document: dto, actorId: userId });
+      startExtraction(row, req.log);
       return dto;
     },
   );
@@ -262,7 +421,27 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
         .from(schema.documents)
         .where(and(...where))
         .orderBy(desc(schema.documents.createdAt));
-      return { documents: rows.map(documentDTO) };
+      const counts = await itemCountsFor(rows.map((r) => r.id));
+      return { documents: rows.map((r) => documentDTO(r, counts.get(r.id) ?? NO_ITEMS)) };
+    },
+  );
+
+  // ---- one document ----------------------------------------------------------
+  app.get(
+    '/api/documents/:id',
+    { preHandler: requireBoardRole('viewer', documentBoard) },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const { includeText } = req.query as { includeText?: string };
+
+      const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, id)).limit(1);
+      if (!doc || doc.deletedAt) return reply.code(404).send({ error: 'not found' });
+
+      const document = await documentDTOWithCounts(doc);
+      // Opt-in, because the text can be a megabyte and the only surface that wants it is the
+      // jump-to-context view behind a citation. Everything else reads textStatus/textChars.
+      if (includeText !== '1' && includeText !== 'true') return { document };
+      return { document, text: doc.textContent ?? undefined };
     },
   );
 
@@ -345,7 +524,8 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
         .returning();
       if (!row) return reply.code(404).send({ error: 'not found' });
 
-      const dto = documentDTO(row);
+      // Items survive the trip through Trash with the row, so these are re-read rather than zeroed.
+      const dto = await documentDTOWithCounts(row);
       recordAudit({
         actorId: userId, action: 'document_restore', targetType: 'document', targetId: id,
         scopeId: tabId, method: 'POST', status: 200,

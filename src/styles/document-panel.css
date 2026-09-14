@@ -1,0 +1,272 @@
+/* Document panel: the per-document view and the extracted-commitment review list.
+   Owned by the review-panel work; the file list's styles are in documents.css. Reuse the app's
+   existing custom properties and class idioms from index.css. */
+
+/* The panel itself reuses .share-panel (chrome, scrolling, and the phone bottom-sheet treatment
+   index.css already gives that class) and only widens it: a review list carries a quote per row,
+   and 460px turns every one of them into six ragged lines. */
+.document-panel {
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(84vh, 860px);
+}
+
+.doc-panel-head { align-items: flex-start; gap: 12px; }
+.doc-panel-title { min-width: 0; }
+.doc-panel-title strong { display: block; overflow-wrap: anywhere; }
+.doc-panel-sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+.doc-panel-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.doc-panel-actions .btn { text-decoration: none; }
+/* index.css only styles :disabled for the sync button; the extract button spends whole minutes
+   disabled while a run works, so it has to look it. */
+.doc-panel-actions .btn:disabled { opacity: 0.55; cursor: default; }
+
+/* Every "this didn't work" state on this surface is a sentence, so they all share one calm
+   treatment — a scan, an unconfigured model and an empty result are outcomes, not failures. */
+.doc-panel-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-paper);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.doc-panel-note.is-bad { border-color: rgba(190,60,40,0.3); background: rgba(190,60,40,0.06); }
+.doc-panel-note code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.doc-panel-running {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.doc-panel-bar {
+  position: relative;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.doc-panel-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: 999px;
+  background: var(--pop);
+  animation: doc-scan 1.1s ease-in-out infinite;
+}
+@keyframes doc-scan {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+/* A bar that never stops sweeping is the kind of motion people turn off; the state still reads
+   without it, so hold it still and let the text carry the message. */
+@media (prefers-reduced-motion: reduce) {
+  .doc-panel-bar::after { animation: none; width: 100%; opacity: 0.5; }
+}
+
+.doc-panel-summary {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+  margin-bottom: 4px;
+}
+.doc-panel-count { font-size: 14px; color: var(--ink-soft); }
+.doc-panel-count strong { color: var(--ink); }
+.doc-panel-caveat {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-mute);
+  max-width: 62ch;
+}
+.doc-panel-acceptall { margin-top: 10px; }
+.doc-panel-dropped { margin: 10px 0 0; font-size: 12px; color: var(--ink-mute); }
+
+/* ── Kind groups ──────────────────────────────────────────────────────────
+   All five kinds get the SAME heading, deliberately (D11). "Out of scope" and "Limits" are the
+   two a contract buries and every other tool drops; giving them a quieter style than
+   "Deliverables" would re-bury them here. */
+.doc-group { margin-top: 18px; }
+.doc-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.doc-group-count {
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-mute);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 11px;
+}
+.doc-group-empty {
+  margin: 0;
+  padding: 2px 0 4px;
+  font-size: 13px;
+  color: var(--ink-mute);
+}
+
+.doc-item-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.doc-item {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  padding: 12px;
+}
+/* Reviewed rows are marked on the edge rather than recoloured: the list has to stay readable as a
+   list once most of it has been gone through. */
+.doc-item.is-accepted { box-shadow: inset 3px 0 0 var(--ink); }
+.doc-item.is-rejected { opacity: 0.55; }
+.doc-item.is-rejected .doc-item-text { text-decoration: line-through; }
+
+/* Wraps rather than a media query: below ~400px the actions drop to their own line on their own,
+   which is what a breakpoint would have done and one less number to keep true. */
+.doc-item-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; }
+.doc-item-body { flex: 1 1 240px; min-width: 0; }
+.doc-item-text { margin: 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+
+.doc-item-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.doc-item-tags > * { font-size: 11px; }
+.doc-item-due {
+  font-family: var(--mono);
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+}
+.doc-item-state { text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-mute); }
+.doc-item-state.is-accepted { color: var(--ink); }
+.doc-item-human {
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--pop-2) 22%, transparent);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+/* Advisory, and styled to be exactly that. It never hides a row and it must never look like it
+   could — it is the smallest, quietest thing on the line. */
+.doc-item-confidence { color: var(--ink-mute); font-variant-numeric: tabular-nums; }
+
+/* The evidence. Always rendered, never collapsed, never behind hover. */
+.doc-item-quote {
+  margin: 8px 0 0;
+  padding: 0 0 0 10px;
+  border-left: 2px solid var(--line-strong);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.doc-item-cite {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px; /* touch target: this is the row's one disclosure control */
+  margin-top: 2px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.doc-item-cite:hover { color: var(--ink); }
+
+.doc-item-context { margin-top: 6px; }
+.doc-item-context-text {
+  margin: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-paper);
+  font-family: var(--serif);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.doc-item-context-text mark {
+  background: color-mix(in srgb, var(--pop-2) 55%, transparent);
+  color: var(--ink);
+  border-radius: 3px;
+}
+.doc-item-context-note { margin: 0; font-size: 12px; color: var(--ink-mute); }
+
+.doc-item-editor { display: flex; flex-wrap: wrap; gap: 8px; }
+.doc-item-input {
+  flex: 1 1 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  outline: none;
+  resize: vertical;
+}
+.doc-item-input:focus { border-color: var(--pop); }
+.doc-item-date-input {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  padding: 6px 8px;
+  font-size: 13px;
+  outline: none;
+}
+.doc-item-editor-actions { display: flex; gap: 6px; margin-left: auto; }
+
+/* 40px square, on every device. These three are the entire point of the panel, they are what a
+   thumb reaches for while reading on a phone, and .btn.tiny (26px) is not a touch target. */
+.doc-item-actions { display: flex; gap: 6px; margin-left: auto; flex: 0 0 auto; }
+.doc-item-btn {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-paper);
+  color: var(--ink-mute);
+  font-size: 15px;
+  line-height: 1;
+  transition: background .12s ease, border-color .12s, color .12s;
+}
+.doc-item-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+.doc-item-btn.accept.is-on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.doc-item-btn.reject.is-on { color: var(--pop); border-color: var(--pop); background: rgba(255,106,61,0.07); }
+
+@media (max-width: 720px) {
+  /* index.css sheet-ifies .share-panel at this width; .document-panel's wider rule above would
+     otherwise win on later-stylesheet order and leave a phone with a floating 720px card. */
+  .document-panel { width: 100%; max-width: none; max-height: 88vh; }
+}
