@@ -8,7 +8,7 @@
 // stay as direct fetches and simply fail while offline.
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import type { BlockFilter, CalendarEvent, Comment as CommentDTO, ID, Notification as NotificationDTO, RsvpStatus, Sprint, Task, TaskStatus } from '../types';
+import type { BlockFilter, CalendarEvent, Comment as CommentDTO, DocumentDTO, DocumentItem, ExtractionRun, ID, Notification as NotificationDTO, RsvpStatus, Sprint, Task, TaskStatus } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
 
@@ -264,6 +264,76 @@ export const api = {
   // offline that we'd have). The WRITES go through the durable outbox: a comment typed on a
   // train is exactly the edit that must survive a reload, and the client-generated id makes the
   // replayed POST idempotent server-side (D8).
+  // Documents. Uploads are NOT in the outbox (DOCUMENTS_PLAN D1): the outbox is a JSON queue
+  // persisted to IndexedDB, and base64-ing a file into it is +33% storage plus an ordered queue
+  // parked behind one large retry. So an upload is direct and non-optimistic — the one write in
+  // this app allowed to say "not yet" — and only the metadata reads/writes go through req/outbox.
+  documents: {
+    list: (boardId: ID, taskId?: ID) =>
+      req<{ documents: DocumentDTO[] }>(
+        `/api/boards/${boardId}/documents${taskId ? `?taskId=${encodeURIComponent(taskId)}` : ''}`,
+      ),
+    get: (id: ID, includeText = false) =>
+      req<{ document: DocumentDTO; text?: string }>(`/api/documents/${id}${includeText ? '?includeText=1' : ''}`),
+    /** The download URL. A plain <a href> works — the session cookie authenticates it, so there is
+     *  no reason to pull bytes through JS only to hand them back to the browser. */
+    contentUrl: (id: ID) => `/api/documents/${id}/content`,
+    remove: (id: ID) => submitMutation(M('DELETE', `/api/documents/${id}`)),
+    restore: (id: ID) => submitMutation(M('POST', `/api/documents/${id}/restore`)),
+
+    /**
+     * Upload one file, with progress. XHR rather than fetch purely because fetch cannot report
+     * upload progress — and a file upload with no progress bar is how a user concludes the app
+     * has frozen. `onProgress` receives 0..1.
+     */
+    upload(boardId: ID, file: File, opts: { taskId?: ID; onProgress?: (p: number) => void } = {}) {
+      const form = new FormData();
+      form.append('file', file, file.name);
+      const url = `/api/boards/${boardId}/documents${opts.taskId ? `?taskId=${encodeURIComponent(opts.taskId)}` : ''}`;
+      return new Promise<DocumentDTO>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        xhr.withCredentials = true;
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) opts.onProgress?.(e.loaded / e.total);
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText) as DocumentDTO);
+            } catch {
+              reject(new Error('upload succeeded but the response was unreadable'));
+            }
+          } else {
+            let msg = `upload failed (${xhr.status})`;
+            try {
+              const body = JSON.parse(xhr.responseText) as { error?: string };
+              if (body.error) msg = body.error;
+            } catch {
+              /* non-JSON error body — keep the status message */
+            }
+            reject(new Error(msg));
+          }
+        };
+        xhr.onerror = () => reject(new Error('upload failed — no connection'));
+        xhr.onabort = () => reject(new Error('upload cancelled'));
+        xhr.send(form);
+      });
+    },
+  },
+
+  // Commitments pulled out of a document (CONTRACT_TO_PROJECT_PLAN rung 3). Reads are live; the
+  // accept/reject writes go through the outbox like any other small mutation.
+  items: {
+    list: (documentId: ID) =>
+      req<{ items: DocumentItem[]; run: ExtractionRun }>(`/api/documents/${documentId}/items`),
+    /** Starts a run. 202 — poll list() while run.status === 'running'. */
+    extract: (documentId: ID) => req<{ runId: string }>(`/api/documents/${documentId}/extract`, { method: 'POST' }),
+    update: (id: ID, patch: { status?: 'accepted' | 'rejected'; text?: string; dueDate?: string | null }) =>
+      submitMutation(M('PATCH', `/api/items/${id}`, patch)),
+    acceptAll: (documentId: ID) =>
+      submitMutation(M('POST', `/api/documents/${documentId}/items/accept-all`)),
+  },
   comments: {
     list: (taskId: ID) => req<{ comments: CommentDTO[] }>(`/api/tasks/${taskId}/comments`),
     create: (taskId: ID, b: { id: ID; body: string; parentCommentId?: ID | null }) =>

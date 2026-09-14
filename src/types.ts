@@ -183,8 +183,8 @@ export interface CalendarEvent {
 // Three views, one of them two layouts of the same component (NOTES_SPLIT_PLAN §N2).
 // 'list' folded into the table (group by status, columns off), 'calendar' into the /calendar
 // route which does that job properly, and 'sprints' into the board panel.
-export type BoardView = 'table' | 'kanban' | 'notes';
-export const BOARD_VIEWS: BoardView[] = ['table', 'kanban', 'notes'];
+export type BoardView = 'table' | 'kanban' | 'notes' | 'files';
+export const BOARD_VIEWS: BoardView[] = ['table', 'kanban', 'notes', 'files'];
 
 /** Any older or unknown value lands on the table rather than a blank screen (§N2.4). */
 export function asBoardView(v: unknown): BoardView {
@@ -254,4 +254,70 @@ export interface Filter {
   hasDate: boolean;
   dueSoon: boolean;
   query: string;
+}
+
+// ---- documents (DOCUMENTS_PLAN, CONTRACT_TO_PROJECT_PLAN) --------------------
+
+/** Why a document has no extracted text — each value is something the UI must SAY, not hide. */
+export type TextStatus = 'pending' | 'ok' | 'no_text_layer' | 'unsupported' | 'too_large' | 'failed';
+
+export interface DocumentDTO {
+  id: ID;
+  tabId: ID;
+  taskId?: ID;
+  filename: string;
+  mime: string;
+  size: number;
+  sha256?: string;
+  uploadedBy?: ID;
+  createdAt?: number;
+  textStatus: TextStatus;
+  textChars?: number;
+  /** Populated by the board/task list so a strip can show "6 found" without a second request. */
+  itemCounts?: { proposed: number; accepted: number };
+}
+
+/**
+ * The five kinds of commitment we pull out of a contract.
+ *
+ * `exclusion` and `limit` are the point: every tool lists deliverables, almost none surface what
+ * you agreed NOT to do, or that you promised two rounds of revisions and are on round four.
+ */
+export type ItemKind = 'deliverable' | 'exclusion' | 'date' | 'payment' | 'limit';
+export const ITEM_KINDS: ItemKind[] = ['deliverable', 'exclusion', 'date', 'payment', 'limit'];
+export const ITEM_KIND_LABEL: Record<ItemKind, string> = {
+  deliverable: 'Deliverables',
+  exclusion: 'Out of scope',
+  date: 'Dates',
+  payment: 'Payment',
+  limit: 'Limits',
+};
+
+export type ItemStatus = 'proposed' | 'accepted' | 'rejected';
+
+export interface DocumentItem {
+  id: ID;
+  documentId: ID;
+  kind: ItemKind;
+  text: string;
+  /** Verbatim from the document, server-verified to appear in it. Always shown, never hidden
+   *  behind a hover — it is the entire reason a reader should believe the row. */
+  sourceQuote: string;
+  sourceOffset?: number;
+  dueDate?: string;
+  confidence?: number;
+  status: ItemStatus;
+  editedAt?: number;
+  editedBy?: ID;
+}
+
+/** In-flight state of an extraction run, polled while one is running. */
+export interface ExtractionRun {
+  status: 'idle' | 'running' | 'done' | 'error';
+  startedAt?: number;
+  error?: string;
+  proposed?: number;
+  /** Items the model returned whose quote was NOT in the document, and were therefore dropped.
+   *  Surfaced because a high number is the signal that the model or prompt is bad. */
+  dropped?: number;
 }

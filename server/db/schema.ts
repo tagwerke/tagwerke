@@ -13,6 +13,7 @@ import {
   text,
   integer,
   bigint,
+  real,
   smallint,
   boolean,
   jsonb,
@@ -583,6 +584,16 @@ export const documents = pgTable(
     size: bigint('size', { mode: 'number' }).notNull(),
     // Integrity only, not identity (see storageKey). Null if hashing was skipped.
     sha256: text('sha256'),
+    // Plain text pulled out of the file on upload (CONTRACT_TO_PROJECT_PLAN D2). Everything the
+    // commitment extraction does reads this, never the bytes — the bytes are in a bucket and the
+    // model needs text anyway.
+    textContent: text('text_content'),
+    // 'pending' | 'ok' | 'no_text_layer' | 'unsupported' | 'too_large' | 'failed'.
+    // `no_text_layer` is the important one: a PDF that is almost certainly a SCAN. Saying so beats
+    // extracting a handful of garbage characters and then confidently finding commitments in them.
+    textStatus: text('text_status').notNull().default('pending'),
+    textChars: integer('text_chars'),
+    extractedAt: timestamp('extracted_at', { withTimezone: true }),
     // Real FK, like task_comments.authorId: a document is user-facing content, not a forensic
     // record. Erasing a user blanks the byline; audit_log keeps the trail.
     uploadedBy: text('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
@@ -595,5 +606,49 @@ export const documents = pgTable(
   (t) => [
     index('documents_tab_idx').on(t.tabId, t.createdAt), // the board's file list
     index('documents_task_idx').on(t.taskId), // a task's attachments
+  ],
+);
+
+// One commitment pulled out of a document — a deliverable, an exclusion, a date, a payment trigger
+// or a limit (CONTRACT_TO_PROJECT_PLAN D11). The valuable kinds are `exclusion` and `limit`: every
+// tool can list deliverables, almost none surface what you agreed NOT to do, or that you promised
+// two rounds of revisions and are on round four.
+//
+// Nothing here is authoritative (D8). Rows land as `proposed` and a human accepts them. The
+// document stays the source of truth; this table is a derived, reviewable view of it.
+export const documentItems = pgTable(
+  'document_items',
+  {
+    id: text('id').primaryKey(),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    // Denormalized board scope, like task_comments and documents: authorization and the realtime
+    // channel both need it, and every read would otherwise join documents to get it.
+    tabId: text('tab_id')
+      .notNull()
+      .references(() => tabs.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(), // deliverable | exclusion | date | payment | limit
+    text: text('text').notNull(), // the commitment, in plain language
+    // VERBATIM from the document, and verified to actually appear in text_content before this row
+    // is written (D6). This is the anti-hallucination gate and the reason a reader can believe the
+    // row: an invented commitment in a contract is worse than no feature, because someone acts on
+    // it. A model that cannot quote gets its output dropped, so weak models yield FEWER items
+    // rather than wrong ones.
+    sourceQuote: text('source_quote').notNull(),
+    sourceOffset: integer('source_offset'), // into text_content, so the UI can jump to context
+    dueDate: text('due_date'), // 'YYYY-MM-DD', when kind='date' and the contract stated one
+    confidence: real('confidence'), // the model's own; advisory, never a gate
+    status: text('status').notNull().default('proposed'), // proposed | accepted | rejected
+    // Non-null means a person touched this row, and re-running extraction must leave it alone
+    // (D7). Silently overwriting someone's correction is how this feature would lose trust.
+    editedAt: timestamp('edited_at', { withTimezone: true }),
+    editedBy: text('edited_by').references(() => users.id, { onDelete: 'set null' }),
+    runId: text('run_id'), // which extraction run produced it, for debugging a bad prompt
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('document_items_doc_idx').on(t.documentId, t.kind),
+    index('document_items_tab_idx').on(t.tabId),
   ],
 );

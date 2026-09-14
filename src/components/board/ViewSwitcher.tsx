@@ -9,7 +9,7 @@
 
 import { BOARD_VIEWS, type BoardView } from '../../types';
 
-const LABEL: Record<BoardView, string> = { table: 'Table', kanban: 'Kanban', notes: 'Notes' };
+const LABEL: Record<BoardView, string> = { table: 'Table', kanban: 'Kanban', notes: 'Notes', files: 'Files' };
 
 export function ViewSwitcher({ view, onChange }: { view: BoardView; onChange: (v: BoardView) => void }) {
   return (
