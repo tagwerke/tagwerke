@@ -25,6 +25,7 @@ import { rankBetween } from '../../shared/rank';
 import { MAX_TASK_DEPTH } from '../../shared/tree';
 import { navigate, boardTaskPath } from '../util/router';
 import { describeMove, moveTargets, moveTaskToBoard } from './moveToBoard';
+import { newestFirst } from '../util/sprints';
 import type { ID, Member, Task, TaskStatus } from '../types';
 
 /** Which field a cell click scopes the menu to. Matches the table's column keys. */
@@ -258,16 +259,16 @@ const sprintAction: TaskAction = {
       const store = useStore.getState();
       for (const id of ctx.ids) store.setTaskMeta(id, { sprintId });
     };
-    // Oldest first, Backlog last — the order every other sprint list on the board uses.
+    // Backlog, then newest first — the order every other sprint list on the board uses.
     return [
-      ...sprints.map((s) => ({
+      { key: 'none', label: 'Backlog', selected: current.size === 1 && current.has(null), run: set(undefined) },
+      ...newestFirst(sprints).map((s) => ({
         key: s.id,
         label: s.label,
         hint: s.isCurrent ? 'current' : undefined,
         selected: current.size === 1 && current.has(s.id),
         run: set(s.id),
       })),
-      { key: 'none', label: 'Backlog', selected: current.size === 1 && current.has(null), run: set(undefined) },
     ];
   },
 };

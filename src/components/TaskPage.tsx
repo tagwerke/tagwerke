@@ -12,6 +12,7 @@ import { DocumentStrip } from './documents/DocumentStrip';
 import { flush as flushPersist } from '../api/persist';
 import { navigate, boardTaskPath, boardPath } from '../util/router';
 import type { ID, TaskStatus } from '../types';
+import { newestFirst } from '../util/sprints';
 
 /** One row of the field rail. Only here to say the label/control wrapper once. */
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -225,10 +226,10 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
               disabled={!editable}
               onChange={(e) => setTaskMeta(task.id, { sprintId: e.target.value || undefined })}
             >
-              {sprints?.map((sp) => (
+              <option value="">Backlog</option>
+              {newestFirst(sprints ?? []).map((sp) => (
                 <option key={sp.id} value={sp.id}>{sp.label}{sp.isCurrent ? ' (current)' : ''}</option>
               ))}
-              <option value="">Backlog</option>
             </select>
           </Field>
         </aside>

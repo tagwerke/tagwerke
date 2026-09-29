@@ -17,6 +17,7 @@ import { boardTaskPath, navigate } from '../../util/router';
 import type { DraftFields } from '../../tasks/createTask';
 import type { SprintFilter } from '../TabView';
 import { ViewSwitcher } from './ViewSwitcher';
+import { newestFirst } from '../../util/sprints';
 import { DocumentStrip } from '../documents/DocumentStrip';
 import { Dropdown } from '../Dropdown';
 import type { BoardView, ID, Member, Sprint } from '../../types';
@@ -271,8 +272,8 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
               value={sprintFilter === 'all' ? 'all' : sprintFilter ?? 'backlog'}
               options={[
                 { value: 'all', label: 'All' },
-                ...sprints.map((s) => ({ value: s.id, label: s.isCurrent ? `${s.label} · now` : s.label })),
                 { value: 'backlog', label: 'Backlog' },
+                ...newestFirst(sprints).map((s) => ({ value: s.id, label: s.isCurrent ? `${s.label} · now` : s.label })),
               ]}
               onChange={(v) => onSprintFilter(v === 'all' ? 'all' : v === 'backlog' ? null : v)}
             />

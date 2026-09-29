@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store';
 import { askConfirm } from '../confirm/useConfirm';
+import { newestFirst } from '../util/sprints';
 import type { ID, Sprint } from '../types';
 
 export function SprintsPage({ tabId, onOpenSprint }: { tabId: string; onOpenSprint: (sprintId: ID | null) => void }) {
@@ -21,8 +22,8 @@ export function SprintsPage({ tabId, onOpenSprint }: { tabId: string; onOpenSpri
   const canManage = role === 'editor' || role === 'admin';
   const canDelete = role === 'admin';
 
-  // Oldest first, the order the sprint filter, the pickers and group-by-sprint all use.
-  const ordered = useMemo(() => [...sprints].sort((a, b) => (a.startsAt < b.startsAt ? -1 : a.startsAt > b.startsAt ? 1 : 0)), [sprints]);
+  // Backlog, then newest first — the order the sprint filter, the pickers and group-by-sprint use.
+  const ordered = useMemo(() => newestFirst(sprints), [sprints]);
 
   const countFor = (sprintId: ID | null) =>
     Object.values(tasks).filter((t) => t.homeTabId === tabId && (t.sprintId ?? null) === sprintId).length;
@@ -53,6 +54,22 @@ export function SprintsPage({ tabId, onOpenSprint }: { tabId: string; onOpenSpri
       </p>
 
       <ul className="sprints-list">
+        {(() => {
+          const n = countFor(null);
+          return (
+            <li className="sprints-row sprints-row-backlog">
+              <div className="sprints-row-main">
+                <span className="sprints-current-toggle" aria-hidden />
+                <button type="button" className="sprints-row-label" title="Show the backlog on the board" onClick={() => onOpenSprint(null)}>
+                  Backlog
+                </button>
+                <span className="sprints-row-count" title={`${n} task${n === 1 ? '' : 's'}`}>{n}</span>
+                {canManage && <span className="sprints-row-more" aria-hidden />}
+              </div>
+            </li>
+          );
+        })()}
+
         {ordered.map((sprint) => {
           const n = countFor(sprint.id);
           const open = menuFor === sprint.id;
@@ -140,21 +157,6 @@ export function SprintsPage({ tabId, onOpenSprint }: { tabId: string; onOpenSpri
           );
         })}
 
-        {(() => {
-          const n = countFor(null);
-          return (
-            <li className="sprints-row sprints-row-backlog">
-              <div className="sprints-row-main">
-                <span className="sprints-current-toggle" aria-hidden />
-                <button type="button" className="sprints-row-label" title="Show the backlog on the board" onClick={() => onOpenSprint(null)}>
-                  Backlog
-                </button>
-                <span className="sprints-row-count" title={`${n} task${n === 1 ? '' : 's'}`}>{n}</span>
-                {canManage && <span className="sprints-row-more" aria-hidden />}
-              </div>
-            </li>
-          );
-        })()}
       </ul>
     </div>
   );

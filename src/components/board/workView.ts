@@ -7,6 +7,7 @@
 import { STATUS_LABEL, STATUS_ORDER } from '../StatusControl';
 import { compareRank } from '../../../shared/rank';
 import type { ID, Member, Sprint, Task, TaskStatus } from '../../types';
+import { newestFirst } from '../../util/sprints';
 
 export type WorkLayout = 'table' | 'board';
 export type Grouping = 'status' | 'assignee' | 'sprint' | 'none';
@@ -81,8 +82,8 @@ export function groupTasks(
   }
 
   return [
-    ...sprints.map((s) => ({ key: s.id, label: s.label, tasks: buckets.get(s.id) ?? [] })),
     { key: '~none', label: 'Backlog', tasks: buckets.get('~none') ?? [] },
+    ...newestFirst(sprints).map((s) => ({ key: s.id, label: s.label, tasks: buckets.get(s.id) ?? [] })),
   ];
 }
 
