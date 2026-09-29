@@ -6,6 +6,7 @@
 // On desktop it's a persistent right rail; on mobile TabView mounts it inside a Sheet.
 
 import { useState } from 'react';
+import { useStore } from '../store';
 import { SharePanel } from './SharePanel';
 import { EventsPanel } from './EventsPanel';
 import { BoardActivity } from './BoardActivity';
@@ -15,16 +16,28 @@ import { SprintsPage } from './SprintsPage';
 
 type PanelTab = 'members' | 'events' | 'activity' | 'sprints';
 
-export function BoardPanel({ tabId, tabName, initialTab, onOpenSprint }: {
+export function BoardPanel({ tabId, tabName, onOpenSprint }: {
   tabId: string;
   tabName: string;
-  initialTab?: PanelTab;
-  /** Filter the work view to a sprint — the one thing the sprints page ever did to a view. */
-  onOpenSprint?: (id: string) => void;
+  /** Filter the work view to a sprint, or to the backlog (`null`) — the one thing the sprints
+   *  page ever did to a view. */
+  onOpenSprint?: (id: string | null) => void;
 }) {
   // Sprints moved in here from the view switcher (§N2.3): its main action was always to set a
   // filter on another view, which makes it a management page, not a view of the tasks.
-  const [tab, setTab] = useState<PanelTab>(initialTab ?? 'members');
+  //
+  // The Sprints tab is the one with a URL (/b/:id/sprints), so it is read from the store that the
+  // URL syncs to rather than held here. It used to be only the initial value of local state: a
+  // link to /sprints with the panel already open did nothing, and clicking the tab never changed
+  // the URL, so a refresh after leaving it landed back on it.
+  const boardPanel = useStore((s) => s.boardPanel);
+  const setBoardPanel = useStore((s) => s.setBoardPanel);
+  const [other, setOther] = useState<Exclude<PanelTab, 'sprints'>>('members');
+  const tab: PanelTab = boardPanel === 'sprints' ? 'sprints' : other;
+  const setTab = (t: PanelTab): void => {
+    if (t !== 'sprints') setOther(t);
+    setBoardPanel(t === 'sprints' ? 'sprints' : null);
+  };
   const [historyOpen, setHistoryOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
 
@@ -40,7 +53,7 @@ export function BoardPanel({ tabId, tabName, initialTab, onOpenSprint }: {
       <div className="board-panel-body">
         {tab === 'members' && <SharePanel embedded tabId={tabId} tabName={tabName} onClose={() => {}} />}
         {tab === 'events' && <EventsPanel embedded tabId={tabId} tabName={tabName} onClose={() => {}} />}
-        {tab === 'sprints' && <SprintsPage tabId={tabId} onOpenSprint={(id) => { if (id) onOpenSprint?.(id); }} />}
+        {tab === 'sprints' && <SprintsPage tabId={tabId} onOpenSprint={(id) => onOpenSprint?.(id)} />}
         {tab === 'activity' && (
           <div className="activity-tab">
             <BoardActivity tabId={tabId} />

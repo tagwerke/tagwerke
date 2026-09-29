@@ -5,8 +5,9 @@
 // switching layout keeps it. That is the whole reason for the shape: "group by assignee" gives you
 // a per-person table and a per-person board, and it is one implementation.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { childrenOf, descendantsOf, taskDepth, useBoardOutline, useStore } from '../../store';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { childrenOf, descendantsOf, siblingsOf, taskDepth, useBoardOutline, useStore } from '../../store';
+import { showToast } from '../../toast/useToast';
 import { TaskActionMenu } from '../common/TaskActionMenu';
 import { WorkTable } from './WorkTable';
 import { WorkBoard } from './WorkBoard';
@@ -59,9 +60,14 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
   const [scope, setScope] = useState<'all' | 'roots'>(() =>
     readStored(SCOPE_KEY(tabId), ['all', 'roots'] as const, 'all'));
   const [sort, setSort] = useState<Sort>({ key: 'rank', dir: 'asc' });
+  // §I.3: a column sort makes "between these two rows" a lie, so the handle is not offered.
+  const canReorder = sort.key === 'rank';
   const [selection, setSelection] = useState<Set<ID>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<ID>>(new Set());
-  const [menu, setMenu] = useState<{ ids: ID[]; x: number; y: number; field?: FocusField } | null>(null);
+  const menuSeq = useRef(0);
+  const [menu, setMenu] = useState<{
+    ids: ID[]; x: number; y: number; field?: FocusField; onStep?: (dir: -1 | 1) => void; seq: number;
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -96,10 +102,10 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
 
   const groups = useMemo(() => {
     const memberName = new Map(members.map((m) => [m.id, m.name]));
-    const sprintName = new Map(sprints.map((s) => [s.id, s.label]));
+    const sprintStart = new Map(sprints.map((s) => [s.id, s.startsAt]));
     return groupTasks(visible, effectiveGrouping, members, sprints).map((g) => ({
       ...g,
-      tasks: sortTasks(g.tasks, sort, memberName, sprintName),
+      tasks: sortTasks(g.tasks, sort, memberName, sprintStart),
     }));
   }, [visible, effectiveGrouping, members, sprints, sort]);
 
@@ -136,8 +142,12 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
     });
   }, [groups]);
 
-  const openMenu = useCallback((ids: ID[], x: number, y: number, field?: FocusField) => {
-    setMenu({ ids, x, y, field });
+  const openMenu = useCallback((ids: ID[], x: number, y: number, field?: FocusField, onStep?: (dir: -1 | 1) => void) => {
+    // `seq` keys the menu: stepping from one cell's menu to the next closes and opens in the same
+    // tick, and without a new key React would keep the first menu's state for the second field.
+    // A counter of its own, not `prev.seq + 1` — the close has already nulled `prev` by then.
+    menuSeq.current += 1;
+    setMenu({ ids, x, y, field, onStep, seq: menuSeq.current });
   }, []);
 
   /** The keyboard runs the SAME actions the menu does, so the two can never disagree (§N3). */
@@ -177,18 +187,44 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
     return groupKey === '~none' ? {} : null; // a brand-new task cannot be born into a sprint here
   }, [effectiveGrouping]);
 
-  const onReorder = useCallback((dragId: ID, targetId: ID, place: 'before' | 'after') => {
+  /**
+   * Put `id` directly before or after `targetId`, a sibling. The neighbours come from the SIBLING
+   * list, not from the rows on screen: on screen the row above a task can be another task's
+   * sub-task, and a rank between keys from two different sibling sets is either out of order
+   * (so the move fell back to appending — the task jumped to the end) or lands arbitrarily.
+   */
+  const placeBeside = useCallback((id: ID, targetId: ID, place: 'before' | 'after') => {
     const store = useStore.getState();
-    const flat = groups.flatMap((g) => g.tasks);
-    const at = flat.findIndex((t) => t.id === targetId);
-    if (at < 0) return;
-    // The pair the dragged task lands between, in the order shown, excluding itself.
-    const seq = flat.filter((t) => t.id !== dragId);
-    const i = seq.findIndex((t) => t.id === targetId);
+    const t = store.tasks[id];
+    if (!t) return;
+    const seq = siblingsOf(store.tasks, t.homeTabId, t.parentTaskId).filter((s) => s.id !== id);
+    const i = seq.findIndex((s) => s.id === targetId);
+    if (i < 0) return;
     const before = place === 'before' ? seq[i - 1] : seq[i];
     const after = place === 'before' ? seq[i] : seq[i + 1];
-    store.moveTask(dragId, { before: before?.id, after: after?.id });
-  }, [groups]);
+    store.moveTask(id, { before: before?.id, after: after?.id });
+  }, []);
+
+  const onReorder = placeBeside;
+
+  /**
+   * Alt+↑/↓: swap with the neighbouring sibling — among the ones in this task's group, so under a
+   * grouping it moves past something you can see rather than a sibling filed elsewhere. Only in the
+   * board's own order, for the reason the drag handle is: under a column sort "above" is not a
+   * position the task can hold.
+   */
+  const onShift = useCallback((id: ID, dir: -1 | 1) => {
+    if (!canReorder) return showToast('Reordering needs the board’s own order — clear the column sort');
+    const store = useStore.getState();
+    const t = store.tasks[id];
+    const group = groups.find((g) => g.tasks.some((x) => x.id === id));
+    if (!t || !group) return;
+    const shown = new Set(group.tasks.map((x) => x.id));
+    const sibs = siblingsOf(store.tasks, t.homeTabId, t.parentTaskId).filter((s) => shown.has(s.id));
+    const target = sibs[sibs.findIndex((s) => s.id === id) + dir];
+    if (!target) return;
+    placeBeside(id, target.id, dir < 0 ? 'before' : 'after');
+  }, [canReorder, groups, placeBeside]);
 
   // Files is a view of the board, not a layout of its tasks — so it takes the whole surface and
   // keeps only the switcher, the way the Notes view does. It is answered HERE rather than beside
@@ -211,8 +247,6 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
   const total = visible.length;
   const doneCount = visible.filter((t) => t.status === 'done').length;
   const hiddenSubtasks = scope === 'roots' ? outline.length - visible.length : 0;
-  // §I.3: a column sort makes "between these two rows" a lie, so the handle is not offered.
-  const canReorder = sort.key === 'rank';
 
   return (
     <div className="board-work">
@@ -250,7 +284,7 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
           title="Hide sub-tasks; they stay visible as progress on their parent"
           onClick={() => setScope((s) => (s === 'all' ? 'roots' : 'all'))}
         >
-          Commitments only
+          Top level only
         </button>
         {hiddenSubtasks > 0 && (
           <span className="muted work-note">{hiddenSubtasks} sub-task{hiddenSubtasks === 1 ? '' : 's'} hidden</span>
@@ -290,6 +324,7 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
           } : null}
           canReorder={canReorder}
           onReorder={onReorder}
+          onShift={onShift}
           members={members}
           sprints={sprints}
           tasksById={tasksById}
@@ -330,12 +365,14 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
 
       {menu && (
         <TaskActionMenu
+          key={menu.seq}
           ids={menu.ids}
           tabId={tabId}
           focusField={menu.field}
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
+          onStep={menu.onStep}
         />
       )}
     </div>

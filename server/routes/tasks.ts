@@ -334,7 +334,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         priority: b.data.priority ?? null,
         rank,
         parentTaskId: b.data.parentTaskId ?? null,
-        sprintId: b.data.sprintId ?? null,
+        // Omitted PRESERVES, the same as description: the client sends a sprint only when there is
+        // one, so `?? null` here wiped every assignment on any re-PUT. A sprint belongs to one
+        // board, so a PUT that re-homes the task drops it rather than tripping the same-board FK.
+        sprintId: b.data.sprintId !== undefined
+          ? b.data.sprintId
+          : before && before.homeTabId === b.data.homeTabId ? before.sprintId : null,
         owner: b.data.owner ?? null,
         done: status === 'done',
         // Retain a recognizable Trash label; null only when genuinely never titled (§G).
@@ -538,6 +543,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         .update(schema.tasks)
         .set({
           homeTabId: toTabId,
+          // A sprint belongs to one board (tasks_sprint_same_board), so it cannot come along.
+          sprintId: null,
           parentTaskId: sql`CASE WHEN ${schema.tasks.id} = ${id} THEN NULL ELSE ${schema.tasks.parentTaskId} END`,
           rank: sql`CASE WHEN ${schema.tasks.id} = ${id} THEN ${rank} ELSE ${schema.tasks.rank} END`,
           ...(clearAssignee.length
@@ -567,6 +574,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       recordAudit({
         actorId: userId, action: 'task_move', targetType: 'task', targetId: id,
         scopeId: fromTabId, method: 'POST', status: 200,
+        // Scoped to the board it LEFT; board history also matches `toTabId`, so the board it
+        // arrived on sees it too without the task's own history showing the move twice.
         payload: {
           fromTabId,
           toTabId,

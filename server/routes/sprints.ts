@@ -7,7 +7,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { desc, eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { requireBoardRole, paramTabId, sprintTabId } from '../auth/boards.ts';
@@ -33,7 +33,7 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
         .select()
         .from(schema.sprints)
         .where(eq(schema.sprints.tabId, id))
-        .orderBy(desc(schema.sprints.startsAt));
+        .orderBy(asc(schema.sprints.startsAt)); // oldest first, the same as /api/state
       return reply.send({ sprints: rows });
     },
   );

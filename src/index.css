@@ -2237,6 +2237,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .history-line { display: flex; align-items: baseline; gap: 6px; }
 .history-actor { font-weight: 600; font-size: 13px; color: var(--ink); }
 .history-verb { font-size: 13px; color: var(--ink-soft); }
+.history-subject { color: var(--ink); }
 .history-time { margin-left: auto; font-size: 11px; color: var(--ink-mute); white-space: nowrap; }
 .history-changes { list-style: none; margin: 4px 0 0; padding: 0 0 0 2px; display: flex; flex-direction: column; gap: 2px; }
 .history-changes li { font-size: 12px; color: var(--ink-soft); font-family: var(--mono); }
@@ -2603,21 +2604,41 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-card-prio.p3 { color: #fff; background: var(--pop); border-radius: 999px; padding: 1px 6px; }
 
 /* ── Sprints page (SPRINTS_PLAN.md) ──────────────────────────────────────── */
-.sprints-page { padding: 12px clamp(16px, 3vw, 40px) 48px; max-width: 720px; }
-.sprints-list { display: flex; flex-direction: column; }
-.sprints-row { display: flex; align-items: center; gap: 10px; padding: 10px 6px; border-top: 1px solid var(--line); }
+/* The sprint list lives in the board panel's 320px rail, not on a page of its own — so no page
+   padding, and every row is sized to fit what is left of that rail after the panel's own. */
+.sprints-page { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sprints-note { margin: 0; font-size: 12px; line-height: 1.45; }
+.sprints-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.sprints-row { border-top: 1px solid var(--line); }
 .sprints-row:first-child { border-top: 0; }
+.sprints-row-main { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 2px; }
 .sprints-row.is-current { background: color-mix(in srgb, var(--pop) 6%, transparent); }
-.sprints-current-toggle { flex: none; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: 0; background: none; color: var(--ink-mute); cursor: pointer; border-radius: var(--r-sm); }
+.sprints-current-toggle {
+  flex: none; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+  border: 0; background: none; color: var(--ink-mute); cursor: pointer; border-radius: var(--r-sm); padding: 0;
+}
 .sprints-current-toggle:not(:disabled):hover { color: var(--pop); }
 .sprints-row.is-current .sprints-current-toggle { color: var(--pop); }
-.sprints-current-toggle-spacer { pointer-events: none; }
-.sprints-row-label { flex: 1; text-align: left; border: 0; background: none; padding: 4px 2px; font-size: 14px; color: var(--ink); cursor: pointer; }
-.sprints-row-label:hover { text-decoration: underline; }
-.sprints-row-label-input { flex: 1; font-size: 14px; padding: 4px 6px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--bg-paper); color: var(--ink); }
-.sprints-row-count { font-family: var(--mono); font-size: 11px; flex: none; }
+.sprints-row-label {
+  flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 4px 2px;
+  font-size: 13.5px; color: var(--ink); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sprints-row.is-current .sprints-row-label { font-weight: 600; }
+.sprints-row-label:hover { text-decoration: underline; text-underline-offset: 2px; }
+.sprints-row-label-input {
+  flex: 1; min-width: 0; font-size: 13.5px; padding: 3px 6px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--bg-paper); color: var(--ink);
+}
+.sprints-row-count { flex: none; min-width: 2ch; text-align: right; font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
+.sprints-row-more {
+  flex: none; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  border: 0; background: none; padding: 0; color: var(--ink-mute); border-radius: var(--r-sm); cursor: pointer;
+}
+.sprints-row-more:hover, .sprints-row-more.is-open { color: var(--ink); background: var(--line); }
+.sprints-row-actions { display: flex; gap: 6px; padding: 0 2px 8px 30px; }
 .sprints-row-delete:hover { color: #c0392b; }
-.sprints-row-backlog { color: var(--ink-soft); }
+.sprints-row-backlog .sprints-row-label { color: var(--ink-soft); }
 
 /* ── Task page (`/b/:id/task/:id`) ───────────────────────────────────────── */
 .task-page-body { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 28px; padding: 10px clamp(16px, 3vw, 40px) 60px; overflow-y: auto; flex: 1; min-height: 0; }
@@ -2896,7 +2917,7 @@ input, select, textarea { font: inherit; color: inherit; }
 /* Outline mode indents by real tree depth; the rule is the same containment cue the doc uses. */
 .list-outline .task-row.is-sub { border-left: 1.5px solid var(--rule, rgba(0, 0, 0, 0.09)); }
 
-/* Kanban scope switch (SUBTASKS_PLAN D10) — "All work" vs "Commitments". Reuses the List mode pill. */
+/* Kanban scope switch (SUBTASKS_PLAN D10) — "All work" vs "Top level only". Reuses the List mode pill. */
 .kb-scope { display: flex; align-items: center; gap: 2px; margin: 0 0 10px; }
 .kb-scope-note { margin-left: 8px; font-size: 0.78rem; }
 

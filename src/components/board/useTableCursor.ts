@@ -18,6 +18,10 @@
 // feel like a document rather than a grid: you arrow to the bottom, keep going, and you are typing
 // the next task.
 //
+// Alt+arrows move the TASK rather than the cursor, the way an outliner does: Alt+↑/↓ swap it with
+// the sibling above or below (its sub-tasks come with it), Alt+→/← nest it under the task above and
+// step it back out — the same as Tab/Shift+Tab, on the keys that point where it goes.
+//
 // One deliberate accessibility trade. In an ARIA grid, Tab exits the widget and arrows move within
 // it; here Tab nests, because nesting by Tab is the gesture people brought from the document.
 // Escape releases the cursor, at which point Tab behaves normally again — so the keyboard is never
@@ -44,6 +48,11 @@ export interface TableCursorHandlers {
   toggleSelect(taskId: ID): void;
   nest(taskId: ID): void;
   unnest(taskId: ID): void;
+  /** Alt+↑/↓: swap with the sibling above (-1) or below (1). */
+  shift(taskId: ID, dir: -1 | 1): void;
+  /** Whether a column is on screen for this row. Narrow widths hide some, and a cursor stop you
+   *  cannot see reads as the arrow key doing nothing. */
+  colVisible(taskId: ID, col: number): boolean;
   remove(taskId: ID): void;
   /** Put the caret in the quick-add line when the cursor lands on it. */
   focusAdd(): void;
@@ -107,12 +116,33 @@ export function useTableCursor(
     });
   }, [rowIds]);
 
+  /** The next column in `dir` that is actually on screen, or `col` itself at the edge. */
+  const stepCol = useCallback((row: ID, col: number, dir: -1 | 1): number => {
+    for (let c = col + dir; c >= 0 && c <= COL_LAST; c += dir) {
+      if (h.current.colVisible(row, c)) return c;
+    }
+    return col;
+  }, []);
+
   const onKeyDown = useCallback((e: React.KeyboardEvent): boolean => {
     if (!enabled) return false;
     const cur = cursor;
 
+    // Alt moves the task, not the cursor. Checked first so Alt+↑ never also moves the cursor —
+    // and preventDefault matters on Windows, where Alt+← is the browser's Back.
+    if (e.altKey && cur && cur.row !== 'add' && e.key.startsWith('Arrow')) {
+      e.preventDefault();
+      if (e.key === 'ArrowUp') h.current.shift(cur.row, -1);
+      else if (e.key === 'ArrowDown') h.current.shift(cur.row, 1);
+      else if (e.key === 'ArrowRight') h.current.nest(cur.row);
+      else if (e.key === 'ArrowLeft') h.current.unnest(cur.row);
+      return true;
+    }
+
     if (e.key === 'ArrowDown') { e.preventDefault(); move(1); return true; }
     if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); return true; }
+    // With no cursor yet, left/right enter the list too, rather than being dead keys.
+    if (!cur && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) { e.preventDefault(); move(1); return true; }
     if (!cur) return false;
 
     if (e.key === 'Escape') { e.preventDefault(); setCursor(null); return true; }
@@ -120,14 +150,9 @@ export function useTableCursor(
     // Everything below acts on a task, so the add line ignores it and lets its own input have the key.
     if (cur.row === 'add') return false;
 
-    if (e.key === 'ArrowRight') {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
-      setCursor({ ...cur, col: Math.min(COL_LAST, cur.col + 1) });
-      return true;
-    }
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      setCursor({ ...cur, col: Math.max(0, cur.col - 1) });
+      setCursor({ ...cur, col: stepCol(cur.row, cur.col, e.key === 'ArrowRight' ? 1 : -1) });
       return true;
     }
     if (e.key === 'Tab') {
@@ -155,7 +180,7 @@ export function useTableCursor(
       return true;
     }
     return false;
-  }, [cursor, enabled, move]);
+  }, [cursor, enabled, move, stepCol]);
 
-  return { cursor, setCursor, onKeyDown, moveRow: move };
+  return { cursor, setCursor, onKeyDown, moveRow: move, stepCol };
 }

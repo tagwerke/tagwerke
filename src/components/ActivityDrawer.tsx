@@ -37,6 +37,9 @@ function actionVerb(action: string, payload: unknown): string {
   if (action.startsWith('DELETE')) return 'deleted';
   if (action === 'task_restore') return 'restored';
   if (action === 'task_approved') return 'approved';
+  if (action === 'task_revert') return 'rolled back';
+  if (action === 'task_move') return 'moved';
+  if (action === 'sprint_rollover') return 'carried over to the new week';
   if (action === 'board_settings_change') return 'changed board settings';
   return action;
 }
@@ -48,6 +51,10 @@ function actionVerb(action: string, payload: unknown): string {
  * rows still exist; they live in the admin audit log, where forensics belong.
  */
 const COMMENT_ACTIONS = new Set(['comment_create', 'comment_edit', 'comment_delete']);
+
+function hasChanges(payload: unknown): boolean {
+  return !!payload && typeof payload === 'object' && Array.isArray((payload as { changes?: unknown }).changes);
+}
 
 /** One row of the merged timeline. Both variants carry an ISO timestamp to sort on. */
 type Item =
@@ -74,6 +81,10 @@ export function ActivityDrawer({
 }) {
   const members = useStore((s) => s.membersByBoard[boardId]);
   const myRole = useStore((s) => s.tabs[boardId]?.role);
+  // For naming what a row points at: a move's boards, a sprint, a parent task.
+  const tabs = useStore((s) => s.tabs);
+  const sprints = useStore((s) => s.sprintsByBoard[boardId]);
+  const allTasks = useStore((s) => s.tasks);
   const meId = useSession((s) => s.user?.id);
   const comments = useComments((s) => (kind === 'task' ? s.byTask[id] : undefined));
   const commentsLoading = useComments((s) => (kind === 'task' ? s.loading[id] : false));
@@ -196,6 +207,8 @@ export function ActivityDrawer({
   function value(field: string, v: unknown): string {
     if (v == null || v === '') return '—';
     if (USER_FIELDS.has(field)) return nameOf(String(v));
+    if (field === 'sprintId') return sprints?.find((sp) => sp.id === v)?.label ?? 'a deleted sprint';
+    if (field === 'parentTaskId') return allTasks[String(v)]?.text || 'another task';
     if (typeof v === 'object') return JSON.stringify(v);
     return String(v);
   }
@@ -239,6 +252,15 @@ export function ActivityDrawer({
     return null;
   }
 
+  /** "to Design" / "here from Design" — a move reads from whichever end you are looking at. */
+  function moveNote(payload: unknown): string | null {
+    const p = payload as { fromTabId?: string; toTabId?: string } | null;
+    if (!p?.toTabId) return null;
+    const name = (tabId?: string) => (tabId && tabs[tabId]?.name) || 'another board';
+    if (kind === 'tab' && p.toTabId === id) return `here from ${name(p.fromTabId)}`;
+    return `to ${name(p.toTabId)}`;
+  }
+
   const isTask = kind === 'task';
   const loading = entries === null || (isTask && commentsLoading && !comments);
 
@@ -274,7 +296,14 @@ export function ActivityDrawer({
                   <span className="history-actor" title={item.entry.actorEmail ?? undefined}>
                     {item.entry.actorEmail?.split('@')[0] ?? item.entry.actorId ?? 'system'}
                   </span>
-                  <span className="history-verb">{actionVerb(item.entry.action, item.entry.payload)}</span>
+                  <span className="history-verb">
+                    {actionVerb(item.entry.action, item.entry.payload)}
+                    {/* A board's history is mostly its tasks, so each row has to say WHICH. */}
+                    {!isTask && item.entry.targetType === 'task' && (
+                      <> <span className="history-subject">“{item.entry.subject || 'untitled task'}”</span></>
+                    )}
+                    {item.entry.action === 'task_move' && moveNote(item.entry.payload) && <> {moveNote(item.entry.payload)}</>}
+                  </span>
                   <span className="history-time" title={item.entry.createdAt}>{timeAgo(item.entry.createdAt)}</span>
                   {/* Every entry is a point this task can be put back to — except the newest,
                       which is where it already is. */}
@@ -289,7 +318,10 @@ export function ActivityDrawer({
                     </button>
                   )}
                 </div>
-                {details(item.entry.payload)}
+                {/* The snapshot/created lines only repeat the title the row now names. */}
+                {isTask || item.entry.targetType !== 'task' || hasChanges(item.entry.payload)
+                  ? details(item.entry.payload)
+                  : null}
               </li>
             ),
           )}

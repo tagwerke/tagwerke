@@ -86,6 +86,7 @@ type TaskPatch = {
   priority?: 1 | 2 | 3 | null;
   rank?: string;
   parentTaskId?: ID | null;
+  sprintId?: ID | null;
 };
 
 function changedFields(p: Task, t: Task): TaskPatch | null {
@@ -101,6 +102,9 @@ function changedFields(p: Task, t: Task): TaskPatch | null {
   if ((p.priority ?? null) !== (t.priority ?? null)) patch.priority = t.priority ?? null;
   if ((p.rank ?? null) !== (t.rank ?? null) && t.rank) patch.rank = t.rank;
   if ((p.parentTaskId ?? null) !== (t.parentTaskId ?? null)) patch.parentTaskId = t.parentTaskId ?? null;
+  // Missing from this diff since sprints shipped, so a sprint was only ever set locally and every
+  // refresh put the task back in the backlog. An explicit null is what moves it to the backlog.
+  if ((p.sprintId ?? null) !== (t.sprintId ?? null)) patch.sprintId = t.sprintId ?? null;
   // approvedBy/approvedAt are DB-managed (set on the in_review → done transition) and never
   // sent from the client.
   return Object.keys(patch).length ? patch : null;
@@ -121,6 +125,9 @@ function fullBody(t: Task) {
     priority: t.priority ?? null,
     ...(t.rank ? { rank: t.rank } : {}),
     parentTaskId: t.parentTaskId ?? null,
+    // Present-only, like description: an omitted sprint is preserved server-side, so a PUT from a
+    // client that never saw the assignment cannot knock the task back into the backlog.
+    ...(t.sprintId ? { sprintId: t.sprintId } : {}),
     owner: t.owner ?? null,
   };
 }

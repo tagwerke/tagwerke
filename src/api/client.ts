@@ -473,6 +473,11 @@ export interface HistoryEntry {
   action: string;
   payload: unknown;
   createdAt: string;
+  /** What the row is about. On a board's history most rows are its tasks, not the board. */
+  targetType?: string | null;
+  targetId?: ID | null;
+  /** The task's title, for a task row — how a board's history names what changed. */
+  subject?: string | null;
 }
 
 /**

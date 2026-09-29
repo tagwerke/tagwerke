@@ -225,10 +225,10 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
               disabled={!editable}
               onChange={(e) => setTaskMeta(task.id, { sprintId: e.target.value || undefined })}
             >
-              <option value="">Backlog</option>
               {sprints?.map((sp) => (
                 <option key={sp.id} value={sp.id}>{sp.label}{sp.isCurrent ? ' (current)' : ''}</option>
               ))}
+              <option value="">Backlog</option>
             </select>
           </Field>
         </aside>

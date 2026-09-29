@@ -258,8 +258,8 @@ const sprintAction: TaskAction = {
       const store = useStore.getState();
       for (const id of ctx.ids) store.setTaskMeta(id, { sprintId });
     };
+    // Oldest first, Backlog last — the order every other sprint list on the board uses.
     return [
-      { key: 'none', label: 'Backlog', selected: current.size === 1 && current.has(null), run: set(undefined) },
       ...sprints.map((s) => ({
         key: s.id,
         label: s.label,
@@ -267,6 +267,7 @@ const sprintAction: TaskAction = {
         selected: current.size === 1 && current.has(s.id),
         run: set(s.id),
       })),
+      { key: 'none', label: 'Backlog', selected: current.size === 1 && current.has(null), run: set(undefined) },
     ];
   },
 };
@@ -316,8 +317,12 @@ const unnestAction: TaskAction = {
     const t = store.tasks[ctx.ids[0]];
     const parent = t?.parentTaskId ? store.tasks[t.parentTaskId] : undefined;
     if (!t || !parent) return;
-    // Land directly after the old parent, which is where it visually was.
-    store.moveTask(t.id, { parentTaskId: parent.parentTaskId ?? null, before: parent.id });
+    // Land directly after the old parent, which is where it visually was. Bounded on BOTH sides:
+    // with only the parent as a floor, the new key was the next whole step up — which is often
+    // exactly the parent's next sibling's key, so the two tied and the order became arbitrary.
+    const aunts = siblingsOf(store.tasks, parent.homeTabId, parent.parentTaskId);
+    const next = aunts[aunts.findIndex((s) => s.id === parent.id) + 1];
+    store.moveTask(t.id, { parentTaskId: parent.parentTaskId ?? null, before: parent.id, after: next?.id });
   },
 };
 

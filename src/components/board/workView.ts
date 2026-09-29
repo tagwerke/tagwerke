@@ -87,14 +87,16 @@ export function groupTasks(
 }
 
 /** Display value for a sort comparison. Unset always sorts last, whichever direction. */
-function sortValue(t: Task, key: SortKey, names: Map<ID, string>, sprintNames: Map<ID, string>): string | number | null {
+function sortValue(t: Task, key: SortKey, names: Map<ID, string>, sprintStarts: Map<ID, string>): string | number | null {
   switch (key) {
     case 'title': return t.text.trim().toLowerCase() || null;
     case 'status': return STATUS_ORDER.indexOf(t.status ?? 'todo');
     case 'assignee': return t.assigneeId ? (names.get(t.assigneeId) ?? '').toLowerCase() : null;
     case 'due': return t.date ?? null;
     case 'priority': return t.priority ?? null;
-    case 'sprint': return t.sprintId ? (sprintNames.get(t.sprintId) ?? '') : null;
+    // By the sprint's start date, not its label: labels are "Aug 3–9" and renamable, so comparing
+    // them put Aug 31 before Aug 3 and October before September.
+    case 'sprint': return t.sprintId ? (sprintStarts.get(t.sprintId) ?? '') : null;
     case 'rank': return null;
   }
 }
@@ -109,13 +111,14 @@ export function sortTasks(
   tasks: Task[],
   sort: Sort,
   names: Map<ID, string>,
-  sprintNames: Map<ID, string>,
+  /** Sprint id → its `startsAt`, which is what the Sprint column sorts by. */
+  sprintStarts: Map<ID, string>,
 ): Task[] {
   if (sort.key === 'rank') return tasks;
   const dir = sort.dir === 'asc' ? 1 : -1;
   return [...tasks].sort((a, b) => {
-    const av = sortValue(a, sort.key, names, sprintNames);
-    const bv = sortValue(b, sort.key, names, sprintNames);
+    const av = sortValue(a, sort.key, names, sprintStarts);
+    const bv = sortValue(b, sort.key, names, sprintStarts);
     if (av === null && bv === null) return compareRank(a, b);
     if (av === null) return 1; // unset last, regardless of direction
     if (bv === null) return -1;

@@ -424,8 +424,10 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       createTab(projectId, name) {
         const id = nanoid();
         const position = nextPosition(Object.values(get().tabs).map((t) => t.order));
+        // The creator is always the board's admin (routes/tabs.ts). Without the role here the board
+        // read as view-only until the next full state pull — an empty table with no add line.
         const tab: Tab = {
-          id, projectId, name, order: position, starred: false, type: 'normal',
+          id, projectId, name, order: position, starred: false, type: 'normal', role: 'admin',
         };
         set((s) => ({
           tabs: { ...s.tabs, [id]: tab },

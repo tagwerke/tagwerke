@@ -110,6 +110,9 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
       await ensureCurrentSprint(tx, b.data.id, new Date());
     });
     dlog('tabs', `POST /api/tabs board=${sid(b.data.id)} COMMITTED (membership now exists → ydoc-join will pass)`);
+    // The creator's client made this board optimistically and knows nothing the server added:
+    // the seeded sprint, the member list. The same nudge a share sends makes it re-pull them.
+    publish(userChannel(userId), { v: 1, type: 'board-list', action: 'added', tabId: b.data.id });
     return reply.code(201).send({ ok: true });
   });
 

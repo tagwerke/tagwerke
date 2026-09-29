@@ -39,7 +39,6 @@ export function TabView({ tabId }: { tabId: string }) {
   const renameTab = useStore((s) => s.renameTab);
   const setTabStarred = useStore((s) => s.setTabStarred);
   const boardView = useStore((s) => s.boardView);
-  const boardPanel = useStore((s) => s.boardPanel);
   const projects = useStore((s) => s.projects);
   const setTabProject = useStore((s) => s.setTabProject);
   const projectOptions = useMemo(
@@ -69,6 +68,9 @@ export function TabView({ tabId }: { tabId: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // Something inside already took this Escape — a cell menu closing, the table releasing its
+        // cursor. Those all preventDefault, and none of them meant "leave the board".
+        if (e.defaultPrevented) return;
         const target = e.target as HTMLElement;
         if (target?.closest('.ProseMirror')) return;
         setActiveTab(null);
@@ -179,9 +181,9 @@ export function TabView({ tabId }: { tabId: string }) {
         </div>
         {isBoard && panelOpen && (
           <BoardPanel
+            key={tab.id}
             tabId={tab.id}
             tabName={tab.name}
-            initialTab={boardPanel ?? undefined}
             onOpenSprint={(id) => {
               setSprintFilter(id);
               setBoardView('table');

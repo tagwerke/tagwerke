@@ -10,6 +10,8 @@ const FIELD_LABELS: Record<string, string> = {
   date: 'due',
   priority: 'priority',
   homeTabId: 'board',
+  parentTaskId: 'parent',
+  sprintId: 'sprint',
   tabId: 'board',
   docJSON: 'document',
   name: 'name',

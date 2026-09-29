@@ -19,7 +19,7 @@ import type { ID, Member, Sprint, Task } from '../../types';
 
 export function WorkTable({
   tabId, groups, sort, onSort, selection, onSelect, onSelectAll, onOpenMenu, onOpenTask, canReorder, onReorder,
-  onNest, onUnnest, onDelete, members, sprints, tasksById, editable, nesting,
+  onShift, onNest, onUnnest, onDelete, members, sprints, tasksById, editable, nesting,
 }: {
   tabId: ID;
   groups: Group[];
@@ -27,7 +27,8 @@ export function WorkTable({
   onSort: (key: SortKey) => void;
   selection: Set<ID>;
   onSelect: (id: ID, mode: 'toggle' | 'range' | 'only') => void;
-  onOpenMenu: (ids: ID[], x: number, y: number, field?: FocusField) => void;
+  /** `onStep` is set for a cell's menu: ←/→ inside it leave for the neighbouring cell. */
+  onOpenMenu: (ids: ID[], x: number, y: number, field?: FocusField, onStep?: (dir: -1 | 1) => void) => void;
   onOpenTask: (id: ID) => void;
   /** Tri-state over the rows on screen: select all of them, or clear the selection. */
   onSelectAll: (select: boolean) => void;
@@ -49,6 +50,8 @@ export function WorkTable({
   /** Reordering is meaningful only in rank order (§I.3); otherwise the handle is not drawn. */
   canReorder: boolean;
   onReorder: (dragId: ID, targetId: ID, place: 'before' | 'after') => void;
+  /** Alt+↑/↓: swap a task with its neighbouring sibling. */
+  onShift: (id: ID, dir: -1 | 1) => void;
   members: Member[];
   sprints: Sprint[];
   tasksById: Record<ID, Task>;
@@ -60,27 +63,29 @@ export function WorkTable({
   const endingRef = useRef(false);
   const flatIds = useMemo(() => groups.flatMap((g) => g.tasks.map((t) => t.id)), [groups]);
 
-  /** Open the menu over a cell the KEYBOARD chose, so it lands on the cell rather than the pointer. */
-  const openCellByIndex = useCallback((taskId: ID, col: number) => {
-    const el = rootRef.current?.querySelector(`[data-row="${CSS.escape(taskId)}"] [data-col="${col}"]`);
-    const box = el?.getBoundingClientRect();
-    onOpenMenu([taskId], box?.left ?? 0, (box?.bottom ?? 0) + 4, columnAt(col)?.field);
-  }, [onOpenMenu]);
+  const cellEl = (taskId: ID, col: number): Element | null | undefined =>
+    rootRef.current?.querySelector(`[data-row="${CSS.escape(taskId)}"] [data-col="${col}"]`);
 
   /** Click and keyboard both land here, so a rename begins the same way whichever started it. */
   const startRename = useCallback((id: ID, seed?: string) => {
     setRenaming({ id, text: seed ?? useStore.getState().tasks[id]?.text ?? '' });
   }, []);
 
-  const { cursor, setCursor, onKeyDown, moveRow } = useTableCursor(
+  const { cursor, setCursor, onKeyDown, moveRow, stepCol } = useTableCursor(
     flatIds,
     {
-      openCell: openCellByIndex,
+      openCell: (taskId, col) => openCellByIndex(taskId, col),
       renameStart: startRename,
       openTask: onOpenTask,
       toggleSelect: (id) => onSelect(id, 'toggle'),
       nest: onNest,
       unnest: onUnnest,
+      shift: onShift,
+      colVisible: (taskId, col) => {
+        // Hidden by a narrow-width rule means no layout box at all.
+        const el = cellEl(taskId, col);
+        return !!el && el.getClientRects().length > 0;
+      },
       remove: onDelete,
       focusAdd: () => focusQuickAdd(tabId),
     },
@@ -98,6 +103,21 @@ export function WorkTable({
     setCursor({ row, col });
     rootRef.current?.focus({ preventScroll: true });
   }, [setCursor]);
+
+  /**
+   * Open the menu over a cell, scoped to its field. ←/→ inside that menu step to the neighbouring
+   * cell — and straight into its menu when it has one — so a row can be filled in field by field
+   * without letting go of the keyboard. The menu used to swallow both keys, which is where "the
+   * arrows don't move between fields" came from: after the first Enter, they didn't.
+   */
+  const openCellByIndex = (taskId: ID, col: number, ids: ID[] = [taskId]): void => {
+    const box = cellEl(taskId, col)?.getBoundingClientRect();
+    onOpenMenu(ids, box?.left ?? 0, (box?.bottom ?? 0) + 4, columnAt(col)?.field, (dir) => {
+      const next = stepCol(taskId, col, dir);
+      putCursor(taskId, next);
+      if (next !== col && columnAt(next)?.field && editable) openCellByIndex(taskId, next, ids);
+    });
+  };
 
   const allOnScreen = flatIds.length > 0 && flatIds.every((id) => selection.has(id));
   const someOnScreen = flatIds.some((id) => selection.has(id));
@@ -293,6 +313,26 @@ export function WorkTable({
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') { e.preventDefault(); endRename(true); }
                           else if (e.key === 'Escape') { e.preventDefault(); endRename(false); }
+                          else if (e.altKey && e.key.startsWith('Arrow')) {
+                            // Moving the task mid-edit: keep the text, then move it.
+                            e.preventDefault();
+                            endRename(true);
+                            if (e.key === 'ArrowUp') onShift(t.id, -1);
+                            else if (e.key === 'ArrowDown') onShift(t.id, 1);
+                            else if (e.key === 'ArrowRight') onNest(t.id);
+                            else onUnnest(t.id);
+                          }
+                          else if (
+                            (e.key === 'ArrowRight' && atEdge(e.currentTarget, 'end'))
+                            || (e.key === 'ArrowLeft' && atEdge(e.currentTarget, 'start'))
+                          ) {
+                            // Past the end of the text, → carries on to the next field, the way it
+                            // would past the end of a cell in a sheet; inside the text it is a caret.
+                            e.preventDefault();
+                            endRename(true);
+                            const dir = e.key === 'ArrowRight' ? 1 : -1;
+                            setCursor({ row: t.id, col: stepCol(t.id, COL.title, dir) });
+                          }
                           else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                             // Commit and keep going, the way leaving a line in a document does —
                             // otherwise the only way out of an edit is a key that stops you dead.
@@ -330,11 +370,9 @@ export function WorkTable({
                       data-col={COL.fieldFirst + ci}
                       className={`wt-cell ${cursor?.row === t.id && cursor.col === COL.fieldFirst + ci ? 'is-focused' : ''}`}
                       disabled={!editable || !c.field}
-                      onClick={(e) => {
+                      onClick={() => {
                         putCursor(t.id, COL.fieldFirst + ci);
-                        const ids = selection.has(t.id) ? [...selection] : [t.id];
-                        const box = e.currentTarget.getBoundingClientRect();
-                        onOpenMenu(ids, box.left, box.bottom + 4, c.field);
+                        openCellByIndex(t.id, COL.fieldFirst + ci, selection.has(t.id) ? [...selection] : [t.id]);
                       }}
                     >
                       {cell(t, c)}
@@ -382,4 +420,11 @@ export function WorkTable({
       )}
     </div>
   );
+}
+
+/** Caret collapsed at the start or end of an input — where an arrow key stops being a caret move. */
+function atEdge(input: HTMLInputElement, edge: 'start' | 'end'): boolean {
+  const { selectionStart: a, selectionEnd: b, value } = input;
+  if (a === null || a !== b) return false;
+  return edge === 'start' ? a === 0 : a === value.length;
 }

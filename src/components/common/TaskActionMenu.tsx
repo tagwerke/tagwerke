@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { actionForField, actionsFor, type ChoiceOption, type FocusField, type TaskAction } from '../../tasks/actions';
 import type { ID } from '../../types';
 
-export function TaskActionMenu({ ids, tabId, focusField, x, y, onClose }: {
+export function TaskActionMenu({ ids, tabId, focusField, x, y, onClose, onStep }: {
   ids: ID[];
   tabId: ID;
   /** Open directly into this field's choices — a table cell click. */
@@ -18,6 +18,8 @@ export function TaskActionMenu({ ids, tabId, focusField, x, y, onClose }: {
   x: number;
   y: number;
   onClose: () => void;
+  /** A table cell's menu: ←/→ close it and move to the neighbouring cell instead. */
+  onStep?: (dir: -1 | 1) => void;
 }) {
   const ctx = useMemo(() => ({ ids, tabId }), [ids, tabId]);
   const actions = useMemo(() => actionsFor(ctx), [ctx]);
@@ -80,6 +82,11 @@ export function TaskActionMenu({ ids, tabId, focusField, x, y, onClose }: {
     if (e.key === 'ArrowDown') { e.preventDefault(); return setHighlight((h) => Math.min(rows.length - 1, h + 1)); }
     if (e.key === 'ArrowUp') { e.preventDefault(); return setHighlight((h) => Math.max(0, h - 1)); }
     if (e.key === 'Enter') { e.preventDefault(); return choose(highlight); }
+    if (onStep && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+      e.preventDefault();
+      onClose();
+      return onStep(e.key === 'ArrowRight' ? 1 : -1);
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       // Escape backs out one level before it closes, so a mis-click on a cell is one key to undo.
