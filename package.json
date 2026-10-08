@@ -33,6 +33,7 @@
     "verify:documents": "tsx server/scripts/verify-documents.ts",
     "verify:extraction": "tsx server/scripts/verify-extraction.ts",
     "verify:items": "tsx server/scripts/verify-items.ts",
+    "verify:agent": "tsx server/scripts/verify-agent.ts",
     "migrate:notes-split": "tsx server/scripts/migrate-notes-split.ts",
     "backfill:task-rank": "tsx server/scripts/backfill-task-rank.ts",
     "erase-user": "tsx server/scripts/erase-user.ts",

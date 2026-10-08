@@ -62,7 +62,40 @@ export const users = pgTable('users', {
   // Account deactivation (suspend without deleting). A non-null timestamp blocks login and
   // invalidates sessions. The hook SCIM deprovisioning will set. See AUTH_IMPLEMENTATION_PLAN.md (Slice 7).
   deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+  // 'human' | 'agent'. An agent user has no password and can never hold a session cookie
+  // (resolveUser refuses it); its only way in is an `agent_tokens` bearer token. See AGENT_API.md.
+  kind: text('kind').notNull().default('human'),
 });
+
+// Bearer tokens for agent users (AGENT_API.md). ONE agent = ONE board = ONE live token: the board
+// is carried by the token, never by the request, so a caller cannot point an agent elsewhere.
+// Only the SHA-256 of the secret is stored; the secret is shown once at issue time.
+export const agentTokens = pgTable(
+  'agent_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tabId: text('tab_id')
+      .notNull()
+      .references(() => tabs.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    // Subset of 'board:read' | 'task:comment'. The effective permission is the LOWER of this and
+    // the agent user's board role.
+    scopes: jsonb('scopes').notNull().default([]),
+    label: text('label'),
+    createdBy: text('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    // At most one live token per agent user (rotate = revoke, then issue).
+    uniqueIndex('agent_tokens_one_live_per_user').on(t.userId).where(sql`${t.revokedAt} is null`),
+  ],
+);
 
 // Signup invites. A code may allow multiple uses and/or expire. Later this can
 // carry team_id/role to become a team invite.

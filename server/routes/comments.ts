@@ -64,7 +64,7 @@ type CommentRow = typeof schema.taskComments.$inferSelect;
  * text: the tombstone is there to keep the conversation readable, not to publish what was
  * withdrawn. (`last_body` stays in the row for the audit trail — it is never sent to a client.)
  */
-function commentDTO(row: CommentRow, authorEmail: string | null): Record<string, unknown> {
+export function commentDTO(row: CommentRow, authorEmail: string | null): Record<string, unknown> {
   const deleted = row.deletedAt != null;
   return {
     id: row.id,
@@ -83,7 +83,7 @@ function commentDTO(row: CommentRow, authorEmail: string | null): Record<string,
 }
 
 /** Resolve one comment's author email (for the byline) without a join on the write paths. */
-async function authorEmailOf(authorId: string | null): Promise<string | null> {
+export async function authorEmailOf(authorId: string | null): Promise<string | null> {
   if (!authorId) return null;
   const rows = await db.select({ email: schema.users.email }).from(schema.users).where(eq(schema.users.id, authorId)).limit(1);
   return rows[0]?.email ?? null;
@@ -94,7 +94,7 @@ async function authorEmailOf(authorId: string | null): Promise<string | null> {
  * board. Re-derived on every write and never taken from the request (D5) — the set the server
  * notifies has to be exactly the set the reader can see was mentioned.
  */
-async function resolveMentions(body: string, tabId: string): Promise<string[]> {
+export async function resolveMentions(body: string, tabId: string): Promise<string[]> {
   const ids = mentionedUserIds(body);
   if (!ids.length) return [];
   const rows = await db
@@ -112,7 +112,7 @@ function commentPreview(body: string): string {
 }
 
 /** Broadcast a comment change to everyone with the board open (D2). */
-function publishComment(tabId: string, action: 'create' | 'update' | 'delete', comment: Record<string, unknown>, actorId: string): void {
+export function publishComment(tabId: string, action: 'create' | 'update' | 'delete', comment: Record<string, unknown>, actorId: string): void {
   publish(boardChannel(tabId), { v: 1, type: 'comment', action, comment, actorId });
 }
 
@@ -279,7 +279,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
  * NOT included, deliberately: everyone who previously commented on the task. Thread-wide fan-out
  * is how comment systems become noise, and there is no per-thread mute yet to relieve it.
  */
-async function notifyForComment(input: {
+export async function notifyForComment(input: {
   taskId: string;
   tabId: string;
   actorId: string;

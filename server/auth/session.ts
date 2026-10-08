@@ -83,6 +83,7 @@ export async function resolveUser(req: FastifyRequest): Promise<SessionUser | nu
       role: schema.users.role,
       totpEnabled: schema.users.totpEnabled,
       deactivatedAt: schema.users.deactivatedAt,
+      kind: schema.users.kind,
     })
     .from(schema.sessions)
     .innerJoin(schema.users, eq(schema.sessions.userId, schema.users.id))
@@ -92,6 +93,13 @@ export async function resolveUser(req: FastifyRequest): Promise<SessionUser | nu
   const row = rows[0];
   if (!row) return null;
   if (row.expiresAt.getTime() < nowMs()) {
+    await destroySession(sessionId);
+    return null;
+  }
+  // An agent user authenticates ONLY by bearer token (auth/agent.ts). Even if a session row were
+  // somehow created for one, it must never act as a logged-in human — this is what keeps an agent
+  // out of every approval route, the in_review → done transition included.
+  if (row.kind === 'agent') {
     await destroySession(sessionId);
     return null;
   }
