@@ -61,8 +61,10 @@ export function TaskActionMenu({ ids, tabId, focusField, x, y, onClose, onStep }
     const onDown = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) onClose();
     };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
+    // Capture phase: this must look at the click before an item's own handler re-renders the menu,
+    // or the clicked button is already detached by the time we ask whether it was inside.
+    document.addEventListener('mousedown', onDown, true);
+    return () => document.removeEventListener('mousedown', onDown, true);
   }, [onClose]);
 
   const choose = (i: number): void => {
