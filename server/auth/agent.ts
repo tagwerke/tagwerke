@@ -18,6 +18,8 @@ export interface AgentContext {
   userId: string;
   tabId: string;
   scopes: AgentScope[];
+  role: string;
+  expiresAt: Date | null;
 }
 
 declare module 'fastify' {
@@ -71,7 +73,8 @@ export async function requireAgent(req: FastifyRequest, reply: FastifyReply): Pr
   if (!row || row.kind !== 'agent' || row.deactivatedAt) return deny();
   if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return deny();
   // The token and the membership must agree. Removing the agent from the board kills the token.
-  if (!(await boardRole(row.userId, row.tabId))) return deny();
+  const role = await boardRole(row.userId, row.tabId);
+  if (!role) return deny();
 
   void db
     .update(schema.agentTokens)
@@ -80,7 +83,7 @@ export async function requireAgent(req: FastifyRequest, reply: FastifyReply): Pr
     .catch(() => {});
 
   const scopes = ((row.scopes as unknown[]) ?? []).filter(isScope);
-  req.agent = { tokenId: row.id, userId: row.userId, tabId: row.tabId, scopes };
+  req.agent = { tokenId: row.id, userId: row.userId, tabId: row.tabId, scopes, role, expiresAt: row.expiresAt };
   req.user = { id: row.userId, email: row.email, role: 'member', totpEnabled: false };
   req.boardScope = row.tabId;
 }
