@@ -55,7 +55,7 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
   const editable = role === 'editor' || role === 'admin';
 
   const [grouping, setGrouping] = useState<Grouping>(() =>
-    readStored(GROUP_KEY(tabId), ['status', 'assignee', 'sprint', 'none'] as const, 'status'));
+    readStored(GROUP_KEY(tabId), ['status', 'assignee', 'sprint', 'none'] as const, layout === 'table' ? 'none' : 'status'));
   // The busy-board escape hatch from the Kanban (SUBTASKS_PLAN D10): a parent with eight sub-tasks
   // puts nine rows on screen. Kept, because the problem it solves did not go away.
   const [scope, setScope] = useState<'all' | 'roots'>(() =>
