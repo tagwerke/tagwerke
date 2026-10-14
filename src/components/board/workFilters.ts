@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ancestorsOf } from '../../store';
 import type { DraftFields } from '../../tasks/createTask';
-import type { ID, Task } from '../../types';
+import type { ID, Task, TaskStatus } from '../../types';
 
 /** Stand-ins for "no sprint" / "no assignee" inside a filter list. */
 export const BACKLOG = 'backlog';
@@ -19,14 +19,16 @@ export interface WorkFilters {
   sprints: string[];
   /** Member ids, plus UNASSIGNED. Empty means everyone. */
   assignees: string[];
+  /** Task statuses. Empty means every status. */
+  statuses: string[];
   /** Title search. Never persisted: a leftover query on reopen reads as an empty board. */
   query: string;
 }
 
-export const NO_FILTERS: WorkFilters = { sprints: [], assignees: [], query: '' };
+export const NO_FILTERS: WorkFilters = { sprints: [], assignees: [], statuses: [], query: '' };
 
 export function hasActiveFilters(f: WorkFilters): boolean {
-  return f.sprints.length > 0 || f.assignees.length > 0 || f.query.trim() !== '';
+  return f.sprints.length > 0 || f.assignees.length > 0 || f.statuses.length > 0 || f.query.trim() !== '';
 }
 
 /** Lower-case and strip accents, so "cafe" finds "Café". */
@@ -37,6 +39,7 @@ function fold(s: string): string {
 export function matchesFilters(t: Task, f: WorkFilters): boolean {
   if (f.sprints.length && !f.sprints.includes(t.sprintId ?? BACKLOG)) return false;
   if (f.assignees.length && !f.assignees.includes(t.assigneeId ?? UNASSIGNED)) return false;
+  if (f.statuses.length && !f.statuses.includes(t.status ?? 'todo')) return false;
   const q = fold(f.query.trim());
   if (q && !fold(t.text).includes(q)) return false;
   return true;
@@ -79,9 +82,11 @@ export function applyFilters(
  * value (two sprints selected: which one?). Null means the add line is not offered at all, rather
  * than one that would put the task somewhere the user did not choose.
  */
-export function presetFromFilters(f: WorkFilters): DraftFields | null {
+export function presetFromFilters(f: WorkFilters, ignoreStatus = false): DraftFields | null {
   if (f.sprints.length > 1 || f.assignees.length > 1) return null;
+  if (!ignoreStatus && f.statuses.length > 1) return null;
   const fields: DraftFields = {};
+  if (!ignoreStatus && f.statuses.length === 1) fields.status = f.statuses[0] as TaskStatus;
   if (f.sprints.length === 1) fields.sprintId = f.sprints[0] === BACKLOG ? null : f.sprints[0];
   if (f.assignees.length === 1) fields.assigneeId = f.assignees[0] === UNASSIGNED ? null : f.assignees[0];
   return fields;
@@ -100,7 +105,7 @@ function load(tabId: ID): WorkFilters {
     const raw = localStorage.getItem(KEY(tabId));
     if (!raw) return NO_FILTERS;
     const p = JSON.parse(raw) as Partial<WorkFilters>;
-    return { sprints: strings(p.sprints), assignees: strings(p.assignees), query: '' };
+    return { sprints: strings(p.sprints), assignees: strings(p.assignees), statuses: strings(p.statuses), query: '' };
   } catch {
     return NO_FILTERS; // storage refused, or the value is not ours — start unfiltered
   }
@@ -108,8 +113,8 @@ function load(tabId: ID): WorkFilters {
 
 function save(tabId: ID, f: WorkFilters): void {
   try {
-    if (f.sprints.length === 0 && f.assignees.length === 0) localStorage.removeItem(KEY(tabId));
-    else localStorage.setItem(KEY(tabId), JSON.stringify({ sprints: f.sprints, assignees: f.assignees }));
+    if (f.sprints.length === 0 && f.assignees.length === 0 && f.statuses.length === 0) localStorage.removeItem(KEY(tabId));
+    else localStorage.setItem(KEY(tabId), JSON.stringify({ sprints: f.sprints, assignees: f.assignees, statuses: f.statuses }));
   } catch { /* a per-viewer convenience; a browser that refuses it just doesn't remember */ }
 }
 

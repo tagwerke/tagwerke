@@ -18,6 +18,7 @@ import type { DraftFields } from '../../tasks/createTask';
 import { ViewSwitcher } from './ViewSwitcher';
 import { newestFirst } from '../../util/sprints';
 import { DocumentStrip } from '../documents/DocumentStrip';
+import { STATUS_LABEL, STATUS_ORDER } from '../StatusControl';
 import { MultiSelect } from '../common/MultiSelect';
 import {
   applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
@@ -214,13 +215,15 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
 
   /** What a task added under the current filters starts as; null hides the add line (D10). */
   const filterPreset = useMemo(() => presetFromFilters(filters), [filters]);
+  // A Kanban column already fixes the status, so a status filter must not hide its add line.
+  const columnPreset = useMemo(() => presetFromFilters(filters, true), [filters]);
 
   /** What a task added in a given Kanban column starts as: the column's status plus the filters'. */
   const addFieldsFor = useCallback((groupKey: string): DraftFields | null => {
     const status = statusOfGroup(groupKey);
-    if (!filterPreset || !status) return null;
-    return { ...filterPreset, status };
-  }, [filterPreset]);
+    if (!columnPreset || !status) return null;
+    return { ...columnPreset, status };
+  }, [columnPreset]);
 
   /**
    * Put `id` directly before or after `targetId`, a sibling. The neighbours come from the SIBLING
@@ -278,6 +281,10 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
     { value: BACKLOG, label: 'Backlog' },
     ...newestFirst(sprints).map((s) => ({ value: s.id, label: s.isCurrent ? `${s.label} · now` : s.label })),
   ], [sprints]);
+  const statusOptions = useMemo(
+    () => STATUS_ORDER.map((st) => ({ value: st, label: STATUS_LABEL[st] })),
+    [],
+  );
   const assigneeOptions = useMemo(() => [
     ...members.map((m) => ({ value: m.id, label: m.name })),
     { value: UNASSIGNED, label: 'Unassigned' },
@@ -323,6 +330,16 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
             />
           </span>
         )}
+        <span className="work-control">
+          <span className="work-control-label">Status</span>
+          <MultiSelect
+            label="Filter by status"
+            noun="statuses"
+            options={statusOptions}
+            selected={filters.statuses}
+            onChange={(statuses) => onFilters((f) => ({ ...f, statuses }))}
+          />
+        </span>
         {members.length > 0 && (
           <span className="work-control">
             <span className="work-control-label">Assignee</span>
