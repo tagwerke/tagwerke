@@ -10,6 +10,16 @@ automatically on boot — always take a backup before upgrading.
 
 ### Added
 
+- **Board filters and search** — the board's Sprint and new Assignee filters are multi-select, with
+  a search box at the right (matches titles, Esc clears) and a Clear filters button. Your sprint and
+  assignee choices are remembered per board. When a sub-task matches but its parent doesn't, the
+  parent stays in the outline, dimmed, so the nesting still reads.
+- **Group from the table headers** — click Status, Assignee or Sprint to group by it (A→Z, then
+  Z→A, then back to the outline); one column at a time. This replaces the Group dropdown and the
+  "Top level only" toggle, and the group label rows are gone. The Kanban stays grouped by Status.
+- **New tasks start where the filters are** — the add line presets the sprint and assignee you're
+  filtered to, and is hidden when several are selected.
+
 - **Point-in-time restore for a task** — every row in a task's History drawer is now a point you
   can put the task back to. Its title, status, assignee, reviewer, due date and priority are
   reconstructed from the audit trail and rewritten; where the task sits on the board is left

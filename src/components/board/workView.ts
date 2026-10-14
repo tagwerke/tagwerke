@@ -23,14 +23,15 @@ export interface Group {
   tasks: Task[];
 }
 
-export const GROUPINGS: { key: Grouping; label: string }[] = [
-  { key: 'status', label: 'Status' },
-  { key: 'assignee', label: 'Assignee' },
-  { key: 'sprint', label: 'Sprint' },
-  // Named for what it IS rather than what it lacks: with no grouping and the board's own rank
-  // order, the rows are a contiguous outline and can be indented truthfully (§N2.5).
-  { key: 'none', label: 'Outline' },
-];
+/**
+ * The table's grouping is not a setting of its own: it is whichever column header is active
+ * (BOARD_FILTERS_PLAN D5). Status, Assignee and Sprint group their rows; Title, Due and Priority
+ * only sort, and the rank order is the Outline, which is what "off" means. Rows with no grouping
+ * and the board's own rank order are a contiguous outline and can be indented truthfully (§N2.5).
+ */
+export function groupingOfSort(sort: Sort): Grouping {
+  return sort.key === 'status' || sort.key === 'assignee' || sort.key === 'sprint' ? sort.key : 'none';
+}
 
 /** The bucket a task belongs to under `grouping`. `null` means "the unset bucket". */
 export function bucketOf(task: Task, grouping: Grouping): string | null {
@@ -54,6 +55,8 @@ export function groupTasks(
   grouping: Grouping,
   members: Member[],
   sprints: Sprint[],
+  /** Direction of the group order. The unset group (Unassigned, Backlog) is last either way. */
+  dir: SortDir = 'asc',
 ): Group[] {
   const buckets = new Map<string, Task[]>();
   const put = (key: string, t: Task) => {
@@ -66,7 +69,8 @@ export function groupTasks(
   if (grouping === 'none') return [{ key: 'all', label: 'Outline', tasks: buckets.get('all') ?? [] }];
 
   if (grouping === 'status') {
-    return STATUS_ORDER.map((s) => ({
+    const order = dir === 'asc' ? STATUS_ORDER : [...STATUS_ORDER].reverse();
+    return order.map((s) => ({
       key: s,
       label: STATUS_LABEL[s],
       swatch: `status-${s}`,
@@ -75,15 +79,18 @@ export function groupTasks(
   }
 
   if (grouping === 'assignee') {
+    const byName = [...members].sort((a, b) => a.name.localeCompare(b.name) * (dir === 'asc' ? 1 : -1));
     return [
-      ...members.map((m) => ({ key: m.id, label: m.name, tasks: buckets.get(m.id) ?? [] })),
+      ...byName.map((m) => ({ key: m.id, label: m.name, tasks: buckets.get(m.id) ?? [] })),
       { key: '~none', label: 'Unassigned', tasks: buckets.get('~none') ?? [] },
     ];
   }
 
+  // Oldest first for asc, to match the Sprint column's own sort (by start date); Backlog last.
+  const dated = dir === 'asc' ? [...newestFirst(sprints)].reverse() : newestFirst(sprints);
   return [
+    ...dated.map((s) => ({ key: s.id, label: s.label, tasks: buckets.get(s.id) ?? [] })),
     { key: '~none', label: 'Backlog', tasks: buckets.get('~none') ?? [] },
-    ...newestFirst(sprints).map((s) => ({ key: s.id, label: s.label, tasks: buckets.get(s.id) ?? [] })),
   ];
 }
 

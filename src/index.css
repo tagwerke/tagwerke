@@ -3352,6 +3352,17 @@ input, select, textarea { font: inherit; color: inherit; }
   padding: 10px clamp(16px, 3vw, 32px) 0;
 }
 .work-control, .work-toolbar .seg, .work-toolbar .list-mode { flex-shrink: 0; }
+.work-search {
+  flex: 0 1 200px; min-width: 110px; height: 26px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--bg-elev);
+  font-size: 12px; color: var(--ink); outline: none; transition: border-color .12s;
+}
+.work-search:focus { border-color: var(--pop); }
+.work-search::placeholder { color: var(--ink-mute); }
+.work-empty {
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  padding: 14px clamp(16px, 3vw, 32px) 0;
+}
 .work-control { display: inline-flex; align-items: center; gap: 6px; }
 .work-control-label {
   text-transform: uppercase; letter-spacing: 0.09em;
@@ -3375,12 +3386,9 @@ input, select, textarea { font: inherit; color: inherit; }
   font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-mute);
 }
 .wt-th.is-sorted { color: var(--ink); }
-.wt-group-head {
-  display: flex; align-items: center; gap: 8px;
-  padding: 14px 6px 5px;
-  font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-mute);
-}
-.wt-group-n { font-family: var(--mono); }
+.wt-group + .wt-group { margin-top: 16px; }
+/* Context rows: shown only because a sub-task below them matched the filters (D3). */
+.wt-row.is-context { opacity: 0.5; }
 .wt-row { min-height: 36px; border-bottom: 1px solid var(--line); position: relative; }
 .wt-row:hover { background: var(--bg-paper); }
 .wt-row.is-selected { background: rgba(255, 106, 61, 0.08); }
@@ -3639,6 +3647,24 @@ input, select, textarea { font: inherit; color: inherit; }
   background: var(--bg-elev);
 }
 .dd.is-compact .dd-panel { left: 0; right: auto; min-width: 170px; }
+
+/* The multi-select (BOARD_FILTERS_PLAN D1): a Dropdown whose options carry a checkbox and whose
+   closed field reads "All sprints", the first pick, or the first pick plus a count. */
+.dd.ms .ms-text { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd.ms.has-value .dd-trigger { border-color: var(--pop); }
+.ms-extra {
+  font-family: var(--mono); font-size: 10.5px; line-height: 1;
+  padding: 2px 5px; border-radius: 999px; background: var(--line); color: var(--ink-soft);
+}
+.ms-box {
+  width: 14px; height: 14px; flex: none; border-radius: 3px;
+  border: 1.5px solid var(--line-strong); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ms-box.is-on { background: var(--pop); border-color: var(--pop); }
+.dd.ms .dd-option { gap: 8px; }
+.dd.ms .dd-panel { max-height: 320px; display: flex; flex-direction: column; }
+.dd.ms .dd-list { overflow-y: auto; }
 
 /* Parent is the first thing to go when there is not room for everything; the open button is the
    last, because it is the only way out of a row. */

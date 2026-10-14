@@ -68,6 +68,8 @@ export function useTableCursor(
   handlers: TableCursorHandlers,
   enabled: boolean,
   containerRef: React.RefObject<HTMLDivElement | null>,
+  /** False when the add line is not drawn (filters that name no single value hide it). */
+  hasAdd = true,
 ) {
   const [raw, setCursor] = useState<TableCursor | null>(null);
   // Handlers are rebuilt every render by their callers; reading them through a ref keeps the
@@ -78,7 +80,7 @@ export function useTableCursor(
   // A cursor on a row that filtering, collapsing or a delete just took away is a cursor on
   // nothing, and the next arrow key would jump somewhere arbitrary. Derived rather than corrected
   // in an effect, so there is never a render where the cursor points at a row that is not there.
-  const cursor = raw && (raw.row === 'add' || rowIds.includes(raw.row)) ? raw : null;
+  const cursor = raw && ((raw.row === 'add' && hasAdd) || rowIds.includes(raw.row)) ? raw : null;
 
   // Keep the cursor on screen, and only just — `nearest` scrolls the minimum, so arrowing down a
   // long list does not yank the viewport around on every step.
@@ -108,13 +110,16 @@ export function useTableCursor(
   const move = useCallback((delta: number) => {
     setCursor((cur) => {
       // No cursor yet: the first arrow enters the list at whichever end you came from.
-      if (!cur) return { row: rowIds[delta > 0 ? 0 : rowIds.length - 1] ?? 'add', col: COL.title };
-      const track: CursorRow[] = [...rowIds, 'add'];
+      if (!cur) {
+        const first = rowIds[delta > 0 ? 0 : rowIds.length - 1] ?? (hasAdd ? 'add' : undefined);
+        return first === undefined ? cur : { row: first, col: COL.title };
+      }
+      const track: CursorRow[] = hasAdd ? [...rowIds, 'add'] : rowIds;
       const i = track.indexOf(cur.row);
       const next = track[Math.min(track.length - 1, Math.max(0, i + delta))];
       return next === undefined ? cur : { row: next, col: cur.col };
     });
-  }, [rowIds]);
+  }, [rowIds, hasAdd]);
 
   /** The next column in `dir` that is actually on screen, or `col` itself at the edge. */
   const stepCol = useCallback((row: ID, col: number, dir: -1 | 1): number => {

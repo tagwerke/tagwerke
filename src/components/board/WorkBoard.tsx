@@ -17,7 +17,7 @@ import type { FocusField } from '../../tasks/actions';
 import type { Group } from './workView';
 import type { ID } from '../../types';
 
-export function WorkBoard({ tabId, groups, onDropOn, onOpenTask, onOpenMenu, addFieldsFor, editable }: {
+export function WorkBoard({ tabId, groups, onDropOn, onOpenTask, onOpenMenu, addFieldsFor, onCreated, editable }: {
   tabId: ID;
   groups: Group[];
   /** Move a task into this group — sets whichever field the board is grouped by. */
@@ -26,6 +26,7 @@ export function WorkBoard({ tabId, groups, onDropOn, onOpenTask, onOpenMenu, add
   onOpenMenu: (ids: ID[], x: number, y: number, field?: FocusField) => void;
   /** What a task added in this column should start with, or null where that is not expressible. */
   addFieldsFor: (groupKey: string) => DraftFields | null;
+  onCreated?: (id: ID) => void;
   editable: boolean;
 }) {
   const [over, setOver] = useState<string | null>(null);
@@ -57,7 +58,7 @@ export function WorkBoard({ tabId, groups, onDropOn, onOpenTask, onOpenMenu, add
               {/* Per column, so a task added here starts in this column (§I.1). Grouping the board
                   by something a new task cannot be born with — a sprint it is not in yet — simply
                   offers no line rather than one that would put the card somewhere else. */}
-              {editable && add && <QuickAdd tabId={tabId} presetFields={add} placeholder="Add a task" />}
+              {editable && add && <QuickAdd tabId={tabId} presetFields={add} placeholder="Add a task" onCreated={onCreated} />}
 
               {g.tasks.map((t) => (
                 <article

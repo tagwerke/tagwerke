@@ -15,11 +15,12 @@ import { formatDateChip, todayISO } from '../../util/dates';
 import type { FocusField } from '../../tasks/actions';
 import { COL, COLUMNS, columnAt, type ColumnDef } from './workColumns';
 import type { Group, Sort, SortKey } from './workView';
+import type { DraftFields } from '../../tasks/createTask';
 import type { ID, Member, Sprint, Task } from '../../types';
 
 export function WorkTable({
   tabId, groups, sort, onSort, selection, onSelect, onSelectAll, onOpenMenu, onOpenTask, canReorder, onReorder,
-  onShift, onNest, onUnnest, onDelete, members, sprints, tasksById, editable, nesting,
+  onShift, onNest, onUnnest, onDelete, members, sprints, tasksById, editable, nesting, contextIds, addFields, onCreated,
 }: {
   tabId: ID;
   groups: Group[];
@@ -56,6 +57,11 @@ export function WorkTable({
   sprints: Sprint[];
   tasksById: Record<ID, Task>;
   editable: boolean;
+  /** Rows shown only because a descendant matched the filters — dimmed, and not selectable. */
+  contextIds: ReadonlySet<ID>;
+  /** What the add line starts a task as. Null hides the line: the filters name no single value. */
+  addFields: DraftFields | null;
+  onCreated: (id: ID) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [dragId, setDragId] = useState<ID | null>(null);
@@ -91,6 +97,7 @@ export function WorkTable({
     },
     editable,
     rootRef,
+    addFields !== null,
   );
 
   /**
@@ -119,8 +126,9 @@ export function WorkTable({
     });
   };
 
-  const allOnScreen = flatIds.length > 0 && flatIds.every((id) => selection.has(id));
-  const someOnScreen = flatIds.some((id) => selection.has(id));
+  const selectable = useMemo(() => flatIds.filter((id) => !contextIds.has(id)), [flatIds, contextIds]);
+  const allOnScreen = selectable.length > 0 && selectable.every((id) => selection.has(id));
+  const someOnScreen = selectable.some((id) => selection.has(id));
 
   /**
    * End the rename and give the keyboard back to the table.
@@ -193,11 +201,17 @@ export function WorkTable({
             />
           )}
         </span>
-        <button type="button" className={`wt-th ${sort.key === 'title' ? 'is-sorted' : ''}`} onClick={() => onSort('title')}>
+        <button type="button" className={`wt-th ${sort.key === 'title' ? 'is-sorted' : ''}`} onClick={() => onSort('title')} title={headTitle('Title', sort.key === 'title')}>
           Title{sort.key === 'title' && (sort.dir === 'asc' ? ' ↑' : ' ↓')}
         </button>
         {COLUMNS.map((c) => (
-          <button key={c.key} type="button" className={`wt-th ${sort.key === c.key ? 'is-sorted' : ''}`} onClick={() => onSort(c.key)}>
+          <button
+            key={c.key}
+            type="button"
+            className={`wt-th ${sort.key === c.key ? 'is-sorted' : ''}`}
+            onClick={() => onSort(c.key)}
+            title={headTitle(c.label, sort.key === c.key, GROUPABLE.has(c.key))}
+          >
             {c.label}{sort.key === c.key && (sort.dir === 'asc' ? ' ↑' : ' ↓')}
           </button>
         ))}
@@ -209,11 +223,6 @@ export function WorkTable({
         if (!g.tasks.length) return null; // an empty group is a column in the board layout, not a row here
         return (
           <div key={g.key} className="wt-group">
-            <div className="wt-group-head" role="row">
-              {g.swatch && <span className={`list-dot ${g.swatch}`} />}
-              <span>{g.label}</span>
-              <span className="wt-group-n">{g.tasks.length}</span>
-            </div>
             {g.tasks.map((t) => {
               const parent = t.parentTaskId ? tasksById[t.parentTaskId] : undefined;
               const done = t.status === 'done' || t.status === 'cancelled';
@@ -225,7 +234,7 @@ export function WorkTable({
                   role="row"
                   aria-selected={selection.has(t.id)}
                   data-row={t.id}
-                  className={`wt-row ${selection.has(t.id) ? 'is-selected' : ''} ${done ? 'is-done' : ''} ${cursor?.row === t.id ? 'is-cursor' : ''}`}
+                  className={`wt-row ${selection.has(t.id) ? 'is-selected' : ''} ${done ? 'is-done' : ''} ${contextIds.has(t.id) ? 'is-context' : ''} ${cursor?.row === t.id ? 'is-cursor' : ''}`}
                   data-drop={dropOn?.id === t.id ? dropOn.place : undefined}
                   onMouseDown={() => putCursor(t.id, COL.title)}
                   draggable={canReorder && editable}
@@ -260,7 +269,7 @@ export function WorkTable({
                     className={`wt-cb ${cursor?.row === t.id && cursor.col === COL.select ? 'is-focused' : ''}`}
                     data-col={COL.select}
                   >
-                    {editable && (
+                    {editable && !contextIds.has(t.id) && (
                       <input
                         type="checkbox"
                         checked={selection.has(t.id)}
@@ -408,18 +417,26 @@ export function WorkTable({
 
       {/* The add line is the last ROW, not a field floating above the table: it is where the next
           task will actually appear, so that is where you type it. */}
-      {editable && (
+      {editable && addFields && (
         <div
           className={`wt-row is-add ${cursor?.row === 'add' ? 'is-cursor' : ''}`}
           role="row"
           data-add-row
         >
           <span className="wt-cb" />
-          <QuickAdd tabId={tabId} shortcut />
+          <QuickAdd tabId={tabId} shortcut presetFields={addFields} onCreated={onCreated} />
         </div>
       )}
     </div>
   );
+}
+
+/** Columns whose header click groups the rows as well as sorting them (BOARD_FILTERS_PLAN D5). */
+const GROUPABLE: ReadonlySet<SortKey> = new Set<SortKey>(['status', 'assignee', 'sprint']);
+
+function headTitle(name: string, active: boolean, groups = false): string {
+  const what = groups ? `Group by ${name}` : `Sort by ${name}`;
+  return active ? `${what} — click to reverse, again to clear` : what;
 }
 
 /** Caret collapsed at the start or end of an input — where an arrow key stops being a caret move. */

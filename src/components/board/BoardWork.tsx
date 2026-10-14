@@ -1,9 +1,9 @@
 // The board's work view (NOTES_SPLIT_PLAN §N2).
 //
 // Table and Kanban are two LAYOUTS of this one component, not two views. Everything that decides
-// what you are looking at — which tasks, grouped how, sorted how, what is selected — lives here, so
-// switching layout keeps it. That is the whole reason for the shape: "group by assignee" gives you
-// a per-person table and a per-person board, and it is one implementation.
+// what you are looking at — which tasks (filters), grouped how, sorted how, what is selected — lives
+// here, so switching layout keeps it. In the table the active column header is both the sort and the
+// grouping (BOARD_FILTERS_PLAN D5); the Kanban's columns are always Status.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { childrenOf, descendantsOf, siblingsOf, taskDepth, useBoardOutline, useStore } from '../../store';
@@ -11,39 +11,49 @@ import { showToast } from '../../toast/useToast';
 import { TaskActionMenu } from '../common/TaskActionMenu';
 import { WorkTable } from './WorkTable';
 import { WorkBoard } from './WorkBoard';
-import { GROUPINGS, groupTasks, sortTasks, statusOfGroup, type Grouping, type Sort, type SortKey, type WorkLayout } from './workView';
+import { groupingOfSort, groupTasks, sortTasks, statusOfGroup, type Grouping, type Sort, type SortKey, type WorkLayout } from './workView';
 import { actionForField, TASK_ACTIONS, type FocusField } from '../../tasks/actions';
 import { boardTaskPath, navigate } from '../../util/router';
 import type { DraftFields } from '../../tasks/createTask';
-import type { SprintFilter } from '../TabView';
 import { ViewSwitcher } from './ViewSwitcher';
 import { newestFirst } from '../../util/sprints';
 import { DocumentStrip } from '../documents/DocumentStrip';
-import { Dropdown } from '../Dropdown';
+import { MultiSelect } from '../common/MultiSelect';
+import {
+  applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
+} from './workFilters';
 import type { BoardView, ID, Member, Sprint } from '../../types';
 
 /** Shared empties. `?? []` would mint a new array each render and churn every memo below. */
 const NO_MEMBERS: Member[] = [];
 const NO_SPRINTS: Sprint[] = [];
 
-const GROUP_KEY = (tabId: ID) => `tw:work-group:${tabId}`;
-const SCOPE_KEY = (tabId: ID) => `tw:work-scope:${tabId}`;
+const SORT_KEY = (tabId: ID) => `tw:work-sort:${tabId}`;
+const SORT_KEYS: readonly SortKey[] = ['rank', 'title', 'status', 'assignee', 'due', 'priority', 'sprint'];
+const RANK_SORT: Sort = { key: 'rank', dir: 'asc' };
+const NO_PINNED: ReadonlySet<ID> = new Set();
+const SEARCH_DEBOUNCE_MS = 200;
 
-/** localStorage is a per-viewer convenience here; a browser that refuses it just doesn't remember. */
-function readStored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+/**
+ * The table's sort — which is also its grouping (BOARD_FILTERS_PLAN D5). Remembered per board, as
+ * the grouping was; localStorage is a per-viewer convenience, so a browser that refuses it just
+ * opens on the outline.
+ */
+function readSort(tabId: ID): Sort {
   try {
-    const v = localStorage.getItem(key);
-    return allowed.includes(v as T) ? (v as T) : fallback;
-  } catch {
-    return fallback;
-  }
+    const [key, dir] = (localStorage.getItem(SORT_KEY(tabId)) ?? '').split(':');
+    if (SORT_KEYS.includes(key as SortKey) && key !== 'rank' && (dir === 'asc' || dir === 'desc')) {
+      return { key: key as SortKey, dir };
+    }
+  } catch { /* fall through */ }
+  return RANK_SORT;
 }
 
-export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter, view, onViewChange }: {
+export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view, onViewChange }: {
   tabId: ID;
   layout: WorkLayout;
-  sprintFilter?: SprintFilter;
-  onSprintFilter: (f: SprintFilter) => void;
+  filters: WorkFilters;
+  onFilters: (update: (f: WorkFilters) => WorkFilters) => void;
   view: BoardView;
   onViewChange: (v: BoardView) => void;
 }) {
@@ -54,15 +64,14 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
   const role = useStore((s) => s.tabs[tabId]?.role);
   const editable = role === 'editor' || role === 'admin';
 
-  const [grouping, setGrouping] = useState<Grouping>(() =>
-    readStored(GROUP_KEY(tabId), ['status', 'assignee', 'sprint', 'none'] as const, layout === 'table' ? 'none' : 'status'));
-  // The busy-board escape hatch from the Kanban (SUBTASKS_PLAN D10): a parent with eight sub-tasks
-  // puts nine rows on screen. Kept, because the problem it solves did not go away.
-  const [scope, setScope] = useState<'all' | 'roots'>(() =>
-    readStored(SCOPE_KEY(tabId), ['all', 'roots'] as const, 'all'));
-  const [sort, setSort] = useState<Sort>({ key: 'rank', dir: 'asc' });
+  const [sort, setSort] = useState<Sort>(() => readSort(tabId));
+  // The Kanban's columns ARE its grouping, so it is always Status in rank order and ignores the
+  // table's header choice. The two are independent: switching layout never wipes the outline.
+  const isTable = layout === 'table';
+  const effSort: Sort = isTable ? sort : RANK_SORT;
+  const grouping: Grouping = isTable ? groupingOfSort(sort) : 'status';
   // §I.3: a column sort makes "between these two rows" a lie, so the handle is not offered.
-  const canReorder = sort.key === 'rank';
+  const canReorder = effSort.key === 'rank';
   const [selection, setSelection] = useState<Set<ID>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<ID>>(new Set());
   const menuSeq = useRef(0);
@@ -72,13 +81,10 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
 
   useEffect(() => {
     try {
-      localStorage.setItem(GROUP_KEY(tabId), grouping);
-      localStorage.setItem(SCOPE_KEY(tabId), scope);
+      if (sort.key === 'rank') localStorage.removeItem(SORT_KEY(tabId));
+      else localStorage.setItem(SORT_KEY(tabId), `${sort.key}:${sort.dir}`);
     } catch { /* storage disabled — the choice just doesn't persist */ }
-  }, [tabId, grouping, scope]);
-
-  // A board layout needs columns to lay out, so "group by nothing" is a table-only choice.
-  const effectiveGrouping: Grouping = layout === 'board' && grouping === 'none' ? 'status' : grouping;
+  }, [tabId, sort]);
 
   /**
    * Nesting is shown only when the rows are a contiguous outline: no grouping, and the board's own
@@ -86,7 +92,33 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
    * an indent would point at nothing that is on screen — the crumb in the Parent column carries the
    * relationship instead, and holds wherever a task falls.
    */
-  const isOutline = effectiveGrouping === 'none' && sort.key === 'rank' && scope === 'all';
+  const isOutline = grouping === 'none' && effSort.key === 'rank';
+
+  // A filter on something that no longer exists (a deleted sprint, a removed member) would show an
+  // empty board with nothing to untick, so ids that name nothing are ignored at use. Not written
+  // back: until the board's sprints and members have loaded they look absent too.
+  const filters = useMemo(
+    () => pruneFilters(rawFilters, new Set(sprints.map((s) => s.id)), new Set(members.map((m) => m.id))),
+    [rawFilters, sprints, members],
+  );
+  const filtersActive = hasActiveFilters(filters);
+
+  // Tasks added under a filter stay visible until the filters next change, even if they would not
+  // match (a search term the new title lacks): a row that vanishes on creation reads as a lost write.
+  // The set remembers which filters it was made under, so a changed filter reads as an empty set
+  // without an effect to reset it.
+  const [pinState, setPinState] = useState<{ under: WorkFilters; ids: ReadonlySet<ID> }>({ under: rawFilters, ids: NO_PINNED });
+  const pinned = pinState.under === rawFilters ? pinState.ids : NO_PINNED;
+  const onCreated = useCallback(
+    (id: ID) => setPinState((p) => ({ under: rawFilters, ids: new Set(p.under === rawFilters ? p.ids : []).add(id) })),
+    [rawFilters],
+  );
+
+  const filtered = useMemo(
+    () => applyFilters(outline, filters, tasksById, isOutline, pinned),
+    [outline, filters, tasksById, isOutline, pinned],
+  );
+  const contextIds = filtered.context;
 
   const hiddenByCollapse = useMemo(() => {
     if (!isOutline || !collapsed.size) return null;
@@ -95,24 +127,26 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
     return hidden;
   }, [isOutline, collapsed, tasksById]);
 
-  const visible = useMemo(() => {
-    const bySprint = sprintFilter === 'all' ? outline : outline.filter((t) => (t.sprintId ?? null) === sprintFilter);
-    const byScope = scope === 'roots' ? bySprint.filter((t) => !t.parentTaskId) : bySprint;
-    return hiddenByCollapse ? byScope.filter((t) => !hiddenByCollapse.has(t.id)) : byScope;
-  }, [outline, sprintFilter, scope, hiddenByCollapse]);
+  const visible = useMemo(
+    () => (hiddenByCollapse ? filtered.tasks.filter((t) => !hiddenByCollapse.has(t.id)) : filtered.tasks),
+    [filtered, hiddenByCollapse],
+  );
 
   const groups = useMemo(() => {
     const memberName = new Map(members.map((m) => [m.id, m.name]));
     const sprintStart = new Map(sprints.map((s) => [s.id, s.startsAt]));
-    return groupTasks(visible, effectiveGrouping, members, sprints).map((g) => ({
+    return groupTasks(visible, grouping, members, sprints, effSort.dir).map((g) => ({
       ...g,
-      tasks: sortTasks(g.tasks, sort, memberName, sprintStart),
+      tasks: sortTasks(g.tasks, effSort, memberName, sprintStart),
     }));
-  }, [visible, effectiveGrouping, members, sprints, sort]);
+  }, [visible, grouping, members, sprints, effSort]);
 
   // Selection is scoped to what is on screen: a filter or grouping change must not leave a hidden
   // task selected and then act on it from the bulk bar.
-  const visibleIds = useMemo(() => new Set(visible.map((t) => t.id)), [visible]);
+  const visibleIds = useMemo(
+    () => new Set(visible.filter((t) => !contextIds.has(t.id)).map((t) => t.id)),
+    [visible, contextIds],
+  );
   const selected = useMemo(() => [...selection].filter((id) => visibleIds.has(id)), [selection, visibleIds]);
 
   const onSort = useCallback((key: SortKey) => {
@@ -162,31 +196,31 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
   const onDropOn = useCallback((taskId: ID, groupKey: string) => {
     const store = useStore.getState();
     const ctx = { ids: [taskId], tabId };
-    if (effectiveGrouping === 'status') {
+    if (grouping === 'status') {
       const status = statusOfGroup(groupKey);
       if (!status) return;
       // Through the action so the review gate and the single cascade offer both apply.
       actionForField('status')?.options?.(ctx).find((o) => o.key === status)?.run();
       return;
     }
-    if (effectiveGrouping === 'assignee') {
+    if (grouping === 'assignee') {
       store.setTaskAssignee(taskId, groupKey === '~none' ? undefined : groupKey);
       return;
     }
-    if (effectiveGrouping === 'sprint') {
+    if (grouping === 'sprint') {
       store.setTaskMeta(taskId, { sprintId: groupKey === '~none' ? undefined : groupKey });
     }
-  }, [effectiveGrouping, tabId]);
+  }, [grouping, tabId]);
 
-  /** What a task added in a given column starts as. Null where the column is not expressible. */
+  /** What a task added under the current filters starts as; null hides the add line (D10). */
+  const filterPreset = useMemo(() => presetFromFilters(filters), [filters]);
+
+  /** What a task added in a given Kanban column starts as: the column's status plus the filters'. */
   const addFieldsFor = useCallback((groupKey: string): DraftFields | null => {
-    if (effectiveGrouping === 'status') {
-      const status = statusOfGroup(groupKey);
-      return status ? { status } : null;
-    }
-    if (effectiveGrouping === 'assignee') return groupKey === '~none' ? {} : { assigneeId: groupKey };
-    return groupKey === '~none' ? {} : null; // a brand-new task cannot be born into a sprint here
-  }, [effectiveGrouping]);
+    const status = statusOfGroup(groupKey);
+    if (!filterPreset || !status) return null;
+    return { ...filterPreset, status };
+  }, [filterPreset]);
 
   /**
    * Put `id` directly before or after `targetId`, a sibling. The neighbours come from the SIBLING
@@ -227,6 +261,28 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
     placeBeside(id, target.id, dir < 0 ? 'before' : 'after');
   }, [canReorder, groups, placeBeside]);
 
+  // The search box keeps its own text and reports it after a pause, so typing does not re-filter
+  // the board on every keystroke. Esc clears it at once.
+  const [text, setText] = useState(rawFilters.query);
+  useEffect(() => {
+    const h = setTimeout(() => onFilters((f) => (f.query === text ? f : { ...f, query: text })), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(h);
+  }, [text, onFilters]);
+
+  const clearFilters = useCallback(() => {
+    setText('');
+    onFilters(() => NO_FILTERS);
+  }, [onFilters]);
+
+  const sprintOptions = useMemo(() => [
+    { value: BACKLOG, label: 'Backlog' },
+    ...newestFirst(sprints).map((s) => ({ value: s.id, label: s.isCurrent ? `${s.label} · now` : s.label })),
+  ], [sprints]);
+  const assigneeOptions = useMemo(() => [
+    ...members.map((m) => ({ value: m.id, label: m.name })),
+    { value: UNASSIGNED, label: 'Unassigned' },
+  ], [members]);
+
   // Files is a view of the board, not a layout of its tasks — so it takes the whole surface and
   // keeps only the switcher, the way the Notes view does. It is answered HERE rather than beside
   // Notes in TabView because 'files' already routes through this component (anything that isn't
@@ -245,56 +301,73 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
     );
   }
 
-  const total = visible.length;
-  const doneCount = visible.filter((t) => t.status === 'done').length;
-  const hiddenSubtasks = scope === 'roots' ? outline.length - visible.length : 0;
+  const shown = visible.filter((t) => !contextIds.has(t.id));
+  const total = shown.length;
+  const doneCount = shown.filter((t) => t.status === 'done').length;
+  const noMatch = total === 0 && filtersActive;
 
   return (
     <div className="board-work">
       <div className="work-toolbar">
-        <span className="work-control">
-          <span className="work-control-label">Group</span>
-          <Dropdown
-            className="is-compact"
-            value={grouping}
-            options={GROUPINGS.filter((g) => layout === 'table' || g.key !== 'none').map((g) => ({ value: g.key, label: g.label }))}
-            onChange={(v) => setGrouping(v as Grouping)}
-          />
-        </span>
-        {/* The sprint filter has always been applied on open — a board lands on its current sprint
-            — but nothing said so once the Sprints view moved into the panel, so a board whose work
-            is all in the backlog read as an empty board. A filter you cannot see is a bug. */}
+        {/* The sprint filter is always shown once a board has sprints: a filter you cannot see is a
+            bug, and a board whose work is all in the backlog reads as an empty board. */}
         {sprints.length > 0 && (
           <span className="work-control">
             <span className="work-control-label">Sprint</span>
-            <Dropdown
-              className="is-compact"
-              value={sprintFilter === 'all' ? 'all' : sprintFilter ?? 'backlog'}
-              options={[
-                { value: 'all', label: 'All' },
-                { value: 'backlog', label: 'Backlog' },
-                ...newestFirst(sprints).map((s) => ({ value: s.id, label: s.isCurrent ? `${s.label} · now` : s.label })),
-              ]}
-              onChange={(v) => onSprintFilter(v === 'all' ? 'all' : v === 'backlog' ? null : v)}
+            <MultiSelect
+              label="Filter by sprint"
+              noun="sprints"
+              options={sprintOptions}
+              selected={filters.sprints}
+              onChange={(sprintsSel) => onFilters((f) => ({ ...f, sprints: sprintsSel }))}
             />
           </span>
         )}
-        <button
-          type="button"
-          className={`list-mode ${scope === 'roots' ? 'is-on' : ''}`}
-          title="Hide sub-tasks; they stay visible as progress on their parent"
-          onClick={() => setScope((s) => (s === 'all' ? 'roots' : 'all'))}
-        >
-          Top level only
-        </button>
-        {hiddenSubtasks > 0 && (
-          <span className="muted work-note">{hiddenSubtasks} sub-task{hiddenSubtasks === 1 ? '' : 's'} hidden</span>
+        {members.length > 0 && (
+          <span className="work-control">
+            <span className="work-control-label">Assignee</span>
+            <MultiSelect
+              label="Filter by assignee"
+              noun="people"
+              options={assigneeOptions}
+              selected={filters.assignees}
+              onChange={(assignees) => onFilters((f) => ({ ...f, assignees }))}
+            />
+          </span>
+        )}
+        {filtersActive && (
+          <button type="button" className="list-mode" onClick={clearFilters}>Clear filters</button>
         )}
         <span className="work-spacer" />
+        <input
+          type="search"
+          className="work-search"
+          value={text}
+          placeholder="Search tasks"
+          aria-label="Search tasks"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Escape') return;
+            e.stopPropagation();
+            if (text) {
+              setText('');
+              onFilters((f) => (f.query ? { ...f, query: '' } : f));
+            } else {
+              e.currentTarget.blur();
+            }
+          }}
+        />
         <ViewSwitcher view={view} onChange={onViewChange} />
       </div>
 
-      {total === 0 && (layout === 'board' || !editable) ? (
+      {noMatch && (
+        <div className="work-empty muted">
+          No tasks match these filters.{' '}
+          <button type="button" className="btn tiny ghost" onClick={clearFilters}>Clear filters</button>
+        </div>
+      )}
+
+      {total === 0 && !noMatch && (layout === 'board' || !editable) ? (
         <div className="view-placeholder muted">
           {editable ? 'No tasks yet — add one in a column.' : 'No tasks on this board yet.'}
         </div>
@@ -302,7 +375,7 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
         <WorkTable
           tabId={tabId}
           groups={groups}
-          sort={sort}
+          sort={effSort}
           onSort={onSort}
           selection={new Set(selected)}
           onSelect={onSelect}
@@ -330,6 +403,9 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
           sprints={sprints}
           tasksById={tasksById}
           editable={editable}
+          contextIds={contextIds}
+          addFields={filterPreset}
+          onCreated={onCreated}
         />
       ) : (
         <WorkBoard
@@ -339,6 +415,7 @@ export function BoardWork({ tabId, layout, sprintFilter = 'all', onSprintFilter,
           onOpenTask={(id) => navigate(boardTaskPath(tabId, id))}
           onOpenMenu={openMenu}
           addFieldsFor={addFieldsFor}
+          onCreated={onCreated}
           editable={editable}
         />
       )}

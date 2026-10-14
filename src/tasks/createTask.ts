@@ -18,6 +18,8 @@ export interface DraftFields {
   date?: string | null;
   priority?: 1 | 2 | 3 | null;
   assigneeId?: ID | null;
+  /** A filtered board starts new tasks in the sprint it is filtered to. Null/omitted is the backlog. */
+  sprintId?: ID | null;
 }
 
 export interface CreateTaskOptions {
@@ -70,6 +72,7 @@ export function createTaskInBoard(tabId: ID, opts: CreateTaskOptions): ID {
     ...(fields?.date !== undefined ? { date: fields.date ?? undefined } : {}),
     ...(fields?.priority !== undefined ? { priority: fields.priority ?? undefined } : {}),
     ...(fields?.assigneeId !== undefined ? { assigneeId: fields.assigneeId ?? undefined } : {}),
+    ...(fields?.sprintId ? { sprintId: fields.sprintId } : {}),
   });
 
   return id;

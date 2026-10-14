@@ -6,16 +6,13 @@ import { usePresence } from '../realtime/usePresence';
 import { Avatar } from './common/Avatar';
 import { BoardPanel } from './BoardPanel';
 import { BoardWork } from './board/BoardWork';
+import { BACKLOG, useWorkFilters } from './board/workFilters';
 import { ViewSwitcher } from './board/ViewSwitcher';
 import { Dropdown } from './Dropdown';
 import { InfoPane } from './InfoPane';
 import { useHelpBadge } from '../help/useHelpBadge';
-import { asBoardView, type BoardView, type ID } from '../types';
+import { asBoardView, type BoardView } from '../types';
 
-
-/** A sprint filter for List/Kanban: a specific sprint id, `null` for backlog, or 'all' for no
- *  filter. Not persisted — reopening a board (or the Sprints page's own "view all") clears it. */
-export type SprintFilter = ID | null | 'all';
 
 /** Live cursors present in this board, as ringed avatars (self excluded, deduped by name). */
 function PresenceAvatars({ tabId }: { tabId: string }) {
@@ -49,15 +46,10 @@ export function TabView({ tabId }: { tabId: string }) {
   );
   const setBoardView = useStore((s) => s.setBoardView);
   const [panelOpen, setPanelOpen] = useState(true);
-  // Which sprint List/Kanban show. Defaults to 'all' (unfiltered) — every task that existed
-  // before sprints shipped has no sprintId at all, i.e. is in the backlog, so defaulting to
-  // "current sprint" would render an empty view on every pre-existing board. Filtering to one
-  // sprint is an explicit action (drilling in from the Sprints page), never the default.
-  // Deliberately NOT persisted — reset whenever the board itself changes.
-  const [sprintFilter, setSprintFilter] = useState<SprintFilter>('all');
-  useEffect(() => {
-    setSprintFilter('all');
-  }, [tabId]);
+  // The board's work filters (sprints, assignees, search). Owned here, not in BoardWork, because the
+  // Sprints panel drills into them. Sprint and assignee choices are remembered per board; the search
+  // text is not (BOARD_FILTERS_PLAN D8).
+  const [filters, updateFilters] = useWorkFilters(tabId);
   // Not part of `boardView`/global store on purpose — it's an auxiliary pane, not a view of the
   // board's task data, and must never persist as "the" view a board reopens into.
   const [pane, setPane] = useState<'help' | null>(null);
@@ -170,10 +162,11 @@ export function TabView({ tabId }: { tabId: string }) {
                scope switch survive a switch between them (§N2.1). `view` is normalised by
                asBoardView, so there is no fall-through branch to land a deleted view in. */
             <BoardWork
+              key={tab.id}
               tabId={tab.id}
               layout={view === 'kanban' ? 'board' : 'table'}
-              sprintFilter={sprintFilter}
-              onSprintFilter={setSprintFilter}
+              filters={filters}
+              onFilters={updateFilters}
               view={view}
               onViewChange={setBoardView}
             />
@@ -185,7 +178,7 @@ export function TabView({ tabId }: { tabId: string }) {
             tabId={tab.id}
             tabName={tab.name}
             onOpenSprint={(id) => {
-              setSprintFilter(id);
+              updateFilters((f) => ({ ...f, sprints: [id ?? BACKLOG], assignees: [] }));
               setBoardView('table');
             }}
           />
