@@ -7,14 +7,18 @@
 // Rendered by each view's own toolbar rather than by the board shell, so a view owns its whole bar
 // — but from one component, so the switcher itself cannot drift between them.
 
+import { useStore } from '../../store';
 import { BOARD_VIEWS, type BoardView } from '../../types';
 
-const LABEL: Record<BoardView, string> = { table: 'Table', kanban: 'Kanban', notes: 'Notes', files: 'Files' };
+const LABEL: Record<BoardView, string> = { table: 'Table', kanban: 'Kanban', notes: 'Notes', files: 'Files', secrets: 'Secrets' };
 
 export function ViewSwitcher({ view, onChange }: { view: BoardView; onChange: (v: BoardView) => void }) {
+  // Secrets is board-admin only. Hidden, not disabled: to anyone else, a board's secrets don't exist.
+  const isAdmin = useStore((s) => (s.activeTabId ? s.tabs[s.activeTabId]?.role === 'admin' : false));
+  const views = isAdmin ? BOARD_VIEWS : BOARD_VIEWS.filter((v) => v !== 'secrets');
   return (
     <div className="seg board-views" role="tablist" aria-label="Board view">
-      {BOARD_VIEWS.map((v) => (
+      {views.map((v) => (
         <button
           key={v}
           role="tab"

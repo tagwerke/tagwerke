@@ -8,7 +8,7 @@
 // stay as direct fetches and simply fail while offline.
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import type { BlockFilter, CalendarEvent, Comment as CommentDTO, DocumentDTO, DocumentItem, ExtractionRun, ID, Notification as NotificationDTO, RsvpStatus, Sprint, Task, TaskStatus } from '../types';
+import type { BlockFilter, CalendarEvent, Comment as CommentDTO, DocumentDTO, DocumentItem, ExtractionRun, ID, Notification as NotificationDTO, RsvpStatus, SecretEntryDTO, SecretLinkDTO, Sprint, Task, TaskStatus } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
 
@@ -27,12 +27,14 @@ async function req<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   offline.setOnline(true);
   if (!r.ok) {
     let detail = '';
+    let data: { error?: string; code?: string; [k: string]: unknown } | undefined;
     try {
-      detail = (await r.json())?.error ?? '';
+      data = await r.json();
+      detail = data?.error ?? '';
     } catch {
       /* ignore */
     }
-    throw new ApiError(r.status, `${init?.method ?? 'GET'} ${path} -> ${r.status} ${detail}`);
+    throw new ApiError(r.status, `${init?.method ?? 'GET'} ${path} -> ${r.status} ${detail}`, data);
   }
   const text = await r.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -40,9 +42,12 @@ async function req<T = unknown>(path: string, init?: RequestInit): Promise<T> {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The server's JSON error body, when it sent one — `error`, and sometimes a machine `code`. */
+  data?: { error?: string; code?: string; [k: string]: unknown };
+  constructor(status: number, message: string, data?: ApiError['data']) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -73,6 +78,14 @@ export interface SessionUser {
   email: string;
   role: 'admin' | 'member';
   totpEnabled: boolean;
+}
+
+export interface SecretInput {
+  name: string;
+  username?: string | null;
+  secret: string;
+  url?: string | null;
+  notes?: string | null;
 }
 
 export const auth = {
@@ -402,6 +415,45 @@ export const api = {
     // Recovery: unlock a user who lost their 2FA / all their passkeys.
     resetTwoFactor: (id: ID) => req(`/api/admin/users/${id}/reset-2fa`, { method: 'POST' }),
     resetPasskeys: (id: ID) => req(`/api/admin/users/${id}/reset-passkeys`, { method: 'POST' }),
+  },
+  // ── Board secrets (SECRET_LINKS_PLAN.md) — direct fetch, NEVER the outbox ──
+  // The outbox persists request bodies to IndexedDB to replay them; a secret value must never be
+  // written to disk on the client. These simply fail while offline.
+  secrets: {
+    list: (boardId: ID) =>
+      req<{ entries: SecretEntryDTO[]; policy: { allowedCidrs: string[] }; clientIp: string; sudo: boolean }>(
+        `/api/boards/${boardId}/secrets`,
+      ),
+    create: (boardId: ID, body: SecretInput) =>
+      req<SecretEntryDTO>(`/api/boards/${boardId}/secrets`, { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: ID, patch: Partial<SecretInput>) =>
+      req<SecretEntryDTO>(`/api/secrets/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+    remove: (id: ID) => req(`/api/secrets/${id}`, { method: 'DELETE' }),
+    reveal: (id: ID) => req<{ secret: string; notes?: string }>(`/api/secrets/${id}/reveal`, { method: 'POST' }),
+    setPolicy: (boardId: ID, allowedCidrs: string[]) =>
+      req<{ allowedCidrs: string[] }>(`/api/boards/${boardId}/secret-policy`, { method: 'PUT', body: JSON.stringify({ allowedCidrs }) }),
+  },
+  secretLinks: {
+    create: (body: { ciphertext: string; ttlSeconds: number; pinPrefix?: 32 | 24; label?: string; tabId?: ID; entryId?: ID }) =>
+      req<{ id: string; expiresAt: number }>('/api/secret-links', { method: 'POST', body: JSON.stringify(body) }),
+    list: (tabId?: ID) =>
+      req<{ links: SecretLinkDTO[] }>(`/api/secret-links${tabId ? `?tabId=${encodeURIComponent(tabId)}` : ''}`),
+    revoke: (id: ID) => req(`/api/secret-links/${id}`, { method: 'DELETE' }),
+    // The recipient's side: unauthenticated, burns the link (D2/D3).
+    reveal: (id: string) =>
+      req<{ ciphertext: string }>(`/api/public/secret-links/${encodeURIComponent(id)}/reveal`, { method: 'POST' }),
+  },
+  // Step-up for any signed-in user (board admins are usually not platform admins). Same grant as
+  // api.admin.sudo, different mount.
+  stepUp: {
+    status: () => req<{ active: boolean }>('/api/auth/sudo'),
+    password: (creds: { password?: string; totp?: string }) =>
+      req('/api/auth/sudo', { method: 'POST', body: JSON.stringify(creds) }),
+    passkey: async () => {
+      const options = await req<Parameters<typeof startAuthentication>[0]['optionsJSON']>('/api/auth/sudo/passkey/options', { method: 'POST' });
+      const response = await startAuthentication({ optionsJSON: options });
+      return req('/api/auth/sudo/passkey/verify', { method: 'POST', body: JSON.stringify({ response }) });
+    },
   },
   // ── Notifications (per-user feed + web push) — reads/own-state, direct fetch ──
   notifications: {

@@ -129,7 +129,12 @@ export function targetTypeForPath(path: string): string | null {
 
 // Secrets never reach the log. Applied to non-content bodies; auth routes are skipped
 // entirely (they self-enrich), so this is a belt-and-suspenders denylist.
-const SECRET_KEYS = new Set(['password', 'newPassword', 'inviteCode', 'code', 'totp', 'token', 'backupCodes']);
+// `secret`/`notes`/`ciphertext` are board secrets. routes/secrets.ts records its own rows and opts out
+// of this hook entirely — these only catch a future route that forgets to.
+const SECRET_KEYS = new Set([
+  'password', 'newPassword', 'inviteCode', 'code', 'totp', 'token', 'backupCodes',
+  'secret', 'notes', 'ciphertext',
+]);
 
 function redact(body: unknown): unknown {
   if (!body || typeof body !== 'object') return null;

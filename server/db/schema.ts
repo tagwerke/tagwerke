@@ -23,6 +23,7 @@ import {
   unique,
   uniqueIndex,
   index,
+  inet,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
@@ -685,5 +686,78 @@ export const documentItems = pgTable(
   (t) => [
     index('document_items_doc_idx').on(t.documentId, t.kind),
     index('document_items_tab_idx').on(t.tabId),
+  ],
+);
+
+// ── Board secrets (SECRET_LINKS_PLAN.md, reshaped to "boards with secrets") ─────────────────────
+//
+// A board's credential vault. Encrypted SERVER-SIDE under VAULT_KEY (D5) — deliberately not
+// zero-knowledge, so SSO/passkey users can have one. Every `*_enc` column is a sealed string from
+// server/lib/vault.ts whose AAD binds it to (tab_id, id, field): a ciphertext copied onto another
+// entry or another board fails to open rather than leaking there. Only `name` is plaintext, because
+// the list has to render without decrypting secrets.
+//
+// Access is board ADMINS ONLY, plus the board's network policy below, plus a fresh step-up for
+// anything that reveals or changes a value. Entries never enter the Yjs doc, /api/state, the
+// offline snapshot or the agent API — the only way to a value is POST /api/secrets/:id/reveal.
+// Hard delete, no Trash: a deleted credential lingering in a tombstone is the opposite of the point.
+export const secretEntries = pgTable(
+  'secret_entries',
+  {
+    id: text('id').primaryKey(),
+    tabId: text('tab_id')
+      .notNull()
+      .references(() => tabs.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    usernameEnc: text('username_enc'),
+    secretEnc: text('secret_enc').notNull(),
+    urlEnc: text('url_enc'),
+    notesEnc: text('notes_enc'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedBy: text('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('secret_entries_tab_idx').on(t.tabId)],
+);
+
+// A board's network policy for its secrets: when `allowed_cidrs` is non-empty, every secrets
+// request for that board must come from inside one of them. Its own table rather than a key in
+// `tabs.settings`, because settings travel to every member in /api/state and are writable through
+// the generic tab PATCH, which does not demand a step-up.
+export const secretPolicies = pgTable('secret_policies', {
+  tabId: text('tab_id')
+    .primaryKey()
+    .references(() => tabs.id, { onDelete: 'cascade' }),
+  allowedCidrs: jsonb('allowed_cidrs').notNull().default([]),
+  updatedBy: text('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// One-time secret links (D1–D4). Server-opaque: `ciphertext` is AES-GCM output from the browser and
+// the key lives in the URL fragment, which never reaches us. There is deliberately no plaintext path
+// anywhere in the app. The burn (POST /api/public/secret-links/:id/reveal) is one atomic update that
+// also blanks `ciphertext`, so a read link holds nothing worth stealing afterwards.
+export const secretLinks = pgTable(
+  'secret_links',
+  {
+    id: text('id').primaryKey(), // URL id; the key is the fragment, not this
+    ciphertext: text('ciphertext').notNull(), // base64url(iv ‖ AES-GCM output); '' once burned
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    // The board the link was shared from, if any — only so its Secrets view can list it.
+    tabId: text('tab_id').references(() => tabs.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    viewedAt: timestamp('viewed_at', { withTimezone: true }), // non-null = burned
+    viewedIp: inet('viewed_ip'), // trust-on-first-use pin (D4)
+    pinPrefix: integer('pin_prefix').notNull().default(32), // IPv4 width; IPv6 maps 32→128, 24→64
+    // Last attempt to open the link AFTER it was read, from outside the pinned range — the signal
+    // that a link leaked in transit. Shown to the sender; the attempt itself is always refused.
+    foreignAttemptAt: timestamp('foreign_attempt_at', { withTimezone: true }),
+    label: text('label'), // sender-side only; NEVER returned by the public route
+  },
+  (t) => [
+    index('secret_links_expiry_idx').on(t.expiresAt),
+    index('secret_links_creator_idx').on(t.createdBy, t.createdAt),
   ],
 );

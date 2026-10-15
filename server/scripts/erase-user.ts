@@ -16,6 +16,11 @@
 // reach a bucket. If that distinction is wrong for a particular erasure request, delete the board's
 // documents in the app first, then run this.
 //
+// SECRETS: a board's secret entries are board content and stay, byline nulled, on the same reasoning
+// (the board's other admins still need those credentials). The user's own one-time links are
+// personal and are DELETED; a link they sent that was never opened stops working. Their id is also
+// pseudonymized inside secret-link audit payloads (`sender`), which a plain actor relabel misses.
+//
 //   npm run erase-user -- --email a@b.com           # PREVIEW only (no changes)
 //   npm run erase-user -- --email a@b.com --confirm  # actually erase
 //
@@ -117,13 +122,20 @@ async function main() {
       }
     }
 
-    // 2. Delete the user — FK cascade / set-null handle the rest of the app data.
+    // 2. Delete the user — FK cascade / set-null handle the rest of the app data. Their one-time
+    //    links go first: the FK would only null the sender and leave the links live.
+    await tx.delete(schema.secretLinks).where(eq(schema.secretLinks.createdBy, uid));
     await tx.delete(schema.users).where(eq(schema.users.id, uid));
 
     // 3. Audit survives, pseudonymized: relabel the actor, and scrub the email out of any
     //    payloads (the subject's own signup/login rows AND others' member-add rows).
     const tombstone = `erased_${nanoid(8)}`;
     await tx.update(schema.auditLog).set({ actorId: tombstone }).where(eq(schema.auditLog.actorId, uid));
+    await tx.execute(sql`
+      UPDATE "audit_log"
+      SET "payload" = jsonb_set("payload", '{sender}', to_jsonb(${tombstone}::text))
+      WHERE "payload"->>'sender' = ${uid}
+    `);
     await tx.execute(sql`
       UPDATE "audit_log"
       SET "payload" = jsonb_set("payload", '{email}', '"[erased]"')

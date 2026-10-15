@@ -239,6 +239,13 @@
       "when": 1791501705695,
       "tag": "0033_agent_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792032587204,
+      "tag": "0034_board_secrets",
+      "breakpoints": true
     }
   ]
 }

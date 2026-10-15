@@ -381,3 +381,30 @@ npm run start        # migrates, then serves dist/ + /api on PORT (default 5174)
   viewer/editor/admin. See [data-residency.md](data-residency.md).
 - TLS: terminate HTTPS at a reverse proxy in front of the app (Caddy/Traefik/nginx) for
   production; the app sets Secure cookies when `NODE_ENV=production`.
+
+## Board secrets
+
+A board's **Secrets** view stores credentials encrypted on the server, readable only by that
+board's admins, and only after re-entering their password, a 2FA code or a passkey (a ten-minute
+grant). Every reveal, edit and refusal is written to the audit log; values never are. Secrets
+are off until you set `VAULT_KEY` (see `.env.example`):
+
+```
+openssl rand -base64 32     # put the result in .env as VAULT_KEY=..., then restart
+```
+
+- **Back the key up apart from your database backups.** Lose it and every stored secret is gone.
+  Keep it next to the dumps and a stolen backup is readable.
+- **Rotating the key:** set the new key as `VAULT_KEY`, move the old one to `VAULT_KEY_PREVIOUS`,
+  restart, then run `npm run rotate-vault-key` (inside the container:
+  `docker compose exec app npm run rotate-vault-key`). When it reports 0 remaining, remove
+  `VAULT_KEY_PREVIOUS` and restart again. It is safe to re-run.
+- **Network policy:** a board admin can restrict a board's secrets to listed IP ranges (office,
+  VPN). The client address comes from `X-Forwarded-For`, so this is only as strong as your reverse
+  proxy: it must **overwrite** that header rather than pass a client's through. Traefik (Dokploy),
+  Caddy and the bundled compose files do by default; nginx needs
+  `proxy_set_header X-Forwarded-For $remote_addr;`. With the app port published directly and no
+  proxy in front, a client can claim any address. If an admin locks everyone out, clear the policy
+  with `DELETE FROM secret_policies WHERE tab_id = '<board id>';`.
+- **One-time links** (share a secret with someone outside Tagwerke) need the app served over HTTPS:
+  browsers only expose the encryption API in a secure context.

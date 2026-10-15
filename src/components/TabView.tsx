@@ -82,7 +82,10 @@ export function TabView({ tabId }: { tabId: string }) {
   const isBoard = tab.type !== 'today';
   // Normalised, never trusted: an older client, a restored session or a stale link must land
   // on the table rather than on a view that no longer exists (§N2.4).
-  const view: BoardView = isBoard ? asBoardView(boardView) : 'notes';
+  const normalized: BoardView = isBoard ? asBoardView(boardView) : 'notes';
+  // A non-admin never lands on Secrets — e.g. the view was left on it and the next board opened is
+  // one where they are only an editor.
+  const view: BoardView = normalized === 'secrets' && tab.role !== 'admin' ? 'table' : normalized;
 
   return (
     <main className="tab-view tab-open" style={style}>

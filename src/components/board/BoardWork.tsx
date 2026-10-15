@@ -18,6 +18,7 @@ import type { DraftFields } from '../../tasks/createTask';
 import { ViewSwitcher } from './ViewSwitcher';
 import { newestFirst } from '../../util/sprints';
 import { DocumentStrip } from '../documents/DocumentStrip';
+import { SecretsView } from '../secrets/SecretsView';
 import { STATUS_LABEL, STATUS_ORDER } from '../StatusControl';
 import { MultiSelect } from '../common/MultiSelect';
 import {
@@ -310,6 +311,19 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
           <ViewSwitcher view={view} onChange={onViewChange} />
         </div>
         <DocumentStrip variant="board" boardId={tabId} />
+      </div>
+    );
+  }
+  // Secrets: same whole-surface treatment as Files. Admin-only — TabView never routes anyone else
+  // here, and the server refuses them regardless.
+  if (view === 'secrets') {
+    return (
+      <div className="board-work">
+        <div className="work-toolbar">
+          <span className="work-spacer" />
+          <ViewSwitcher view={view} onChange={onViewChange} />
+        </div>
+        <div className="secrets-surface"><SecretsView key={tabId} boardId={tabId} /></div>
       </div>
     );
   }

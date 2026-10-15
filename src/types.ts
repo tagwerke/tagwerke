@@ -183,8 +183,10 @@ export interface CalendarEvent {
 // Three views, one of them two layouts of the same component (NOTES_SPLIT_PLAN §N2).
 // 'list' folded into the table (group by status, columns off), 'calendar' into the /calendar
 // route which does that job properly, and 'sprints' into the board panel.
-export type BoardView = 'table' | 'kanban' | 'notes' | 'files';
-export const BOARD_VIEWS: BoardView[] = ['table', 'kanban', 'notes', 'files'];
+// 'secrets' is board-admin only: ViewSwitcher hides it from everyone else, and TabView normalises a
+// non-admin who lands on it back to the table.
+export type BoardView = 'table' | 'kanban' | 'notes' | 'files' | 'secrets';
+export const BOARD_VIEWS: BoardView[] = ['table', 'kanban', 'notes', 'files', 'secrets'];
 
 /** Any older or unknown value lands on the table rather than a blank screen (§N2.4). */
 export function asBoardView(v: unknown): BoardView {
@@ -320,4 +322,33 @@ export interface ExtractionRun {
   /** Items the model returned whose quote was NOT in the document, and were therefore dropped.
    *  Surfaced because a high number is the signal that the model or prompt is bad. */
   dropped?: number;
+}
+
+// ── Board secrets (SECRET_LINKS_PLAN.md) ────────────────────────────────────
+/** One credential on a board, as the list serializes it. NEVER the value or the notes — those come
+ *  only from `POST /api/secrets/:id/reveal`, held in component state, never in the store, so they
+ *  cannot reach the offline snapshot. */
+export interface SecretEntryDTO {
+  id: ID;
+  tabId: ID;
+  name: string;
+  username?: string;
+  url?: string;
+  hasNotes: boolean;
+  createdBy?: ID;
+  updatedBy?: ID;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SecretLinkDTO {
+  id: ID;
+  label?: string;
+  tabId?: ID;
+  createdAt: number;
+  expiresAt: number;
+  viewedAt?: number;
+  /** Someone tried to open it again, after it was read, from another network. */
+  foreignAttemptAt?: number;
+  status: 'waiting' | 'opened' | 'expired';
 }

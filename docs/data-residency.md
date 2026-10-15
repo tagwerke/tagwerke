@@ -136,8 +136,16 @@ and nothing leaves your network.
   (see above). If your compliance process requires SAML or SCIM provisioning
   specifically, talk to us before deploying.
 - **Encryption at rest** is whatever your host/volume provides (e.g. an encrypted disk);
-  Tagwerke does not add application-level field encryption. Encryption in transit is your
-  reverse proxy's TLS (see [self-hosting.md](self-hosting.md)).
+  Tagwerke does not add application-level encryption to ordinary board content. The one
+  exception is **board secrets** (the Secrets view), which are encrypted field by field with
+  AES-256-GCM under `VAULT_KEY`. Be precise about what that buys: it protects secrets in a
+  stolen database dump or backup, **not** against someone who also holds the server's
+  environment (where `VAULT_KEY` lives). The vault is deliberately *not* zero-knowledge.
+  That would lock out SSO and passkey users, who have no password to derive a key from.
+  **One-time secret links are** zero-knowledge: the browser encrypts, the key travels only
+  in the link's `#fragment` (which browsers never send to a server), and the server stores
+  ciphertext it cannot read, blanked the moment the link is opened. Encryption in transit is
+  your reverse proxy's TLS (see [self-hosting.md](self-hosting.md)).
 - **Concurrent editing** of the same board by multiple people at the same moment is
   last-write-wins today (no real-time merge). Fine for typical small-team use; see
   [self-hosting.md](self-hosting.md) notes.
