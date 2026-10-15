@@ -16,7 +16,7 @@
 // Absent VAULT_KEY disables board secrets cleanly (routes answer 503), the same posture as missing
 // VAPID keys disabling push: never a half-working vault.
 
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from 'node:crypto';
 
 const VERSION = 'v1';
 const IV_BYTES = 12;
@@ -26,11 +26,31 @@ interface Key {
   bytes: Buffer;
 }
 
-/** A 32-byte key from base64/base64url (44/43 chars) or hex (64 chars). Anything else is refused. */
+/** Shortest secret string we will stretch into a key. Same bar as a SESSION_SECRET-style value. */
+const MIN_SECRET_CHARS = 32;
+
+/**
+ * The 32-byte AES key for a VAULT_KEY value. Two accepted shapes:
+ *
+ *   • exactly 32 bytes written as hex (64 chars) or base64/base64url (43–44 chars) — used as-is;
+ *   • any other random string of at least MIN_SECRET_CHARS — stretched with HKDF-SHA256, so an
+ *     operator can use the same kind of value they already put in SESSION_SECRET.
+ *
+ * The raw-key patterns are STRICT on purpose: Buffer.from(s, 'base64') silently skips characters
+ * it does not know, and a lenient check would decide by accident which of the two paths a string
+ * takes. Either way the mapping is deterministic, so a key keeps opening what it sealed.
+ *
+ * HKDF is right for a long random string, not for a human password — hence the length floor.
+ */
 function parseKey(raw: string): Buffer | null {
   const s = raw.trim();
-  const bytes = /^[0-9a-fA-F]{64}$/.test(s) ? Buffer.from(s, 'hex') : Buffer.from(s, 'base64');
-  return bytes.length === 32 ? bytes : null;
+  if (/^[0-9a-fA-F]{64}$/.test(s)) return Buffer.from(s, 'hex');
+  if (/^[A-Za-z0-9+/]{43}=?$/.test(s) || /^[A-Za-z0-9_-]{43}$/.test(s)) {
+    const bytes = Buffer.from(s, s.includes('-') || s.includes('_') ? 'base64url' : 'base64');
+    if (bytes.length === 32) return bytes;
+  }
+  if (s.length < MIN_SECRET_CHARS) return null;
+  return Buffer.from(hkdfSync('sha256', Buffer.from(s, 'utf8'), 'tagwerke-vault', 'aes-256-gcm v1', 32));
 }
 
 function keyFrom(raw: string): Key | null {
@@ -46,12 +66,12 @@ function keys(): { current: Key | null; all: Map<string, Key>; problem?: string 
   const raw = process.env.VAULT_KEY;
   if (!raw) return { current: null, all, problem: 'VAULT_KEY is not set' };
   const current = keyFrom(raw);
-  if (!current) return { current: null, all, problem: 'VAULT_KEY must be 32 bytes, base64 or hex (openssl rand -base64 32)' };
+  if (!current) return { current: null, all, problem: `VAULT_KEY is too short — use a random string of at least ${MIN_SECRET_CHARS} characters (openssl rand -base64 32)` };
   all.set(current.id, current);
   // Decrypt-only keys, kept during a rotation until every row has been re-sealed.
   for (const prev of (process.env.VAULT_KEY_PREVIOUS ?? '').split(',').filter((p) => p.trim())) {
     const k = keyFrom(prev);
-    if (!k) return { current: null, all, problem: 'VAULT_KEY_PREVIOUS holds a key that is not 32 bytes' };
+    if (!k) return { current: null, all, problem: `VAULT_KEY_PREVIOUS holds a key shorter than ${MIN_SECRET_CHARS} characters` };
     all.set(k.id, k);
   }
   return { current, all };

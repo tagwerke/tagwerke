@@ -91,7 +91,21 @@ try {
   process.env.VAULT_KEY = KEY_A;
   delete process.env.VAULT_KEY_PREVIOUS;
   process.env.VAULT_KEY = 'too-short';
-  check('a malformed VAULT_KEY disables the vault', !vault.vaultStatus().ok);
+  check('a short VAULT_KEY disables the vault', !vault.vaultStatus().ok);
+  // A SESSION_SECRET-style string: any long random text, stretched with HKDF.
+  const PASSPHRASE = 'x7Kq-just_a long random string! no particular format 9f3a';
+  process.env.VAULT_KEY = PASSPHRASE;
+  const phraseStatus = vault.vaultStatus();
+  check('a long arbitrary string is accepted as VAULT_KEY', phraseStatus.ok);
+  const phraseSealed = vault.seal('s3cret', 'ctx-a');
+  check('…and round-trips', vault.open(phraseSealed, 'ctx-a') === 's3cret');
+  process.env.VAULT_KEY = `  ${PASSPHRASE}
+`;
+  check('…stably (surrounding whitespace ignored)', vault.open(phraseSealed, 'ctx-a') === 's3cret');
+  process.env.VAULT_KEY = PASSPHRASE + 'y';
+  check('…and a different string cannot open it', throws(() => vault.open(phraseSealed, 'ctx-a')));
+  process.env.VAULT_KEY = Buffer.from(KEY_A, 'base64').toString('hex');
+  check('the same 32 bytes as hex is the same key as base64', vault.open(sealed, 'ctx-a') === 's3cret');
   process.env.VAULT_KEY = KEY_A;
 
   console.log('ipnet');
@@ -187,9 +201,9 @@ try {
   const off = await call('GET', `/api/boards/${board}/secrets`, cAdmin);
   check('no VAULT_KEY → 503 vault_off, not a half-working vault', off.statusCode === 503 && off.json().code === 'vault_off');
   check('…saying why', off.json().detail === 'VAULT_KEY is not set', off.body);
-  process.env.VAULT_KEY = 'not-32-bytes';
+  process.env.VAULT_KEY = 'too-short-key';
   const badKey = await call('GET', `/api/boards/${board}/secrets`, cAdmin);
-  check('a malformed key says so, without echoing it', /32 bytes/.test(badKey.json().detail) && !badKey.body.includes('not-32-bytes'), badKey.body);
+  check('a too-short key says so, without echoing it', /too short/.test(badKey.json().detail) && !badKey.body.includes('too-short-key'), badKey.body);
   process.env.VAULT_KEY = KEY_A;
 
   // ---- secret links ---------------------------------------------------------

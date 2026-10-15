@@ -393,6 +393,9 @@ are off until you set `VAULT_KEY` (see `.env.example`):
 openssl rand -base64 32     # put the result in .env as VAULT_KEY=..., then restart
 ```
 
+Any random string of at least 32 characters works (the same kind of value as `SESSION_SECRET`,
+but use a different one); a shorter value is refused at boot.
+
 - **Back the key up apart from your database backups.** Lose it and every stored secret is gone.
   Keep it next to the dumps and a stolen backup is readable.
 - **Rotating the key:** set the new key as `VAULT_KEY`, move the old one to `VAULT_KEY_PREVIOUS`,
