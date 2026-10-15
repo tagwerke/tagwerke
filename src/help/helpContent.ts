@@ -20,7 +20,7 @@ export interface HelpBasic { heading: string; body?: string; steps?: string[] }
 export const HELP_BASICS: HelpBasic[] = [
   {
     heading: 'What this is',
-    body: 'A board holds your tasks. Table shows them all, Kanban shows where they are stuck, and Notes is for thinking that has no task yet.',
+    body: 'A board holds your tasks. Table shows them all — group by Status to see where they are stuck — and Notes is for thinking that has no task yet.',
   },
   {
     heading: 'Make your first task',

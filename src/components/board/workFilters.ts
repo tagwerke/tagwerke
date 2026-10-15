@@ -1,7 +1,7 @@
 // What a board's work view is filtered to (BOARD_FILTERS_PLAN §2).
 //
 // Pure functions plus one small hook. The filters are applied to the board's outline BEFORE
-// grouping and sorting, so the table and the Kanban see the same tasks, and the rules that say
+// grouping and sorting, so every grouping sees the same tasks, and the rules that say
 // what a new task starts as live next to the rules that say what is shown — a task added under a
 // filter should be one the filter would show.
 
@@ -87,12 +87,12 @@ export function applyFilters(
  * value (two sprints selected: which one?). Null means the add line is not offered at all, rather
  * than one that would put the task somewhere the user did not choose.
  */
-export function presetFromFilters(f: WorkFilters, ignoreStatus = false): DraftFields | null {
+export function presetFromFilters(f: WorkFilters): DraftFields | null {
   if (f.sprints.length > 1 || f.assignees.length > 1) return null;
   if (f.priorities.length > 1) return null;
-  if (!ignoreStatus && f.statuses.length > 1) return null;
+  if (f.statuses.length > 1) return null;
   const fields: DraftFields = {};
-  if (!ignoreStatus && f.statuses.length === 1) fields.status = f.statuses[0] as TaskStatus;
+  if (f.statuses.length === 1) fields.status = f.statuses[0] as TaskStatus;
   if (f.sprints.length === 1) fields.sprintId = f.sprints[0] === BACKLOG ? null : f.sprints[0];
   if (f.priorities.length === 1) fields.priority = f.priorities[0] === NO_PRIORITY ? null : (Number(f.priorities[0]) as 1 | 2 | 3);
   if (f.assignees.length === 1) fields.assigneeId = f.assignees[0] === UNASSIGNED ? null : f.assignees[0];

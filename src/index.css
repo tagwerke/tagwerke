@@ -2585,24 +2585,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .list-rows { display: flex; flex-direction: column; }
 .list-rows .task-row { border-top: 1px solid var(--line); padding: 9px 8px; }
 
-/* ── Kanban view (status columns) ────────────────────────────────────────── */
-.board-kanban { display: flex; gap: 14px; padding: 16px clamp(16px, 3vw, 32px) 40px; overflow-x: auto; align-items: flex-start; height: 100%; }
-.kb-col { flex: 0 0 264px; display: flex; flex-direction: column; gap: 10px; border-radius: var(--r-lg); padding: 4px; }
-.kb-col.is-review { background: color-mix(in srgb, var(--pop) 5%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pop) 20%, transparent); }
-.kb-col.is-over { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-.kb-col-head { display: flex; align-items: center; gap: 8px; padding: 6px 6px 2px; }
-.kb-col-name { font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: var(--ink-soft); }
-.kb-col-n { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--ink-mute); }
-.kb-col-stack { display: flex; flex-direction: column; gap: 9px; min-height: 24px; }
-.task-card { background: var(--bg-paper); border: 1px solid var(--line); border-radius: var(--r-md); padding: 11px 13px; box-shadow: var(--shadow-card); cursor: grab; display: flex; flex-direction: column; gap: 9px; }
-.task-card:active { cursor: grabbing; }
-.task-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-pop); }
-.task-card-text { font-size: 13.5px; color: var(--ink); line-height: 1.35; }
-.task-card-foot { display: flex; align-items: center; justify-content: space-between; }
-.task-card-prio { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--ink-mute); }
-.task-card-prio.p2 { color: var(--pop); }
-.task-card-prio.p3 { color: #fff; background: var(--pop); border-radius: 999px; padding: 1px 6px; }
-
 /* ── Sprints page (SPRINTS_PLAN.md) ──────────────────────────────────────── */
 /* The sprint list lives in the board panel's 320px rail, not on a page of its own — so no page
    padding, and every row is sized to fit what is left of that rail after the panel's own. */
@@ -2844,15 +2826,14 @@ input, select, textarea { font: inherit; color: inherit; }
 .notif-push-btn { width: 100%; justify-content: center; margin-bottom: 8px; }
 
 /* ── Sub-tasks outside the document (SUBTASKS_PLAN P5) ──────────────────────────────────────
-   Kanban and status-grouped List cut ACROSS a family — a parent and its child land in different
-   columns or sections — so indentation is not available to express the relationship. These two
+   A grouped table cuts ACROSS a family — a parent and its child land in different
+   sections — so indentation is not available to express the relationship. These two
    affordances carry it instead: a crumb naming the parent, and a roll-up strip on the parent. */
 
 /* The `Parent ›` crumb, inline on a List row's title line. Dimmed and lighter than the title so a
    scan reads the task first and its context second. */
 .task-text-wrap { grid-column: 2; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
-.task-parent-inline,
-.task-parent-caption {
+.task-parent-inline {
   background: none;
   border: 0;
   padding: 0;
@@ -2866,15 +2847,10 @@ input, select, textarea { font: inherit; color: inherit; }
   gap: 4px;
 }
 .task-parent-inline { font-size: 0.92em; }
-.task-parent-inline:hover .task-parent-name,
-.task-parent-caption:hover .task-parent-name { text-decoration: underline; }
+.task-parent-inline:hover .task-parent-name { text-decoration: underline; }
 .task-parent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-parent-sep { opacity: 0.6; }
 
-/* On a Kanban card the crumb gets its own line above the title — cards have the vertical room, and
-   a caption reads faster than a prefix when you are scanning a column. */
-.task-parent-caption { font-size: 0.82em; margin-bottom: 2px; display: flex; }
-.task-parent-arrow { opacity: 0.7; flex: none; }
 
 /* Roll-up strip. Segmented by status rather than a done/total fraction: with five states, "0/3" on
    a deliverable where two people are mid-flight reads as "nothing is happening", which is exactly
@@ -2895,10 +2871,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .subtask-seg.status-done { background: #16a34a; }
 .subtask-seg.status-cancelled { background: rgba(0, 0, 0, 0.10); }
 .subtask-count { font-size: 0.78em; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
-.subtask-progress.on-card { margin: 4px 0 2px; }
-
-/* A sub-task card is visually quieter than a commitment card — same information, less weight. */
-.task-card.is-subtask .task-card-text { font-size: 0.95em; }
 
 /* List: the Status / Outline switch. */
 .list-modes { display: flex; gap: 2px; margin: 0 0 10px; }
@@ -2916,10 +2888,6 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* Outline mode indents by real tree depth; the rule is the same containment cue the doc uses. */
 .list-outline .task-row.is-sub { border-left: 1.5px solid var(--rule, rgba(0, 0, 0, 0.09)); }
-
-/* Kanban scope switch (SUBTASKS_PLAN D10) — "All work" vs "Top level only". Reuses the List mode pill. */
-.kb-scope { display: flex; align-items: center; gap: 2px; margin: 0 0 10px; }
-.kb-scope-note { margin-left: 8px; font-size: 0.78rem; }
 
 /* The cascade offer. Bottom-centre, above the mobile nav; quiet enough to ignore, specific enough
    to act on. Never a modal — the parent's status change already went through (SUBTASKS_PLAN D5). */
@@ -2958,15 +2926,6 @@ input, select, textarea { font: inherit; color: inherit; }
 @media (max-width: 640px) {
   .cascade-toast { bottom: 72px; flex-direction: column; align-items: stretch; gap: 8px; }
 }
-
-/* Inline sub-task list on a Kanban card. Only reachable in the Commitments scope — in "All work"
-   the children already have cards of their own and this would duplicate them (SUBTASKS_PLAN P6). */
-.task-card-expand { background: none; border: 0; padding: 0; cursor: pointer; display: block; text-align: left; }
-.task-card-subs { list-style: none; margin: 6px 0 2px; padding: 0 0 0 2px; display: grid; gap: 3px; }
-.task-card-sub { display: flex; align-items: center; gap: 6px; font-size: 0.82em; color: var(--ink-mute); min-width: 0; }
-.task-card-sub-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task-card-sub.status-done .task-card-sub-text,
-.task-card-sub.status-cancelled .task-card-sub-text { text-decoration: line-through; opacity: 0.7; }
 
 /* ── Moving a task: drag inside the board, menu to leave it ───────────────────
    Two affordances for one idea. Dragging is the direct one and can only reach places on THIS
@@ -3065,18 +3024,13 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-item .task-move-btn { opacity: 0; }
 .task-item:hover .task-move-btn { opacity: 0.45; }
 .task-item .task-move-btn:hover { opacity: 1; }
-/* On a card / list row it sits with the other trailing metadata rather than floating in a corner.
-   A card has more room than a doc line, so the glyph goes a size up there. */
-.task-move-btn.on-card, .task-move-btn.on-row { opacity: 0; }
-.task-card-foot .move-menu-wrap { margin-left: auto; margin-right: 7px; }
-.task-card .task-move-btn { width: 22px; height: 20px; }
-.task-card .task-move-btn svg { width: 15px; height: 15px; }
+/* On a list row it sits with the other trailing metadata rather than floating in a corner. */
+.task-move-btn.on-row { opacity: 0; }
 /* A list row is a grid of top-aligned cells, so this one is pulled onto the row's own text line. */
 .task-row > .move-menu-wrap { align-self: start; margin-top: 3px; }
-.task-card:hover .task-move-btn.on-card,
 .task-row:hover .task-move-btn.on-row,
 .search-hit-row:hover .task-move-btn.on-row { opacity: 0.5; }
-.task-move-btn.on-card:hover, .task-move-btn.on-row:hover { opacity: 1; }
+.task-move-btn.on-row:hover { opacity: 1; }
 
 .move-menu {
   position: absolute;
@@ -3252,10 +3206,6 @@ input, select, textarea { font: inherit; color: inherit; }
   color: var(--ink-mute);
   white-space: nowrap;
 }
-/* A Kanban column is narrow and its status is already the column header. */
-.kb-col-stack .quick-add { height: 32px; margin-bottom: 8px; padding: 0 9px; }
-.kb-col-stack .quick-add-input { font-size: 13px; }
-.kb-col-stack .quick-add-hint { display: none; }
 
 /* ── The one task menu (NOTES_SPLIT_PLAN §N3) ─────────────────────────────
    Drawn once and shown two ways: a full action list from a row, or opened
@@ -3340,8 +3290,7 @@ input, select, textarea { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--line);
   min-width: 0;
 }
-.work-table, .work-board, .board-work > .view-placeholder { padding: 10px clamp(16px, 3vw, 32px) 0; }
-.work-board { padding-bottom: 8px; }
+.work-table, .board-work > .view-placeholder { padding: 10px clamp(16px, 3vw, 32px) 0; }
 .work-spacer { flex: 1; }
 .work-note { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
 /* A count is something you read, not something you set, so it sits under the rows it counts
@@ -3424,21 +3373,6 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .wt-parent:hover { color: var(--ink); }
 
-/* Board layout. */
-.work-board { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
-.wb-col { flex: 1 1 0; min-width: 200px; display: flex; flex-direction: column; gap: 8px; }
-.wb-col.is-over { background: var(--bg-paper); border-radius: var(--r-sm); }
-.wb-col-head {
-  display: flex; align-items: center; gap: 7px; padding: 0 2px 6px;
-  border-bottom: 1px solid var(--line-strong);
-  font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-mute);
-}
-.wb-col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wb-col-n { margin-left: auto; font-family: var(--mono); }
-.wb-col-stack { display: flex; flex-direction: column; gap: 8px; }
-.wb-col-stack .quick-add { height: 32px; margin-bottom: 0; padding: 0 9px; }
-.wb-col-stack .quick-add-hint { display: none; }
-
 /* Bulk bar: fixed, because a selection outlives the scroll position that made it. */
 .work-bulk {
   position: sticky; bottom: 12px; align-self: center;
@@ -3454,8 +3388,6 @@ input, select, textarea { font: inherit; color: inherit; }
   .wt-head { display: none; }
   .wt-row { grid-template-columns: 26px minmax(0, 1fr) 78px; min-height: 52px; }
   .wt-row > .wt-cell:nth-of-type(n + 2), .wt-row > .wt-cell.is-static { display: none; }
-  .work-board { flex-direction: column; }
-  .wb-col { width: 100%; }
 }
 
 /* The row's two trailing affordances, after the strip (NOTES_SPLIT_PLAN §N3). */

@@ -21,7 +21,7 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
   tabId: ID;
   /** Nest what gets created under this task. */
   parentTaskId?: ID;
-  /** Fields the surface itself implies — a Kanban column supplies its own status. */
+  /** Fields the surface itself implies — the table's filters supply theirs. */
   presetFields?: DraftFields;
   placeholder?: string;
   /** Bind the board-level `n` shortcut to this line. Exactly one per screen. */
@@ -80,7 +80,7 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
 
     const id = createTaskInBoard(tabId, {
       text,
-      // An explicit prop wins — a Kanban column's line is never nesting anything.
+      // An explicit prop wins.
       parentTaskId: parentTaskId ?? nestUnder ?? undefined,
       fields: presetFields,
     });

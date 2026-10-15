@@ -1,4 +1,4 @@
-// Table · Kanban · Notes.
+// Table · Notes · Files · Secrets.
 //
 // Lives on the RIGHT of a board's toolbar, opposite the controls that shape what you are looking
 // at. Which view you are in and how that view is arranged are different questions, and putting
@@ -10,7 +10,7 @@
 import { useStore } from '../../store';
 import { BOARD_VIEWS, type BoardView } from '../../types';
 
-const LABEL: Record<BoardView, string> = { table: 'Table', kanban: 'Kanban', notes: 'Notes', files: 'Files', secrets: 'Secrets' };
+const LABEL: Record<BoardView, string> = { table: 'Table', notes: 'Notes', files: 'Files', secrets: 'Secrets' };
 
 export function ViewSwitcher({ view, onChange }: { view: BoardView; onChange: (v: BoardView) => void }) {
   // Secrets is board-admin only. Hidden, not disabled: to anyone else, a board's secrets don't exist.

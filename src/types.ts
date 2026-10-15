@@ -180,13 +180,14 @@ export interface CalendarEvent {
 
 /** Which view an open board renders. All but `sprints` read the same task entities;
  *  `sprints` is the board's sprint list/management page instead. */
-// Three views, one of them two layouts of the same component (NOTES_SPLIT_PLAN §N2).
+// The table's Kanban layout was removed 2026-10-14; a remembered 'kanban' lands on the table through
+// asBoardView like any other retired view.
 // 'list' folded into the table (group by status, columns off), 'calendar' into the /calendar
 // route which does that job properly, and 'sprints' into the board panel.
 // 'secrets' is board-admin only: ViewSwitcher hides it from everyone else, and TabView normalises a
 // non-admin who lands on it back to the table.
-export type BoardView = 'table' | 'kanban' | 'notes' | 'files' | 'secrets';
-export const BOARD_VIEWS: BoardView[] = ['table', 'kanban', 'notes', 'files', 'secrets'];
+export type BoardView = 'table' | 'notes' | 'files' | 'secrets';
+export const BOARD_VIEWS: BoardView[] = ['table', 'notes', 'files', 'secrets'];
 
 /** Any older or unknown value lands on the table rather than a blank screen (§N2.4). */
 export function asBoardView(v: unknown): BoardView {
@@ -227,7 +228,7 @@ export interface RootState {
   tabOrder: ID[];
   starredRowOrder: ID[];
   activeTabId: ID | null;
-  /** Which view the open board renders (doc/list/kanban/calendar/sprints). */
+  /** Which view the open board renders (table/notes/files/secrets). */
   boardView: BoardView;
   /** A board-panel tab requested by the URL (`/b/:id/sprints`), or null (§N2.4). */
   boardPanel: 'sprints' | null;

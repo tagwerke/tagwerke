@@ -1,20 +1,17 @@
 // The board's work view (NOTES_SPLIT_PLAN §N2).
 //
-// Table and Kanban are two LAYOUTS of this one component, not two views. Everything that decides
-// what you are looking at — which tasks (filters), grouped how, sorted how, what is selected — lives
-// here, so switching layout keeps it. In the table the active column header is both the sort and the
-// grouping (BOARD_FILTERS_PLAN D5); the Kanban's columns are always Status.
+// Everything that decides what you are looking at — which tasks (filters), grouped how, sorted how,
+// what is selected — lives here. The active column header is both the sort and the grouping
+// (BOARD_FILTERS_PLAN D5).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { childrenOf, descendantsOf, siblingsOf, taskDepth, useBoardOutline, useStore } from '../../store';
 import { showToast } from '../../toast/useToast';
 import { TaskActionMenu } from '../common/TaskActionMenu';
 import { WorkTable } from './WorkTable';
-import { WorkBoard } from './WorkBoard';
-import { groupingOfSort, groupTasks, sortTasks, statusOfGroup, type Grouping, type Sort, type SortKey, type WorkLayout } from './workView';
-import { actionForField, TASK_ACTIONS, type FocusField } from '../../tasks/actions';
+import { groupingOfSort, groupTasks, sortTasks, type Sort, type SortKey } from './workView';
+import { TASK_ACTIONS, type FocusField } from '../../tasks/actions';
 import { boardTaskPath, navigate } from '../../util/router';
-import type { DraftFields } from '../../tasks/createTask';
 import { ViewSwitcher } from './ViewSwitcher';
 import { newestFirst } from '../../util/sprints';
 import { DocumentStrip } from '../documents/DocumentStrip';
@@ -51,9 +48,8 @@ function readSort(tabId: ID): Sort {
   return RANK_SORT;
 }
 
-export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view, onViewChange }: {
+export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewChange }: {
   tabId: ID;
-  layout: WorkLayout;
   filters: WorkFilters;
   onFilters: (update: (f: WorkFilters) => WorkFilters) => void;
   view: BoardView;
@@ -67,13 +63,9 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
   const editable = role === 'editor' || role === 'admin';
 
   const [sort, setSort] = useState<Sort>(() => readSort(tabId));
-  // The Kanban's columns ARE its grouping, so it is always Status in rank order and ignores the
-  // table's header choice. The two are independent: switching layout never wipes the outline.
-  const isTable = layout === 'table';
-  const effSort: Sort = isTable ? sort : RANK_SORT;
-  const grouping: Grouping = isTable ? groupingOfSort(sort) : 'status';
+  const grouping = groupingOfSort(sort);
   // §I.3: a column sort makes "between these two rows" a lie, so the handle is not offered.
-  const canReorder = effSort.key === 'rank';
+  const canReorder = sort.key === 'rank';
   const [selection, setSelection] = useState<Set<ID>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<ID>>(new Set());
   const menuSeq = useRef(0);
@@ -94,7 +86,7 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
    * an indent would point at nothing that is on screen — the crumb in the Parent column carries the
    * relationship instead, and holds wherever a task falls.
    */
-  const isOutline = grouping === 'none' && effSort.key === 'rank';
+  const isOutline = grouping === 'none' && sort.key === 'rank';
 
   // A filter on something that no longer exists (a deleted sprint, a removed member) would show an
   // empty board with nothing to untick, so ids that name nothing are ignored at use. Not written
@@ -137,11 +129,11 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
   const groups = useMemo(() => {
     const memberName = new Map(members.map((m) => [m.id, m.name]));
     const sprintStart = new Map(sprints.map((s) => [s.id, s.startsAt]));
-    return groupTasks(visible, grouping, members, sprints, effSort.dir).map((g) => ({
+    return groupTasks(visible, grouping, members, sprints, sort.dir).map((g) => ({
       ...g,
-      tasks: sortTasks(g.tasks, effSort, memberName, sprintStart),
+      tasks: sortTasks(g.tasks, sort, memberName, sprintStart),
     }));
-  }, [visible, grouping, members, sprints, effSort]);
+  }, [visible, grouping, members, sprints, sort]);
 
   // Selection is scoped to what is on screen: a filter or grouping change must not leave a hidden
   // task selected and then act on it from the bulk bar.
@@ -194,37 +186,8 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
     if (action?.enabled(ctx)) action.run?.(ctx);
   }, [tabId]);
 
-  /** Drop onto a column: set whichever field the board is grouped by. Never a reorder (§I.4). */
-  const onDropOn = useCallback((taskId: ID, groupKey: string) => {
-    const store = useStore.getState();
-    const ctx = { ids: [taskId], tabId };
-    if (grouping === 'status') {
-      const status = statusOfGroup(groupKey);
-      if (!status) return;
-      // Through the action so the review gate and the single cascade offer both apply.
-      actionForField('status')?.options?.(ctx).find((o) => o.key === status)?.run();
-      return;
-    }
-    if (grouping === 'assignee') {
-      store.setTaskAssignee(taskId, groupKey === '~none' ? undefined : groupKey);
-      return;
-    }
-    if (grouping === 'sprint') {
-      store.setTaskMeta(taskId, { sprintId: groupKey === '~none' ? undefined : groupKey });
-    }
-  }, [grouping, tabId]);
-
   /** What a task added under the current filters starts as; null hides the add line (D10). */
   const filterPreset = useMemo(() => presetFromFilters(filters), [filters]);
-  // A Kanban column already fixes the status, so a status filter must not hide its add line.
-  const columnPreset = useMemo(() => presetFromFilters(filters, true), [filters]);
-
-  /** What a task added in a given Kanban column starts as: the column's status plus the filters'. */
-  const addFieldsFor = useCallback((groupKey: string): DraftFields | null => {
-    const status = statusOfGroup(groupKey);
-    if (!columnPreset || !status) return null;
-    return { ...columnPreset, status };
-  }, [columnPreset]);
 
   /**
    * Put `id` directly before or after `targetId`, a sibling. The neighbours come from the SIBLING
@@ -414,15 +377,15 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
         </div>
       )}
 
-      {total === 0 && !noMatch && (layout === 'board' || !editable) ? (
+      {total === 0 && !noMatch && !editable ? (
         <div className="view-placeholder muted">
-          {editable ? 'No tasks yet — add one in a column.' : 'No tasks on this board yet.'}
+          No tasks on this board yet.
         </div>
-      ) : layout === 'table' ? (
+      ) : (
         <WorkTable
           tabId={tabId}
           groups={groups}
-          sort={effSort}
+          sort={sort}
           onSort={onSort}
           selection={new Set(selected)}
           onSelect={onSelect}
@@ -454,20 +417,9 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
           addFields={filterPreset}
           onCreated={onCreated}
         />
-      ) : (
-        <WorkBoard
-          tabId={tabId}
-          groups={groups}
-          onDropOn={onDropOn}
-          onOpenTask={(id) => navigate(boardTaskPath(tabId, id))}
-          onOpenMenu={openMenu}
-          addFieldsFor={addFieldsFor}
-          onCreated={onCreated}
-          editable={editable}
-        />
       )}
 
-      {selected.length > 0 && layout === 'table' && (
+      {selected.length > 0 && (
         <div className="work-bulk" role="status">
           <span className="work-bulk-n">{selected.length} selected</span>
           <button

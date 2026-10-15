@@ -51,7 +51,7 @@ export function TaskRow({ taskId, editable = true, indent = 0, showParent = fals
         onPick={(s) => setTaskStatus(task.id, s)}
       />
       <span className="task-text-wrap">
-        {showParent ? <TaskParentPath taskId={task.id} variant="inline" /> : null}
+        {showParent ? <TaskParentPath taskId={task.id} /> : null}
         <button
           type="button"
           className="task-text"

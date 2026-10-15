@@ -161,13 +161,11 @@ export function TabView({ tabId }: { tabId: string }) {
               <div className="tab-view-body"><TabEditor tabId={tab.id} autoFocus /></div>
             </>
           ) : (
-            /* Table and Kanban are one component, two layouts — so grouping, filters and the
-               scope switch survive a switch between them (§N2.1). `view` is normalised by
-               asBoardView, so there is no fall-through branch to land a deleted view in. */
+            /* `view` is normalised by asBoardView, so there is no fall-through branch to land a
+               deleted view in. */
             <BoardWork
               key={tab.id}
               tabId={tab.id}
-              layout={view === 'kanban' ? 'board' : 'table'}
               filters={filters}
               onFilters={updateFilters}
               view={view}

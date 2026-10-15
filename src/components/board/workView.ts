@@ -1,15 +1,12 @@
 // Shared vocabulary for the board's work view (NOTES_SPLIT_PLAN §N2).
 //
-// Table and Kanban are ONE view with two layouts, not two views: same tasks, same grouping, same
-// order, same actions — only the arrangement differs. Everything both layouts need to agree on
-// lives here so neither can drift.
+// Grouping and sorting for the table, kept out of the component so they stay pure.
 
 import { STATUS_LABEL, STATUS_ORDER } from '../StatusControl';
 import { compareRank } from '../../../shared/rank';
-import type { ID, Member, Sprint, Task, TaskStatus } from '../../types';
+import type { ID, Member, Sprint, Task } from '../../types';
 import { newestFirst } from '../../util/sprints';
 
-export type WorkLayout = 'table' | 'board';
 export type Grouping = 'status' | 'assignee' | 'sprint' | 'none';
 export type SortKey = 'rank' | 'title' | 'status' | 'assignee' | 'due' | 'priority' | 'sprint';
 export type SortDir = 'asc' | 'desc';
@@ -47,8 +44,7 @@ export function bucketOf(task: Task, grouping: Grouping): string | null {
  * Split tasks into groups, keeping each group's internal order exactly as it arrived.
  *
  * `order` is the board's outline order (SUBTASKS_PLAN D4) — the one true order every view reads —
- * so bucketing preserves it and a family stays adjacent inside its group. Empty groups survive
- * because the board layout needs a column for a status nobody is in.
+ * so bucketing preserves it and a family stays adjacent inside its group.
  */
 export function groupTasks(
   tasks: Task[],
@@ -134,9 +130,4 @@ export function sortTasks(
     if (av > bv) return 1 * dir;
     return compareRank(a, b);
   });
-}
-
-/** The status a card dropped on this group should take, when grouping by status. */
-export function statusOfGroup(key: string): TaskStatus | null {
-  return (STATUS_ORDER as string[]).includes(key) ? (key as TaskStatus) : null;
 }

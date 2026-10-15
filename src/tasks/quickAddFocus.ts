@@ -2,7 +2,7 @@
 // which lives in the bottom nav and has no other way to reach it (NOTES_SPLIT_PLAN §N1).
 //
 // Only the PRIMARY quick-add on a screen registers (the one carrying the `n` shortcut), so a
-// Kanban board's per-column lines can't fight over who receives the focus.
+// secondary line can't fight over who receives the focus.
 
 import type { ID } from '../types';
 

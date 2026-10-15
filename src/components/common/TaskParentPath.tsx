@@ -6,14 +6,12 @@
 // parent's name can, and it works in any grouping, any filter, and even when the parent is
 // off-screen.
 //
-// Two shapes for two densities:
-//   inline  — `Draft Q3 landing page › Write copy`, on the title line (List rows)
-//   caption — a `↳ Draft Q3 landing page` line above the title (Kanban cards, which have room)
+// Shown inline on the title line: `Draft Q3 landing page › Write copy`.
 
 import { useStore } from '../../store';
 import type { ID } from '../../types';
 
-export function TaskParentPath({ taskId, variant = 'inline' }: { taskId: ID; variant?: 'inline' | 'caption' }) {
+export function TaskParentPath({ taskId }: { taskId: ID }) {
   const parent = useStore((s) => {
     const parentId = s.tasks[taskId]?.parentTaskId;
     return parentId ? s.tasks[parentId] : undefined;
@@ -29,14 +27,6 @@ export function TaskParentPath({ taskId, variant = 'inline' }: { taskId: ID; var
     setActiveTab(parent.homeTabId);
   };
 
-  if (variant === 'caption') {
-    return (
-      <button type="button" className="task-parent-caption" onClick={open} title={`Part of: ${label}`}>
-        <span className="task-parent-arrow" aria-hidden>↳</span>
-        <span className="task-parent-name">{label}</span>
-      </button>
-    );
-  }
   return (
     <button type="button" className="task-parent-inline" onClick={open} title={`Part of: ${label}`}>
       <span className="task-parent-name">{label}</span>
