@@ -21,7 +21,7 @@ import { DocumentStrip } from '../documents/DocumentStrip';
 import { STATUS_LABEL, STATUS_ORDER } from '../StatusControl';
 import { MultiSelect } from '../common/MultiSelect';
 import {
-  applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
+  applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, NO_PRIORITY, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
 } from './workFilters';
 import type { BoardView, ID, Member, Sprint } from '../../types';
 
@@ -285,6 +285,12 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
     () => STATUS_ORDER.map((st) => ({ value: st, label: STATUS_LABEL[st] })),
     [],
   );
+  const priorityOptions = useMemo(() => [
+    { value: '1', label: '!' },
+    { value: '2', label: '!!' },
+    { value: '3', label: '!!!' },
+    { value: NO_PRIORITY, label: 'No priority' },
+  ], []);
   const assigneeOptions = useMemo(() => [
     ...members.map((m) => ({ value: m.id, label: m.name })),
     { value: UNASSIGNED, label: 'Unassigned' },
@@ -338,6 +344,16 @@ export function BoardWork({ tabId, layout, filters: rawFilters, onFilters, view,
             options={statusOptions}
             selected={filters.statuses}
             onChange={(statuses) => onFilters((f) => ({ ...f, statuses }))}
+          />
+        </span>
+        <span className="work-control">
+          <span className="work-control-label">Priority</span>
+          <MultiSelect
+            label="Filter by priority"
+            noun="priorities"
+            options={priorityOptions}
+            selected={filters.priorities}
+            onChange={(priorities) => onFilters((f) => ({ ...f, priorities }))}
           />
         </span>
         {members.length > 0 && (

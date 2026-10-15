@@ -10,7 +10,7 @@ automatically on boot — always take a backup before upgrading.
 
 ### Added
 
-- **Board filters and search** — the board's Sprint, Assignee and new Status filters are multi-select, with
+- **Board filters and search** — the board's Sprint, Assignee, Status and Priority filters are multi-select, with
   a search box at the right (matches titles, Esc clears) and a Clear filters button. Your sprint and
   assignee choices are remembered per board. When a sub-task matches but its parent doesn't, the
   parent stays in the outline, dimmed, so the nesting still reads.

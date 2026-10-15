@@ -13,6 +13,8 @@ import type { ID, Task, TaskStatus } from '../../types';
 /** Stand-ins for "no sprint" / "no assignee" inside a filter list. */
 export const BACKLOG = 'backlog';
 export const UNASSIGNED = 'none';
+/** "No priority" inside a priority filter; the others are '1' | '2' | '3'. */
+export const NO_PRIORITY = 'none';
 
 export interface WorkFilters {
   /** Sprint ids, plus BACKLOG. Empty means every sprint. */
@@ -21,14 +23,16 @@ export interface WorkFilters {
   assignees: string[];
   /** Task statuses. Empty means every status. */
   statuses: string[];
+  /** Priorities: '1' | '2' | '3', plus NO_PRIORITY. Empty means every priority. */
+  priorities: string[];
   /** Title search. Never persisted: a leftover query on reopen reads as an empty board. */
   query: string;
 }
 
-export const NO_FILTERS: WorkFilters = { sprints: [], assignees: [], statuses: [], query: '' };
+export const NO_FILTERS: WorkFilters = { sprints: [], assignees: [], statuses: [], priorities: [], query: '' };
 
 export function hasActiveFilters(f: WorkFilters): boolean {
-  return f.sprints.length > 0 || f.assignees.length > 0 || f.statuses.length > 0 || f.query.trim() !== '';
+  return f.sprints.length > 0 || f.assignees.length > 0 || f.statuses.length > 0 || f.priorities.length > 0 || f.query.trim() !== '';
 }
 
 /** Lower-case and strip accents, so "cafe" finds "Café". */
@@ -40,6 +44,7 @@ export function matchesFilters(t: Task, f: WorkFilters): boolean {
   if (f.sprints.length && !f.sprints.includes(t.sprintId ?? BACKLOG)) return false;
   if (f.assignees.length && !f.assignees.includes(t.assigneeId ?? UNASSIGNED)) return false;
   if (f.statuses.length && !f.statuses.includes(t.status ?? 'todo')) return false;
+  if (f.priorities.length && !f.priorities.includes(t.priority ? String(t.priority) : NO_PRIORITY)) return false;
   const q = fold(f.query.trim());
   if (q && !fold(t.text).includes(q)) return false;
   return true;
@@ -84,10 +89,12 @@ export function applyFilters(
  */
 export function presetFromFilters(f: WorkFilters, ignoreStatus = false): DraftFields | null {
   if (f.sprints.length > 1 || f.assignees.length > 1) return null;
+  if (f.priorities.length > 1) return null;
   if (!ignoreStatus && f.statuses.length > 1) return null;
   const fields: DraftFields = {};
   if (!ignoreStatus && f.statuses.length === 1) fields.status = f.statuses[0] as TaskStatus;
   if (f.sprints.length === 1) fields.sprintId = f.sprints[0] === BACKLOG ? null : f.sprints[0];
+  if (f.priorities.length === 1) fields.priority = f.priorities[0] === NO_PRIORITY ? null : (Number(f.priorities[0]) as 1 | 2 | 3);
   if (f.assignees.length === 1) fields.assigneeId = f.assignees[0] === UNASSIGNED ? null : f.assignees[0];
   return fields;
 }
@@ -105,7 +112,7 @@ function load(tabId: ID): WorkFilters {
     const raw = localStorage.getItem(KEY(tabId));
     if (!raw) return NO_FILTERS;
     const p = JSON.parse(raw) as Partial<WorkFilters>;
-    return { sprints: strings(p.sprints), assignees: strings(p.assignees), statuses: strings(p.statuses), query: '' };
+    return { sprints: strings(p.sprints), assignees: strings(p.assignees), statuses: strings(p.statuses), priorities: strings(p.priorities), query: '' };
   } catch {
     return NO_FILTERS; // storage refused, or the value is not ours — start unfiltered
   }
@@ -113,8 +120,8 @@ function load(tabId: ID): WorkFilters {
 
 function save(tabId: ID, f: WorkFilters): void {
   try {
-    if (f.sprints.length === 0 && f.assignees.length === 0 && f.statuses.length === 0) localStorage.removeItem(KEY(tabId));
-    else localStorage.setItem(KEY(tabId), JSON.stringify({ sprints: f.sprints, assignees: f.assignees, statuses: f.statuses }));
+    if (f.sprints.length === 0 && f.assignees.length === 0 && f.statuses.length === 0 && f.priorities.length === 0) localStorage.removeItem(KEY(tabId));
+    else localStorage.setItem(KEY(tabId), JSON.stringify({ sprints: f.sprints, assignees: f.assignees, statuses: f.statuses, priorities: f.priorities }));
   } catch { /* a per-viewer convenience; a browser that refuses it just doesn't remember */ }
 }
 
