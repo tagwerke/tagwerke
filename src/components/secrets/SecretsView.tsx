@@ -23,7 +23,7 @@ const REVEAL_MS = 30_000;
 type Load =
   | { kind: 'loading' }
   | { kind: 'ready' }
-  | { kind: 'off' }
+  | { kind: 'off'; detail?: string }
   | { kind: 'blocked'; ip?: string }
   | { kind: 'error'; message: string };
 
@@ -74,7 +74,7 @@ export function SecretsView({ boardId }: { boardId: ID }) {
       setClientIp(r.clientIp);
       setLoad({ kind: 'ready' });
     } catch (err) {
-      if (err instanceof ApiError && err.data?.code === 'vault_off') setLoad({ kind: 'off' });
+      if (err instanceof ApiError && err.data?.code === 'vault_off') setLoad({ kind: 'off', detail: err.data.detail as string | undefined });
       else if (err instanceof ApiError && err.data?.code === 'ip_not_allowed') setLoad({ kind: 'blocked', ip: err.data.ip as string | undefined });
       else setLoad({ kind: 'error', message: errorText(err) });
       return;
@@ -200,8 +200,8 @@ export function SecretsView({ boardId }: { boardId: ID }) {
           <p className="secrets-empty">Loading…</p>
         ) : load.kind === 'off' ? (
           <p className="secrets-empty">
-            Secrets aren’t enabled on this instance. An operator has to set <code>VAULT_KEY</code> on the server (see
-            .env.example).
+            Secrets aren’t enabled on this instance{load.detail ? <>: <code>{load.detail}</code></> : '.'} An operator has to
+            set a valid <code>VAULT_KEY</code> on the server and restart it (see .env.example).
           </p>
         ) : load.kind === 'blocked' ? (
           <p className="secrets-empty">

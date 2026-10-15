@@ -91,7 +91,9 @@ function guardSecrets(boardOf: BoardOf, opts: { sudo: boolean }) {
     if (!roleAtLeast(role, 'admin')) return reply.code(403).send({ error: 'only board admins can use secrets' });
 
     const vault = vaultStatus();
-    if (!vault.ok) return reply.code(503).send({ error: 'secrets are not enabled on this instance', code: 'vault_off' });
+    // `detail` says WHY (unset vs malformed) and never contains key material — it is what lets a
+    // board admin tell an operator "the key is the wrong length" instead of "it doesn't work".
+    if (!vault.ok) return reply.code(503).send({ error: 'secrets are not enabled on this instance', code: 'vault_off', detail: vault.detail });
 
     const cidrs = await boardCidrs(tabId);
     const ip = clientIp(req);

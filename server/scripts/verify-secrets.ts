@@ -186,6 +186,10 @@ try {
   delete process.env.VAULT_KEY;
   const off = await call('GET', `/api/boards/${board}/secrets`, cAdmin);
   check('no VAULT_KEY → 503 vault_off, not a half-working vault', off.statusCode === 503 && off.json().code === 'vault_off');
+  check('…saying why', off.json().detail === 'VAULT_KEY is not set', off.body);
+  process.env.VAULT_KEY = 'not-32-bytes';
+  const badKey = await call('GET', `/api/boards/${board}/secrets`, cAdmin);
+  check('a malformed key says so, without echoing it', /32 bytes/.test(badKey.json().detail) && !badKey.body.includes('not-32-bytes'), badKey.body);
   process.env.VAULT_KEY = KEY_A;
 
   // ---- secret links ---------------------------------------------------------
