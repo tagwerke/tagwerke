@@ -66,6 +66,10 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      # Board secrets (docs/self-hosting.md → Board secrets). Unset = the Secrets view is off.
+      # Listed explicitly because compose passes ONLY the variables named here into the container.
+      VAULT_KEY: ${VAULT_KEY:-}
+      VAULT_KEY_PREVIOUS: ${VAULT_KEY_PREVIOUS:-}
       # Automatic daily backups (on by default; see docs/self-hosting.md).
       BACKUP_DISABLED: ${BACKUP_DISABLED:-}
       BACKUP_KEEP: ${BACKUP_KEEP:-14}
