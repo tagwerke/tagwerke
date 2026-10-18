@@ -133,11 +133,6 @@ input, select, textarea { font: inherit; color: inherit; }
   background: var(--bg-paper);
 }
 .btn.ghost:hover { border-color: var(--line-strong); color: var(--ink); }
-.btn.ghost.has-filter {
-  color: var(--ink);
-  border-color: var(--pop);
-  background: rgba(255,106,61,0.06);
-}
 .btn.primary {
   background: var(--ink);
   color: var(--bg);
@@ -149,10 +144,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .btn.sync.syncing svg { animation: sync-spin 1s linear infinite; }
 .btn.sync.error { color: #a8581f; border-color: rgba(168,88,31,0.45); background: rgba(168,88,31,0.06); }
 .btn.sync.ok { color: var(--ink); border-color: var(--line-strong); }
-.btn.sync.state-push { color: var(--ink); border-color: var(--line-strong); background: rgba(255,106,61,0.05); }
-.btn.sync.state-pull { color: var(--ink); border-color: var(--line-strong); background: rgba(61,160,255,0.06); }
-.btn.sync.state-in-sync { color: var(--ink-soft); }
-.btn.sync.state-noop { color: var(--ink-mute); }
 .btn.sync:disabled { opacity: 0.55; cursor: not-allowed; }
 @keyframes sync-spin { to { transform: rotate(360deg); } }
 .icon-btn {
@@ -202,46 +193,6 @@ input, select, textarea { font: inherit; color: inherit; }
   overflow-x: auto;
 }
 .loadout-tab { flex: 0 0 220px; }
-
-/* TODAY mini-card */
-.today-mini {
-  flex: 0 0 260px;
-  display: flex; flex-direction: column; justify-content: space-between;
-  text-align: left;
-  background: linear-gradient(150deg, var(--ink) 0%, #2d2a25 100%);
-  color: var(--bg);
-  border: 0; border-radius: var(--r-md);
-  padding: 16px 18px;
-  position: relative; overflow: hidden;
-  box-shadow: var(--shadow-pop);
-  min-height: 140px;
-}
-.today-mini::after {
-  content: 'TODAY';
-  position: absolute;
-  font-family: var(--serif); font-style: italic;
-  font-size: 110px; line-height: 1;
-  font-weight: 700;
-  color: rgba(255,255,255,0.04);
-  top: -10px; right: -10px;
-  letter-spacing: -4px;
-  pointer-events: none;
-}
-.today-mini-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.today-mini-eyebrow {
-  font-size: 10px; letter-spacing: 1.8px; font-weight: 700;
-  text-transform: uppercase; color: var(--pop-2);
-}
-.today-mini-date { font-size: 12px; color: rgba(240,235,222,0.6); }
-.today-mini-stats { display: flex; align-items: baseline; gap: 6px; margin-top: 8px; }
-.today-mini-num { font-family: var(--serif); font-size: 48px; font-weight: 700; color: var(--pop-2); }
-.today-mini-sep { font-size: 24px; color: rgba(255,255,255,0.3); }
-.today-mini-total { font-size: 22px; color: rgba(240,235,222,0.7); }
-.today-mini-label { font-size: 11px; color: rgba(240,235,222,0.5); margin-left: 8px; }
-.today-mini-cta {
-  font-family: var(--serif); font-style: italic;
-  font-size: 14px; color: var(--pop);
-}
 
 /* ── Board ────────────────────────────────────────────────────────────── */
 .board { display: flex; flex-direction: column; gap: 36px; }
@@ -364,37 +315,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .ProseMirror p:empty::before {
   content: '';
 }
-/* Empty-line "+" (EmptyLineAdd): always visible (muted), not hover-only — the whole point is to be
-   discoverable without already knowing it's there. Hidden entirely on a read-only doc: ProseMirror
-   mirrors non-editability onto this attribute, so this needs no separate JS-driven visibility check. */
-.pm-add-task-btn {
-  position: absolute;
-  left: -26px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px dashed var(--line-strong);
-  background: var(--bg-paper);
-  color: var(--ink-mute);
-  font-size: 14px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0.55;
-  transition: opacity .12s, border-color .12s, color .12s, background .12s;
-}
-.pm-add-task-btn:hover, .pm-add-task-btn:focus-visible {
-  opacity: 1;
-  border-color: var(--ink-mute);
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-.ProseMirror[contenteditable="false"] .pm-add-task-btn { display: none; }
 .ProseMirror h1, .ProseMirror h2, .ProseMirror h3 {
   font-family: var(--serif);
   font-weight: 600;
@@ -435,73 +355,6 @@ input, select, textarea { font: inherit; color: inherit; }
    is nothing to hover; the avatars in the board head are where a name belongs. */
 .ProseMirror .collaboration-carets__label { display: none; }
 
-/* The node view's wrapper is layout-invisible so the <li> it renders is the direct child of the
-   enclosing taskList <ul> — and the sub-task <ul> nested inside that <li> stays valid HTML.
-   TipTap always renders a wrapper element; `display: contents` takes it out of the box model
-   without ProseMirror losing the DOM node it needs. See TaskItemView. */
-.task-root { display: contents; }
-
-/* Task item (rendered via React node view). Title on row 1; the metadata caption line sits on
-   row 2, indented under the text (the empty cell under the indicator); sub-tasks occupy row 3 in
-   the same column as the content, so nesting indents itself with no magic numbers. */
-.task-item {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  grid-template-areas:
-    "indicator content"
-    ".         meta"
-    ".         children";
-  align-items: start;
-  gap: 1px 8px;
-  padding: 3px 0;
-  position: relative;
-}
-
-/* A task's sub-tasks (SUBTASKS_PLAN D2 — rows, not document nodes). The rule down the left edge is
-   the containment cue: it makes a family read as one block even when a child's status differs from
-   its parent's, which is the whole point of sub-tasks being real entities. */
-.task-children {
-  grid-area: children;
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 12px;
-  border-left: 1.5px solid var(--rule, rgba(0, 0, 0, 0.09));
-}
-.task-item:focus-within > .task-children { border-left-color: rgba(0, 0, 0, 0.16); }
-/* Sub-task rows sit a touch tighter and quieter than a top-level task: the root is the commitment,
-   these are the work under it, and the type should say so without a second font. */
-.task-item.is-subtask { padding: 1px 0; }
-.task-item.is-subtask > .task-title { font-size: 0.95em; }
-
-/* Scope done/cancelled styling to the item's OWN text, never nested sub-tasks — line-through and
-   opacity both inherit, so styling a container would paint an in-review or todo child as completed.
-   Target the row's own title/paragraph; the sub-list is a separate grid area. */
-.task-item.is-done > .task-content > p { text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.25); }
-.task-content { grid-area: content; min-width: 0; }
-.task-content p { margin: 0; color: var(--ink); }
-
-/* Task title: an editable widget bound to the entity (TASKS_AS_ENTITIES.md P2). It must read as
-   inline text you can edit — never a boxy input. No border/background; the caret is the only
-   editing affordance. A muted placeholder shows for an untitled task; the active row gets the same
-   faint wash the list rows use on hover (no hard edge around the text). */
-.task-title {
-  grid-area: content;
-  min-width: 0;
-  margin: 0;
-  color: var(--ink);
-  outline: none;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.task-title:empty::before {
-  content: attr(data-placeholder);
-  color: var(--ink-mute);
-  opacity: 0.55;
-  pointer-events: none;
-}
-.task-item:focus-within { background: var(--bg-paper); border-radius: var(--r-sm); }
-.task-item.is-done > .task-title { text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.25); }
-.task-item.is-cancelled > .task-title { text-decoration: line-through; color: var(--ink-mute); opacity: 0.7; }
 .task-indicator {
   grid-area: indicator;
   position: relative;
@@ -527,16 +380,13 @@ input, select, textarea { font: inherit; color: inherit; }
   width: 12px; height: 12px;
   opacity: 0;
 }
-.task-item.is-done > .task-status .task-indicator,
 .task-row.is-done .task-indicator {
   background: var(--accent, var(--ink));
   border-color: var(--accent, var(--ink));
 }
-.task-item.is-done > .task-status .task-indicator .check,
 .task-row.is-done .task-indicator .check {
   opacity: 1;
 }
-.task-item.is-done > .task-status .task-indicator .dot,
 .task-row.is-done .task-indicator .dot {
   opacity: 0;
 }
@@ -550,7 +400,6 @@ input, select, textarea { font: inherit; color: inherit; }
   display: inline-flex; align-items: center;
   transition: opacity .12s;
 }
-.task-item:hover .status-caret,
 .status-caret[aria-expanded="true"] { opacity: 0.55; }
 .status-caret:hover { opacity: 1; }
 
@@ -559,12 +408,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-indicator.status-in_progress .dot { background: #2563eb; opacity: 1; }
 .task-indicator.status-in_review { border-color: #7c3aed; }
 .task-indicator.status-in_review .dot { background: #7c3aed; opacity: 1; }
-
-/* cancelled: muted fill, no check, struck text (distinct from done's accent fill). */
-.task-item.is-cancelled > .task-content > p { text-decoration: line-through; color: var(--ink-mute); opacity: 0.7; }
-.task-item.is-cancelled > .task-status .task-indicator { background: var(--ink-mute); border-color: var(--ink-mute); }
-.task-item.is-cancelled > .task-status .task-indicator .check { opacity: 0; }
-.task-item.is-cancelled > .task-status .task-indicator .dot { opacity: 0; }
 
 .status-menu {
   position: absolute; top: 22px; left: 0; z-index: 50;
@@ -607,50 +450,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .dp-quick { flex: 1; background: var(--bg-elev); border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 4px; font-size: 11px; cursor: pointer; }
 .dp-quick:hover { background: var(--line); }
 .dp-quick.clear { color: var(--ink-mute); flex: 0 0 auto; }
-
-/* Metadata caption line under the task title (assignee · priority · due).
-   Quiet, borderless tokens — they read as metadata, not buttons. Collapses when empty
-   (the component renders nothing). Shared by the editor node view and the list row. */
-.task-meta {
-  grid-area: meta;
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 12px;
-  user-select: none;
-}
-/* Strip the pill chrome so chips become caption tokens; keep their per-kind accents. */
-.task-meta .chip {
-  border: none;
-  background: transparent;
-  border-radius: 0;
-  padding: 0;
-  letter-spacing: 0;
-}
-.task-meta .chip:hover { border-color: transparent; color: var(--ink); }
-.task-meta .chip.active { background: transparent; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
-.task-meta .chip-priority.p2 { border-color: transparent; }
-.task-meta .chip-priority.p3 { color: var(--pop); background: transparent; border-color: transparent; }
-
-.meta-date,
-.meta-add-date {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-mute);
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  transition: color .12s, opacity .12s;
-}
-.meta-date:hover { color: var(--ink); }
-.meta-date.overdue { color: #dc2626; }
-/* +date only matters when a row already exists; reveal it on hover to stay quiet. */
-.meta-add-date { opacity: 0; }
-.task-item:hover .meta-add-date,
-.task-row:hover .meta-add-date { opacity: 0.6; }
-.meta-add-date:hover { opacity: 1; color: var(--ink); }
 
 /* Chips */
 .chip {
@@ -735,37 +534,6 @@ input, select, textarea { font: inherit; color: inherit; }
   min-height: 70vh;
   border-top: 4px solid var(--page-accent, var(--ink));
 }
-.tab-view-head {
-  display: flex; align-items: center; gap: 14px;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px dashed var(--line);
-}
-.tab-view-project {
-  font-size: 11px;
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
-  font-weight: 700;
-  color: var(--page-accent, var(--ink-mute));
-  padding: 3px 10px;
-  background: var(--page-accent-soft, var(--line));
-  border-radius: 999px;
-}
-.tab-view-title {
-  flex: 1;
-  border: 0;
-  background: transparent;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 32px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: -0.5px;
-  outline: none;
-  padding: 4px 2px;
-  border-radius: 4px;
-}
-.tab-view-title:focus { background: rgba(0,0,0,0.03); }
 .back-btn {
   display: inline-flex; align-items: center; gap: 6px;
   background: transparent;
@@ -777,83 +545,6 @@ input, select, textarea { font: inherit; color: inherit; }
   color: var(--ink-soft);
 }
 .back-btn:hover { border-color: var(--line-strong); color: var(--ink); }
-
-/* ── TODAY view ───────────────────────────────────────────────────────── */
-.today-view {
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  padding: 20px clamp(20px, 4vw, 40px) 40px;
-  min-height: 70vh;
-  position: relative;
-}
-.today-head {
-  display: flex; align-items: center; gap: 16px;
-  margin-bottom: 24px;
-  padding-bottom: 14px;
-  border-bottom: 1px dashed var(--line);
-}
-.today-head-titles {
-  flex: 1;
-  display: flex; align-items: baseline; gap: 14px;
-}
-.today-head-titles h1 {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: 40px;
-  font-weight: 700;
-  font-style: italic;
-  letter-spacing: -1px;
-}
-.today-head-date {
-  font-family: var(--mono);
-  color: var(--ink-mute);
-  font-size: 12px;
-}
-.today-head-actions { display: flex; gap: 8px; }
-
-.today-body { }
-.today-editor .ProseMirror {
-  padding: 18px 0;
-  min-height: 360px;
-}
-
-/* Header paragraph — the line that starts with a time token. */
-.today-editor .ProseMirror p.today-header {
-  position: relative;
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 13.5px;
-  color: var(--ink-mute);
-  padding: 8px 12px 8px 16px;
-  margin-top: 18px;
-  margin-bottom: 0;
-  border-radius: var(--r-sm) var(--r-sm) 0 0;
-  background: linear-gradient(to right, color-mix(in srgb, var(--block-accent, var(--ink-mute)) 8%, transparent), transparent 40%);
-  border-left: 4px solid var(--block-accent, var(--line-strong));
-}
-.today-editor .ProseMirror p.today-header.bound { color: var(--ink); }
-.today-editor .ProseMirror p.today-header:first-child { margin-top: 0; }
-.today-editor .ProseMirror p.today-header::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 0 0;
-  border-bottom: 1px dashed var(--line);
-  pointer-events: none;
-}
-
-/* In-block region — top-level nodes that fall under a header. */
-.today-editor .ProseMirror .today-in-block {
-  border-left: 4px solid var(--block-accent, var(--line));
-  padding-left: 12px;
-  margin-left: 0;
-  background: linear-gradient(to right, color-mix(in srgb, var(--block-accent, transparent) 4%, transparent), transparent 50%);
-}
-.today-editor .ProseMirror ul.today-in-block[data-type="taskList"] {
-  padding: 6px 0 6px 12px;
-  margin: 0 0 6px;
-}
-.today-editor p.today-in-block { padding-top: 4px; padding-bottom: 4px; margin: 0; }
 
 .today-suggest {
   list-style: none; margin: 0; padding: 4px;
@@ -875,18 +566,6 @@ input, select, textarea { font: inherit; color: inherit; }
   color: var(--ink);
 }
 .today-suggest-item.active { background: var(--bg-elev); }
-.today-suggest-cat {
-  padding: 5px 10px 2px;
-  font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.today-suggest-cat:not(:first-child) { border-top: 1px solid var(--line); margin-top: 3px; }
-.today-suggest-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--ink-mute);
-  flex-shrink: 0;
-}
-.today-suggest-dot.done { opacity: 0.4; }
 .today-suggest-avatar {
   width: 18px; height: 18px; border-radius: 50%;
   background: var(--bg-elev); color: var(--ink-mute);
@@ -898,138 +577,6 @@ input, select, textarea { font: inherit; color: inherit; }
   font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase;
   color: var(--ink-mute);
   flex-shrink: 0;
-}
-
-.today-blocks { display: flex; flex-direction: column; gap: 20px; }
-.today-empty {
-  padding: 60px 20px;
-  text-align: center;
-  color: var(--ink-mute);
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--r-md);
-}
-.today-empty p { margin-bottom: 16px; }
-
-.today-block {
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--block-accent, var(--ink));
-  border-radius: var(--r-md);
-  padding: 14px 18px;
-  box-shadow: var(--shadow-card);
-  position: relative;
-}
-.today-block-head {
-  display: flex; align-items: center; gap: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px dashed var(--line);
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-}
-.today-block-index {
-  font-family: var(--serif); font-style: italic;
-  color: var(--block-accent, var(--ink));
-  font-weight: 700;
-  font-size: 20px;
-  min-width: 36px;
-}
-.today-block-cmd-wrap { position: relative; flex: 1 1 320px; min-width: 200px; }
-.today-block-cmd {
-  width: 100%;
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 6px 10px;
-  font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--ink);
-}
-.today-block-cmd:focus { border-color: var(--line-strong); outline: none; }
-.today-block-cmd::placeholder { color: var(--ink-mute); }
-
-.today-block-cmd-list {
-  list-style: none; padding: 4px; margin: 4px 0 0;
-  position: absolute; left: 0; right: 0; top: 100%; z-index: 20;
-  background: var(--bg-paper);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  box-shadow: var(--shadow-pop);
-  max-height: 240px; overflow-y: auto;
-}
-.today-block-cmd-item {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  width: 100%; text-align: left;
-  padding: 6px 10px;
-  border: 0; border-radius: 4px;
-  background: transparent; cursor: pointer;
-  font: inherit; color: var(--ink);
-}
-.today-block-cmd-item.active { background: var(--bg-elev); }
-.today-block-cmd-item.bound { box-shadow: inset 2px 0 0 var(--block-accent, var(--pop)); }
-.today-block-cmd-name { font-family: var(--mono); font-size: 12.5px; }
-.today-block-cmd-proj {
-  font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.today-block-preview {
-  display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  font-size: 11px;
-  color: var(--ink-soft);
-  font-family: var(--mono);
-  flex: 1 1 200px; min-width: 0;
-}
-.today-block-preview-time { color: var(--ink); font-weight: 600; }
-.today-block-preview-tab {
-  color: var(--ink);
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-left: 2px solid var(--block-accent, var(--ink));
-  padding: 1px 6px; border-radius: 3px;
-}
-.today-block-preview-label { color: var(--ink-soft); font-style: italic; }
-.today-block-preview-sep { color: var(--ink-mute); }
-.today-block-preview-dim { color: var(--ink-mute); }
-.today-block-preview-missing {
-  margin-left: auto;
-  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
-  color: var(--accent, #a8581f);
-}
-
-.today-block-times {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 2px 6px;
-}
-.today-block-times input {
-  border: 0;
-  background: transparent;
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 2px 4px;
-  outline: none;
-  width: 78px;
-}
-.today-block-times .dash { color: var(--ink-mute); }
-.today-block-tab, .today-block-label {
-  border: 1px solid var(--line);
-  background: var(--bg-paper);
-  border-radius: var(--r-sm);
-  padding: 4px 8px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  outline: none;
-}
-.today-block-tab:focus, .today-block-label:focus { border-color: var(--line-strong); }
-.today-block-label { flex: 1; min-width: 120px; }
-
-.today-block-tasks {
-  list-style: none;
-  padding: 0;
-  margin: 8px 0;
-  display: flex; flex-direction: column; gap: 2px;
 }
 
 /* Task row (TODAY ref) */
@@ -1048,89 +595,14 @@ input, select, textarea { font: inherit; color: inherit; }
    names (indicator/meta) belonging to the doc's .task-item grid. In the list row's own grid those
    names don't exist and hijack placement (text collapses, meta flies right). Reset to auto so the
    row's 3-column grid (24px 1fr auto) lays out indicator | text | meta. */
-.task-row > .task-status,
-.task-row > .task-meta { grid-area: auto; }
-.task-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.task-row > .task-status { grid-area: auto; }
 .task-text {
   background: transparent; border: 0; padding: 0;
   text-align: left; font: inherit; color: inherit;
   cursor: text;
 }
-.task-text-input {
-  width: 100%;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--pop);
-  padding: 0 0 1px;
-  font: inherit;
-  outline: none;
-}
 .task-row.is-done .task-text { text-decoration: line-through; color: var(--ink-mute); text-decoration-color: rgba(0,0,0,0.25); }
-.task-row-meta {
-  display: inline-flex; gap: 6px; align-items: center;
-  flex-wrap: wrap;
-  font-size: 11px;
-}
-.task-row-source {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  color: var(--ink-mute);
-  font-size: 11px;
-}
-.task-row-source:hover { color: var(--ink); }
-.task-row-source .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .muted { color: var(--ink-mute); }
-
-.today-block-add { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); position: relative; }
-
-.task-autocomplete { position: relative; }
-.task-autocomplete-input {
-  width: 100%;
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 6px 10px;
-  font: inherit;
-  color: var(--ink);
-  outline: none;
-}
-.task-autocomplete-input:focus { border-color: var(--pop); }
-.task-autocomplete-list {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0; right: 0;
-  list-style: none; padding: 4px; margin: 0;
-  background: var(--bg-paper);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  box-shadow: 0 6px 24px rgba(0,0,0,0.08);
-  max-height: 280px; overflow-y: auto;
-  z-index: 10;
-}
-.task-autocomplete-item {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; text-align: left;
-  background: transparent; border: 0;
-  padding: 6px 8px;
-  border-radius: var(--r-sm);
-  font-size: 13px;
-  color: var(--ink);
-  cursor: pointer;
-}
-.task-autocomplete-item.active { background: var(--line); }
-.task-autocomplete-item.create { color: var(--pop); font-weight: 500; }
-.task-autocomplete-item.create.active { background: color-mix(in srgb, var(--pop) 12%, transparent); }
-.task-autocomplete-plus {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 14px; height: 14px;
-  font-weight: 700;
-}
-.task-autocomplete-text {
-  flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 
 /* ── Modals / popovers ────────────────────────────────────────────────── */
 .modal-backdrop {
@@ -1305,7 +777,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .board-panel-body .lookup-input { height: 32px; }
 
 /* Events / schedule panel */
-.events-panel, .admin-panel { width: min(520px, calc(100vw - 32px)); max-height: 80vh; overflow-y: auto; }
+.events-panel { width: min(520px, calc(100vw - 32px)); max-height: 80vh; overflow-y: auto; }
 .events-location { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
 .events-location > span { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-mute); }
 .events-location input {
@@ -1415,66 +887,12 @@ input, select, textarea { font: inherit; color: inherit; }
   margin-bottom: 12px;
   outline: none;
 }
-.picker-list {
-  list-style: none; padding: 0; margin: 0 0 12px;
-  max-height: 48vh; overflow-y: auto;
-}
-.picker-item {
-  display: flex; align-items: center; gap: 10px;
-  background: transparent; border: 0;
-  padding: 8px 6px;
-  width: 100%; text-align: left;
-  border-radius: var(--r-sm);
-  font-size: 13px;
-}
-.picker-item:hover { background: var(--line); }
-.picker-dot {
-  width: 10px; height: 10px; border-radius: 50%;
-  border: 1.5px solid var(--line-strong);
-}
-.picker-dot.done { background: var(--ink); border-color: var(--ink); }
-.picker-empty { padding: 16px; color: var(--ink-mute); font-size: 13px; }
-
 /* ── Snapshots ────────────────────────────────────────────────────────── */
 .snapshots {
   margin-top: 48px;
   padding-top: 24px;
   border-top: 1px dashed var(--line);
 }
-.snapshots-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
-.snapshots-head h2 {
-  margin: 0;
-  font-family: var(--serif); font-style: italic;
-  font-size: 22px;
-}
-.snapshots-hint { color: var(--ink-mute); font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; }
-.snapshots-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.snapshot-row {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 8px 12px;
-  width: 100%; text-align: left;
-  font-size: 13px;
-}
-.snapshot-date { font-family: var(--mono); }
-.snapshot-time { color: var(--ink-mute); margin-left: auto; font-size: 11px; }
-.snapshot-chevron { color: var(--ink-mute); }
-.snapshot-body {
-  font-family: var(--mono);
-  font-size: 12px;
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-top: 0;
-  border-radius: 0 0 var(--r-sm) var(--r-sm);
-  padding: 14px 18px;
-  margin: 0;
-  white-space: pre-wrap;
-  color: var(--ink-soft);
-  max-height: 50vh; overflow-y: auto;
-}
-
 /* ── Custom dropdown ──────────────────────────────────────────────────── */
 .dd { position: relative; }
 .dd-trigger {
@@ -1638,121 +1056,13 @@ input, select, textarea { font: inherit; color: inherit; }
   padding: 20px clamp(16px, 3vw, 32px) 40px;
   min-height: 70vh;
 }
-.planner-head {
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  margin-bottom: 20px; padding-bottom: 14px;
-  border-bottom: 1px dashed var(--line);
-}
-.planner-nav { display: flex; align-items: center; gap: 6px; flex: 1; }
-.planner-date-input {
-  margin-left: 8px;
-  background: var(--bg-elev); border: 1px solid var(--line);
-  border-radius: 999px; height: 30px; padding: 0 6px 0 12px;
-  color: var(--ink); font-family: var(--mono); font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color-scheme: light dark; /* let the native picker/indicator follow the theme */
-  transition: border-color .12s ease, box-shadow .12s ease;
-}
-.planner-date-input:hover { border-color: var(--line-strong); }
-.planner-date-input:focus {
-  outline: none; border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
-}
-.planner-modes { display: flex; gap: 4px; }
-.planner-modes .btn.is-active,
 .btn.ghost.is-active { border-color: var(--line-strong); color: var(--ink); background: rgba(0,0,0,0.03); }
-.planner-error { color: var(--pop); font-size: 13px; margin-bottom: 12px; }
-
-.planner-grid { display: grid; gap: 16px; }
-.planner-grid.mode-day { grid-template-columns: minmax(0, 560px); }
-.planner-grid.mode-week { grid-template-columns: repeat(7, minmax(180px, 1fr)); overflow-x: auto; }
-
-.planner-day {
-  display: flex; flex-direction: column; gap: 10px;
-  min-width: 0;
-}
-.planner-day-head { display: flex; align-items: baseline; gap: 8px; }
-.planner-day-name { font-family: var(--serif); font-weight: 700; font-style: italic; font-size: 18px; }
-.planner-day-date { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
-.planner-lane { display: flex; flex-direction: column; gap: 10px; }
-.planner-add {
-  border: 1px dashed var(--line-strong); border-radius: var(--r-md);
-  background: transparent; color: var(--ink-soft);
-  padding: 8px; font-size: 12px; cursor: pointer;
-}
-.planner-add:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-mute); }
-.planner-add:disabled { opacity: .4; cursor: not-allowed; }
-.planner-mate-lane { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); opacity: .85; }
-.planner-mate-name { font-size: 11px; color: var(--ink-mute); margin-bottom: 6px; text-transform: lowercase; }
-
-.time-block {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--accent, var(--line-strong));
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  box-shadow: var(--shadow-card);
-  padding: 10px 12px;
-}
-.time-block-head { display: flex; align-items: center; gap: 8px; }
-.time-block-dot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
-.time-block-picker { flex: 1; min-width: 0; }
-.time-block-title {
-  flex: 1; text-align: left; background: transparent; border: none;
-  font-weight: 600; font-size: 13px; color: var(--ink); cursor: pointer; min-width: 0;
-}
-.time-block-title:hover { color: var(--pop); }
-.time-block-owner { font-size: 11px; color: var(--ink-mute); font-family: var(--mono); }
-.time-block-controls { display: flex; align-items: center; gap: 5px; margin: 8px 0 4px; flex-wrap: wrap; }
-.time-block-time {
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px 4px 3px 10px;
-  font-size: 12px;
-  color: var(--ink);
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.4;
-  cursor: text;
-  color-scheme: light dark; /* let the native time text + picker follow the theme */
-  transition: border-color .12s ease, background .12s ease, box-shadow .12s ease;
-}
-.time-block-time:hover { border-color: var(--line-strong); }
-.time-block-time:focus {
-  outline: none;
-  border-color: var(--accent);
-  background: var(--bg-elev);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
-}
-/* The native field text + the clock/calendar picker button. */
-.time-block-time::-webkit-datetime-edit { padding: 0; color: var(--ink); }
-.time-block-time::-webkit-datetime-edit-fields-wrapper { padding: 0; }
-.time-block-time:invalid::-webkit-datetime-edit,
-.time-block-time:not(:focus):placeholder-shown::-webkit-datetime-edit { color: var(--ink-mute); }
-.time-block-time::-webkit-calendar-picker-indicator,
-.planner-date-input::-webkit-calendar-picker-indicator {
-  opacity: .5; cursor: pointer; padding: 2px; margin: 0; border-radius: 999px;
-  transition: opacity .12s ease, background .12s ease;
-}
-.time-block-time::-webkit-calendar-picker-indicator:hover,
-.planner-date-input::-webkit-calendar-picker-indicator:hover {
-  opacity: 1; background: color-mix(in srgb, var(--ink) 10%, transparent);
-}
-.time-block-dash { color: var(--ink-mute); padding: 0 1px; }
-.time-block-when { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
-.time-block-filter { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
 .status-chip {
   border: 1px solid var(--line); border-radius: 999px; background: transparent;
   padding: 2px 8px; font-size: 11px; color: var(--ink-soft); cursor: pointer;
 }
 .status-chip.on { border-color: var(--ink); color: var(--ink); background: rgba(0,0,0,0.04); }
 
-.time-block-tasks { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.planner-task { display: flex; align-items: center; gap: 8px; padding: 3px 0; min-width: 0; }
-.planner-task-text { flex: 1; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.planner-task.is-done .planner-task-text { text-decoration: line-through; color: var(--ink-mute); }
-.time-block-empty { font-size: 12px; padding: 4px 0; }
-.time-block-more { padding-top: 2px; }
 .muted { color: var(--ink-mute); }
 
 .loadout-planner {
@@ -1886,8 +1196,7 @@ input, select, textarea { font: inherit; color: inherit; }
    them (a touch more visible) when the device is coarse-pointer. */
 @media (hover: none) {
   .board-group-delete,
-  .tab-card .tab-card-actions,
-  .meta-add-date { opacity: 0.6; }
+.tab-card .tab-card-actions { opacity: 0.6; }
   .status-caret { opacity: 0.4; }
   .chip-project-wrap .chip-delete { opacity: 0.5; }
   /* The task row's own touch affordances are handled further down, next to the rules they have to
@@ -1973,24 +1282,9 @@ input, select, textarea { font: inherit; color: inherit; }
   .loadout-row { padding-left: 6px; }
   .board { gap: 26px; }
   .tab-view { padding: 16px; border-radius: var(--r-md); }
-  .tab-view-head { gap: 10px; margin-bottom: 16px; padding-bottom: 12px; }
-  .tab-view-title { font-size: 26px; }
   .planner { padding: 16px 12px calc(24px + env(safe-area-inset-bottom)); border-radius: var(--r-md); }
 
-  /* Planner week: swipe day-by-day with scroll-snap instead of a cramped 7-up grid. */
-  .planner-grid.mode-week {
-    grid-auto-flow: column;
-    grid-auto-columns: 86%;
-    grid-template-columns: none;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    margin: 0 -12px;
-    padding: 0 12px;
   }
-  .planner-grid.mode-week > .planner-day { scroll-snap-align: start; }
-  .planner-grid.mode-day { grid-template-columns: minmax(0, 1fr); }
-}
 
 /* ── board activity strip ("seen by / edited by + time") ──────────────── */
 .board-activity {
@@ -2046,8 +1340,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .sso-hint { font-size:11px; color:var(--ink-mute); }
 .sso-hint code { font-family: ui-monospace, Menlo, monospace; word-break:break-all; }
 
-/* ── audit-log viewer (admin) ─────────────────────────────────────────── */
-.audit-panel { background: var(--bg-elev); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); width: min(960px, 95vw); max-height: 88vh; display: flex; flex-direction: column; padding: 18px 20px; }
 .audit-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 12px; }
 .audit-filters input, .audit-filters select {
   border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
@@ -2139,71 +1431,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .passkey-add { display: flex; gap: 6px; margin-top: 8px; }
 .passkey-add input { flex: 1; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev); padding: 8px 10px; font-size: 14px; outline: none; }
 .passkey-add input:focus { border-color: var(--pop); }
-
-/* ── accountability: reviewer / approve / history (task meta tokens) ───────
-   Match the quiet caption-token aesthetic of .meta-date — mono, small, borderless,
-   revealed on hover so default boards stay calm. */
-.meta-reviewer {
-  font-family: var(--mono); font-size: 10px; line-height: 1;
-  color: var(--ink-mute); background: transparent; border: none;
-  padding: 0; margin: 0; cursor: pointer; outline: none;
-  appearance: none; -webkit-appearance: none;
-}
-.meta-reviewer.set { color: var(--ink-soft); }
-.meta-reviewer:hover { color: var(--ink); }
-.meta-reviewer:not(.set) { opacity: 0; }
-.task-item:hover .meta-reviewer:not(.set),
-.task-row:hover .meta-reviewer:not(.set) { opacity: 0.6; }
-.meta-reviewer:not(.set):hover { opacity: 1; }
-
-.meta-approve {
-  font-family: var(--mono); font-size: 10px; line-height: 1;
-  height: 18px; padding: 0 8px; cursor: pointer;
-  color: var(--pop); background: rgba(255,106,61,0.06);
-  border: 1px solid rgba(255,106,61,0.35); border-radius: 999px;
-}
-.meta-approve:hover { background: rgba(255,106,61,0.12); border-color: var(--pop); }
-
-/* History affordance: a quiet trailing action on the task row, revealed on hover — present
-   on every task regardless of metadata. */
-.task-item { position: relative; }
-/* The comment affordance. Sizing only — the position comes from the row's affordance band further
-   down, so this button shares one vertical line with the status circle, the grab handle and the
-   move button.
-
-   It is PRESENT AT REST, unlike every other trailing action on the row. That is a deliberate
-   exception to the hover-reveal rule the rest of this cluster follows: a hover-revealed action is
-   findable only by someone who already suspects it exists, which is fine for "move to board" (you
-   go looking for it) and fatal for comments (you have to be told). It is held at a low enough
-   opacity to read as chrome rather than content until the row is hovered.
-
-   The box is deliberately much bigger than the glyph. These buttons are absolutely positioned
-   outside the row's grid, so the hit area costs the layout NOTHING — a 34x30 box and a 20x18 box
-   occupy the same zero width in the row. There was never a reason for the small one. The glyph
-   stays 15px; only the reachable area changes.
-
-   34x30 is still under the 44px guideline, which is a touch figure; the pointer equivalent is
-   roughly 24px and this clears it comfortably while staying visually quiet on a dense line. The
-   touch block at the end of this file takes it to a full 44. */
-.task-activity-btn {
-  right: 0;
-  width: 34px; height: 30px; padding: 0;
-  /* Visible at rest, and not so faint it reads as disabled — the first cut sat at 0.28, which on
-     a paper background is nearly invisible and looks like chrome you cannot press. */
-  opacity: 0.45;
-  transition: opacity .12s;
-  /* Insurance, not theory: the row paints a drop indicator at z-index 2 and the title beside it is
-     a contentEditable widget. Sit above both, take pointer events explicitly, and tell the browser
-     this is a tap rather than something it should wait 300ms to disambiguate. */
-  z-index: 3;
-  pointer-events: auto;
-  touch-action: manipulation;
-}
-.task-item:hover .task-activity-btn { opacity: 0.7; }
-.task-activity-btn:hover { opacity: 1; }
-/* A task that HAS comments says so outright, and widens to fit the count. */
-.task-activity-btn.has-comments { opacity: 0.85; width: auto; min-width: 34px; padding: 0 7px 0 4px; gap: 3px; }
-.task-comment-count { font-size: 10px; line-height: 1; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 
 /* ── per-object history drawer (Layer A) ─────────────────────────────── */
 /* The panel is a column so the TIMELINE scrolls and the composer stays pinned at the bottom.
@@ -2433,11 +1660,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .scope-search svg { flex: none; }
 .scope-search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font: inherit; font-size: 12px; color: var(--ink); }
 .scope-search input::placeholder { color: var(--ink-mute); }
-.scope-current { display: inline-flex; align-items: center; gap: 8px; font-family: var(--serif); font-style: italic; font-size: 15px; font-weight: 600; color: var(--ink); }
-.scope-current.all { color: var(--ink-soft); }
 .scope-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-.scope-clear-x { border: 0; background: none; color: var(--ink-mute); font-size: 15px; cursor: pointer; padding: 0 2px; line-height: 1; }
-.scope-clear-x:hover { color: var(--ink); }
 .scope-facets { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 /* Space scope rendered as a filter pill (dot + clear-✕), sitting among the other facet chips. */
 .chip-space .chip-x { color: var(--ink-mute); font-size: 13px; line-height: 1; margin-left: 1px; }
@@ -2460,7 +1683,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .presence.avatar-stack { margin-right: 2px; }
 .panel-toggle.on { background: var(--ink); color: var(--bg); }
 
-.board-toolbar { display: flex; align-items: center; gap: 12px; padding: 4px clamp(16px, 3vw, 32px) 12px; border-bottom: 1px solid var(--line); }
 .help-btn { position: relative; width: 26px; height: 26px; border-radius: 999px; border: 1px solid var(--line); font-weight: 700; font-size: 13px; }
 .help-btn:hover { border-color: var(--line-strong); color: var(--ink); }
 .help-btn.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
@@ -2553,10 +1775,6 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* ── List view (tasks grouped by status) ─────────────────────────────────── */
 .board-list { padding: 12px clamp(16px, 3vw, 40px) 48px; max-width: 900px; }
-.list-group { margin-top: 6px; }
-.list-group-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 6px; background: none; border: 0; cursor: pointer; text-align: left; }
-.list-caret { font-size: 9px; color: var(--ink-mute); transition: transform 0.12s; }
-.list-caret.collapsed { transform: rotate(-90deg); }
 .list-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 /* One status palette, shared with the doc indicator and the action menu's swatches (§D). These
    are the indicator's values, because those are the ones the app has trained everyone on. */
@@ -2565,11 +1783,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .list-dot.status-in_review { background: #7c3aed; }
 .list-dot.status-done { background: var(--accent); }
 .list-dot.status-cancelled { background: var(--line-strong); }
-.list-group-name { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ink-soft); }
-.list-group-n { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--ink-mute); }
-.list-rows { display: flex; flex-direction: column; }
-.list-rows .task-row { border-top: 1px solid var(--line); padding: 9px 8px; }
-
 /* ── Sprints page (SPRINTS_PLAN.md) ──────────────────────────────────────── */
 /* The sprint list lives in the board panel's 320px rail, not on a page of its own — so no page
    padding, and every row is sized to fit what is left of that rail after the panel's own. */
@@ -2628,22 +1841,11 @@ input, select, textarea { font: inherit; color: inherit; }
   .task-page-body { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ── Calendar view (tasks-by-date + events, month grid) ──────────────────── */
-.board-calendar { padding: 16px clamp(16px, 3vw, 32px) 40px; }
 .cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.cal-month { font-family: var(--serif); font-style: italic; font-size: 19px; font-weight: 600; margin-left: 8px; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
-.cal-dow { background: var(--bg-paper); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; color: var(--ink-mute); padding: 8px 10px; }
-.cal-cell { background: var(--bg); min-height: 92px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; }
-.cal-cell.is-out { background: var(--bg-paper); }
-.cal-cell.is-out .cal-dn { color: var(--line-strong); }
-.cal-dn { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
-.cal-cell.is-today .cal-dn { color: var(--pop); font-weight: 700; }
 .cal-ev { font-size: 10.5px; padding: 2px 6px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-ev.task { background: color-mix(in srgb, #1f8a76 14%, transparent); color: #1f8a76; font-weight: 600; }
 .cal-ev.meet { background: color-mix(in srgb, var(--pop) 14%, transparent); color: var(--pop); font-weight: 600; font-family: var(--mono); }
-.cal-more { font-size: 10px; color: var(--ink-mute); padding-left: 4px; }
-
 /* ── Polish pass: align shipped UI with the internal mockups ──────────────── */
 
 /* Sidebar brand sits smaller than the top-bar brand (shell-d). */
@@ -2687,8 +1889,6 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* View toggle + presence header spacing, matching board-final-hybrid. */
 .board-head { padding: 16px clamp(16px, 3vw, 32px) 6px; }
-.board-toolbar { padding: 8px clamp(16px, 3vw, 32px) 12px; }
-
 /* ── Calendar (events time grid) ──────────────────────────────────────────
    A day/week hour grid. Header row + all-day row + scroll body share one grid
    template (a fixed time gutter + one 1fr per day) so columns line up. */
@@ -2835,7 +2035,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-parent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-parent-sep { opacity: 0.6; }
 
-
 /* Roll-up strip. Segmented by status rather than a done/total fraction: with five states, "0/3" on
    a deliverable where two people are mid-flight reads as "nothing is happening", which is exactly
    the lie a parent row must not tell. */
@@ -2856,8 +2055,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .subtask-seg.status-cancelled { background: rgba(0, 0, 0, 0.10); }
 .subtask-count { font-size: 0.78em; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
 
-/* List: the Status / Outline switch. */
-.list-modes { display: flex; gap: 2px; margin: 0 0 10px; }
 .list-mode {
   background: none;
   border: 0;
@@ -2869,9 +2066,6 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .list-mode:hover { background: var(--bg-paper); }
 .list-mode.is-on { background: var(--ink); color: var(--bg); }
-
-/* Outline mode indents by real tree depth; the rule is the same containment cue the doc uses. */
-.list-outline .task-row.is-sub { border-left: 1.5px solid var(--rule, rgba(0, 0, 0, 0.09)); }
 
 /* The cascade offer. Bottom-centre, above the mobile nav; quiet enough to ignore, specific enough
    to act on. Never a modal — the parent's status change already went through (SUBTASKS_PLAN D5). */
@@ -2916,246 +2110,12 @@ input, select, textarea { font: inherit; color: inherit; }
    board (the tree it can see); the menu is the only way to another board, and is also the way in
    for touch and the keyboard, neither of which gets HTML5 drag events at all. */
 
-/* THE ROW'S AFFORDANCE BAND.
-   Everything that floats outside the row's grid — the grab handle on the left, the move and
-   history buttons on the right — is centred on the same 18px band the status indicator occupies,
-   rather than each carrying its own hand-tuned `top`. The indicator sets that band with
-   `margin-top: 4px; height: 18px` inside the grid, so the band starts one padding-top plus 4px
-   down; sub-task rows are tighter, so they declare their own padding. Anything positioned against
-   this variable lines up with the circle, and therefore with everything else, by construction. */
-.task-item { --row-pad: 3px; }
-.task-item.is-subtask { --row-pad: 1px; }
-.task-drag-handle,
-.task-item > .move-menu-wrap,
-.task-item > .task-activity-btn {
-  position: absolute;
-  /* Centre a box of any height on the 18px band: the band's middle sits at --row-pad + 13, so a
-     box of height H starts at (--row-pad + 13 - H/2). Written out per element below rather than
-     computed here, because each one chooses its own target size. */
-  top: calc(var(--row-pad) + 4px);
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-/* Boxes taller than the band re-centre on the same middle: the band's middle is at
-   --row-pad + 13, so a box of height H starts at (--row-pad + 13 - H/2). 30px → --row-pad - 2. */
-.task-item > .task-activity-btn { top: calc(var(--row-pad) - 2px); height: 30px; }
-.task-item > .move-menu-wrap { top: calc(var(--row-pad) - 2px); height: 30px; }
 /* Room at the end of the line for the always-present comment button, so a long title never runs
    underneath it. Only the ALWAYS-visible one is reserved for: the move button appears on hover and
    may overlay the last word of a title for the moment it is shown, as it always has. */
-/* `.task-item.is-subtask` sets the whole `padding` shorthand and carries higher specificity, so a
-   bare `.task-item` rule here would leave sub-task rows with no reserve and their titles running
-   under the button. Both selectors, deliberately. */
-.task-item,
-.task-item.is-subtask { padding-right: 36px; }
-
-/* Grab handle. Sits in the gutter left of the status control — outside the row's grid, so adding
-   it costs the content no width — and stays invisible until the row is hovered. A sub-task's
-   gutter is the 12px indent strip, which already has the family rule down its left edge, so the
-   handle tucks INSIDE that strip instead of sitting on top of the rule. */
-.task-drag-handle {
-  left: -17px;
-  width: 13px;
-  padding: 0;
-  color: var(--ink-mute);
-  fill: currentColor;
-  opacity: 0;
-  cursor: grab;
-  transition: opacity .12s;
-  /* The touch drag is driven by pointer events (taskDnd.ts), so the browser must not claim the
-     gesture as a scroll before it starts. Harmless for a mouse. */
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
-.task-item.is-subtask > .task-drag-handle { left: -12px; width: 11px; }
-.task-item:hover > .task-drag-handle,
-.task-item:focus-within > .task-drag-handle { opacity: 0.45; }
-.task-drag-handle:hover { opacity: 1 !important; }
-.task-drag-handle:active { cursor: grabbing; }
-
-/* Drop indicator. Drawn against the row's OWN line — `--drop-h`, measured in JS, because a
-   parent's <li> is as tall as its whole family and CSS has no way to ask where the line ends.
-   before/after are a rule at the edge of the line; `into` is a wash over it, since "inside this
-   task" is an area, not a boundary. */
-.task-item[data-drop]::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-  z-index: 2;
-  background: var(--page-accent, var(--ink));
-}
-.task-item[data-drop="before"]::before { top: -1px; height: 2px; border-radius: 2px; }
-.task-item[data-drop="after"]::before { top: calc(var(--drop-h, 100%) - 1px); height: 2px; border-radius: 2px; }
-.task-item[data-drop="into"]::before {
-  top: 0;
-  height: var(--drop-h, 100%);
-  border-radius: var(--r-sm, 6px);
-  opacity: 0.13;
-}
-
-/* "Move to board" trigger + popover. */
-.move-menu-wrap { position: relative; display: inline-flex; }
-.task-move-btn { width: 34px; height: 30px; padding: 0; z-index: 3; touch-action: manipulation; }
-/* In the doc it is a trailing hover action, paired tightly with the history button rather than
-   drifting away from it: the two read as one cluster at the end of the row. Both sit on the
-   affordance band declared above, so they line up with the status circle and with each other. */
-.task-item > .move-menu-wrap { right: 35px; }
-.task-item .task-move-btn { opacity: 0; }
-.task-item:hover .task-move-btn { opacity: 0.45; }
-.task-item .task-move-btn:hover { opacity: 1; }
-/* On a list row it sits with the other trailing metadata rather than floating in a corner. */
-.task-move-btn.on-row { opacity: 0; }
-/* A list row is a grid of top-aligned cells, so this one is pulled onto the row's own text line. */
-.task-row > .move-menu-wrap { align-self: start; margin-top: 3px; }
-.task-row:hover .task-move-btn.on-row,
-.search-hit-row:hover .task-move-btn.on-row { opacity: 0.5; }
-.task-move-btn.on-row:hover { opacity: 1; }
-
-.move-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 40;
-  width: 250px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md, 10px);
-  background: var(--bg-elev, var(--bg));
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
-  text-align: left;
-  cursor: default;
-}
-.move-menu-head {
-  display: flex; flex-direction: column; gap: 1px;
-  padding: 2px 4px 6px;
-  font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase;
-  font-weight: 700; color: var(--ink-mute);
-}
-.move-menu-note { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 11px; }
-.move-menu-search {
-  width: 100%;
-  padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--bg);
-  font-size: 13px;
-}
-.move-menu-list { max-height: 220px; overflow-y: auto; margin-top: 6px; }
-.move-menu-empty { padding: 10px 4px; font-size: 12px; }
-.move-menu-item {
-  display: flex; align-items: center; gap: 7px;
-  width: 100%; text-align: left;
-  padding: 6px 6px;
-  border: 0; border-radius: var(--r-sm);
-  background: transparent;
-  font-size: 13px; color: var(--ink);
-  cursor: pointer;
-}
-.move-menu-item.is-active { background: var(--line); }
-.move-menu-item:disabled { opacity: 0.5; cursor: default; }
-.move-menu-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-.move-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.move-menu-space { margin-left: auto; font-size: 11px; color: var(--ink-mute); flex: none; }
-
 /* A search hit is a row now (button + move action) rather than one big button. */
 .search-hit-row { display: flex; align-items: center; gap: 4px; }
 .search-hit-row .search-hit { flex: 1; min-width: 0; }
-
-/* ── Touch: the row's affordances have to be findable and grabbable ───────────
-   Placed here, at the end, deliberately: these override the hover-reveal rules above, which are
-   as specific as anything a media query can hold, so order is what decides it. The generic touch
-   block further up in this file cannot reach them.
-
-   Dragging itself is not a CSS matter — HTML5 drag events never fire from a touch (nothing at all
-   on iOS), so the gesture is re-implemented on pointer events in src/editor/taskDnd.ts. What CSS
-   owes it is a target a finger can find and hit. */
-@media (hover: none) {
-  /* Nothing is revealed by hovering, so the row's actions are simply present. */
-  .task-item > .task-drag-handle,
-  .task-item:hover > .task-drag-handle { opacity: 0.4; }
-  .task-item .task-move-btn { opacity: 0.5; }
-  .task-item > .task-activity-btn { opacity: 0.6; }
-
-  /* At 13x18 the handle was a fingertip target a third the size any guideline allows. Grow the
-     BOX to fill the row's gutter without moving the glyph: a 26px box at `top: var(--row-pad)`
-     centres on exactly the point the 18px affordance band does (pad + 13 either way), so the row
-     stays lined up while the target roughly triples. */
-  .task-item > .task-drag-handle {
-    top: var(--row-pad);
-    left: -26px;
-    width: 26px;
-    height: 26px;
-  }
-  .task-item.is-subtask > .task-drag-handle { left: -22px; width: 22px; }
-
-  /* The growth the original touch pass forgot. It fixed these buttons' OPACITY and left them at
-     20x18 — under half of what any platform guideline asks for, which is why they were reported as
-     very hard to hit on a phone. The glyphs do not move and the row's alignment is untouched; only
-     the reachable area changes, because these boxes are absolutely positioned and cost the layout
-     nothing.
-
-     `right: 0`, never negative: a box hanging off the row's right edge is the one thing that can
-     be clipped by an ancestor's overflow or run under the screen edge, which would take away the
-     hit area this rule exists to give. */
-  .task-item > .task-activity-btn {
-    top: calc(var(--row-pad) - 9px); /* band middle (--row-pad + 13) minus half of 44 */
-    right: 0; width: 44px; height: 44px;
-  }
-  .task-item > .task-activity-btn.has-comments { width: auto; min-width: 44px; padding: 0 10px; }
-
-  /* The move button does NOT get the full 44. Both buttons are permanently visible on touch, and
-     only the comment one has width reserved for it — so a 44px move box would put a transparent
-     tap-stealer over 44px of the title's tail, and the row's title is the thing you edit most.
-     30px is a real improvement on the 20x18 it had, without taking the text's taps. If moving a
-     task by thumb turns out to matter, the answer is to reserve width for it too, not to widen it
-     over the title. */
-  .task-item > .move-menu-wrap {
-    top: calc(var(--row-pad) - 2px);
-    right: 48px; height: 30px;
-  }
-  .task-item .task-move-btn { width: 30px; height: 30px; }
-  .task-item,
-  .task-item.is-subtask { padding-right: 46px; }
-  /* The glyphs stay at their desktop size — this is about the target, not about shouting. */
-  .task-item > .task-activity-btn svg,
-  .task-item .task-move-btn svg { width: 16px; height: 16px; }
-
-  /* While a drag is in flight the handle stays lit, so the thing under the finger reads as the
-     thing that is moving. */
-  .task-item[data-drop] > .task-drag-handle { opacity: 0.8; }
-}
-
-/* ── Phone: no left gutter, so nothing lives in it ────────────────────────────
-   Last in the file, with the other row-affordance overrides and for the same reason: these have to
-   beat every earlier rule that sizes or reveals them.
-
-   Both of these are positioned at `left: -26px`, against a phone page padding of 16px — so they
-   hang 10px off the screen and render as clipped half-glyphs beside the status control. Rather
-   than shave them down to fit a gutter that isn't there, a phone simply doesn't offer them.
-
-   Scoped to the PHONE WIDTH, not to `hover: none`: a touch tablet has the gutter room and its drag
-   works, so this must not reach it.
-
-   Two things go with them, deliberately and not as an oversight:
-     - Reordering by touch. taskDnd.ts drives the touch drag from pointer events on the handle and
-       has no other trigger, so on a phone tasks can no longer be reordered by hand. Moving a task
-       to another BOARD is unaffected (that is the move button, at the other end of the row).
-     - The discoverable way to make a task. EmptyLineAdd's whole purpose is that creating one
-       "never requires knowing the '- ' gesture (typed markdown syntax nobody guesses on a blank
-       board)" — which is exactly what a phone is now left with.
-   Both are recoverable without bringing the gutter back: a long-press drag on the row itself, and
-   a task-add action in the bottom nav. Neither is built. */
-@media (max-width: 720px) {
-  .pm-add-task-btn { display: none; }
-  .task-item > .task-drag-handle,
-  .task-item:hover > .task-drag-handle,
-  .task-item:focus-within > .task-drag-handle { display: none; }
-}
 
 /* ── Quick-add (NOTES_SPLIT_PLAN §N1) ─────────────────────────────────────
    The line a task is typed into now that the document is not the only way in.
@@ -3184,13 +2144,6 @@ input, select, textarea { font: inherit; color: inherit; }
   color: var(--ink);
 }
 .quick-add-input::placeholder { color: var(--ink-mute); }
-.quick-add-hint {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-mute);
-  white-space: nowrap;
-}
-
 /* ── The one task menu (NOTES_SPLIT_PLAN §N3) ─────────────────────────────
    Drawn once and shown two ways: a full action list from a row, or opened
    straight into one field's choices from a table cell. */
@@ -3276,7 +2229,6 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .work-table, .board-work > .view-placeholder { padding: 10px clamp(16px, 3vw, 32px) 0; }
 .work-spacer { flex: 1; }
-.work-note { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
 /* A count is something you read, not something you set, so it sits under the rows it counts
    rather than in the row of controls — where it was what pushed the view switcher onto a
    second line as soon as the board panel was open. */
@@ -3350,13 +2302,6 @@ input, select, textarea { font: inherit; color: inherit; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .wt-mono.is-overdue { color: var(--pop); }
-.wt-parent {
-  border: 0; background: none; padding: 0; font-family: var(--mono); font-size: 11px;
-  color: var(--ink-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: 100%; text-align: left;
-}
-.wt-parent:hover { color: var(--ink); }
-
 /* Bulk bar: fixed, because a selection outlives the scroll position that made it. */
 .work-bulk {
   position: sticky; bottom: 12px; align-self: center;
@@ -3378,7 +2323,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .task-row-menu, .task-row-open { opacity: 0; flex-shrink: 0; }
 .task-row:hover .task-row-menu,
 .task-row:hover .task-row-open,
-.task-item:hover .task-row-open,
 .task-row-menu:focus-visible,
 .task-row-open:focus-visible { opacity: 0.75; }
 .task-row-menu:hover, .task-row-open:hover { opacity: 1; }
