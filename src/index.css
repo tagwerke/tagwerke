@@ -1636,6 +1636,7 @@ input, select, textarea { font: inherit; color: inherit; }
   transition: color .12s ease;
 }
 .auth-toggle:hover { color: var(--pop); }
+.auth-toggle + .auth-toggle { margin-top: 4px; }
 
 /* ── PLANNER ──────────────────────────────────────────────────────────── */
 .planner {
@@ -2021,7 +2022,8 @@ input, select, textarea { font: inherit; color: inherit; }
   background: var(--bg-paper);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  padding: 8px 10px;
+  padding: 8px 11px;
+  margin-bottom: 14px;
 }
 
 /* ── security / two-factor panel ──────────────────────────────────────── */
@@ -2045,9 +2047,11 @@ input, select, textarea { font: inherit; color: inherit; }
 .security-add { align-self:flex-start; }
 
 /* ── SSO: login button + divider, admin config form ───────────────────── */
-.auth-divider { display:flex; align-items:center; gap:10px; color:var(--ink-mute); font-size:11px; text-transform:uppercase; letter-spacing:1px; margin:4px 0; }
+.auth-divider { display:flex; align-items:center; gap:10px; color:var(--ink-mute); font-size:11px; text-transform:uppercase; letter-spacing:1px; margin:18px 0; }
 .auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background:var(--line); }
 .btn.auth-sso { width:100%; justify-content:center; border:1px solid var(--line-strong); color:var(--ink); background:var(--bg-paper); }
+.btn.auth-sso + .btn.auth-sso { margin-top:10px; }
+.btn.auth-sso + .auth-field { margin-top:14px; }
 .btn.auth-sso:hover { border-color:var(--ink); }
 .sso-form { display:flex; flex-direction:column; gap:12px; max-width:440px; }
 .sso-row { display:flex; flex-direction:column; gap:4px; }
