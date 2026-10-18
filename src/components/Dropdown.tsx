@@ -19,9 +19,10 @@ interface Props {
   rank?: (query: string) => DropdownOption[];
   /** Variant hook on the root — `is-chip` is the small inline form used as a board's eyebrow. */
   className?: string;
+  disabled?: boolean;
 }
 
-export function Dropdown({ value, options, onChange, placeholder, searchable, searchPlaceholder, rank, className }: Props) {
+export function Dropdown({ value, options, onChange, placeholder, searchable, searchPlaceholder, rank, className, disabled }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(() =>
@@ -78,6 +79,7 @@ export function Dropdown({ value, options, onChange, placeholder, searchable, se
       <button
         type="button"
         className="dd-trigger"
+        disabled={disabled}
         onClick={() => (open ? setOpen(false) : openList())}
         onKeyDown={onKeyDown}
         aria-haspopup="listbox"

@@ -14,11 +14,12 @@ import { navigate, boardTaskPath, boardPath } from '../util/router';
 import type { ID, TaskStatus } from '../types';
 import { newestFirst } from '../util/sprints';
 import { EmptyState } from './common/EmptyState';
+import { Dropdown } from './Dropdown';
 
 /** One row of the field rail. Only here to say the label/control wrapper once. */
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="task-page-field">
+    <label className="field">
       <span>{label}</span>
       {children}
     </label>
@@ -174,42 +175,30 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
           {/* No Status field here: the StatusControl in the title row is the one status affordance,
               shared with board rows and the Planner. */}
           <Field label="Assignee">
-            <select
+            <Dropdown
               value={task.assigneeId ?? ''}
               disabled={!editable}
-              onChange={(e) => setTaskMeta(task.id, { assigneeId: e.target.value || undefined })}
-            >
-              <option value="">Unassigned</option>
-              {members?.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+              options={[{ value: '', label: 'Unassigned' }, ...(members ?? []).map((m) => ({ value: m.id, label: m.name }))]}
+              onChange={(v) => setTaskMeta(task.id, { assigneeId: v || undefined })}
+            />
           </Field>
 
           <Field label="Reviewer">
-            <select
+            <Dropdown
               value={task.reviewerId ?? ''}
               disabled={!editable}
-              onChange={(e) => setTaskMeta(task.id, { reviewerId: e.target.value || undefined })}
-            >
-              <option value="">None</option>
-              {members?.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+              options={[{ value: '', label: 'None' }, ...(members ?? []).map((m) => ({ value: m.id, label: m.name }))]}
+              onChange={(v) => setTaskMeta(task.id, { reviewerId: v || undefined })}
+            />
           </Field>
 
           <Field label="Priority">
-            <select
-              value={task.priority ?? ''}
+            <Dropdown
+              value={task.priority ? String(task.priority) : ''}
               disabled={!editable}
-              onChange={(e) => setTaskMeta(task.id, { priority: e.target.value ? (Number(e.target.value) as 1 | 2 | 3) : undefined })}
-            >
-              <option value="">None</option>
-              <option value="1">!</option>
-              <option value="2">!!</option>
-              <option value="3">!!!</option>
-            </select>
+              options={[{ value: '', label: 'None' }, { value: '1', label: '!' }, { value: '2', label: '!!' }, { value: '3', label: '!!!' }]}
+              onChange={(v) => setTaskMeta(task.id, { priority: v ? (Number(v) as 1 | 2 | 3) : undefined })}
+            />
           </Field>
 
           <Field label="Date">
@@ -222,16 +211,12 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
           </Field>
 
           <Field label="Sprint">
-            <select
+            <Dropdown
               value={task.sprintId ?? ''}
               disabled={!editable}
-              onChange={(e) => setTaskMeta(task.id, { sprintId: e.target.value || undefined })}
-            >
-              <option value="">Backlog</option>
-              {newestFirst(sprints ?? []).map((sp) => (
-                <option key={sp.id} value={sp.id}>{sp.label}{sp.isCurrent ? ' (current)' : ''}</option>
-              ))}
-            </select>
+              options={[{ value: '', label: 'Backlog' }, ...newestFirst(sprints ?? []).map((sp) => ({ value: sp.id, label: `${sp.label}${sp.isCurrent ? ' (current)' : ''}` }))]}
+              onChange={(v) => setTaskMeta(task.id, { sprintId: v || undefined })}
+            />
           </Field>
         </aside>
       </div>
