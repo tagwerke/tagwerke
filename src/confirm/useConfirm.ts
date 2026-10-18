@@ -2,12 +2,12 @@
 // driven imperatively: `if (await askConfirm({...})) doTheThing()`.
 //
 // Imperative rather than per-call-site JSX because nearly every destructive action already sits
-// inside an async handler (SharePanel/AdminConsole's `run(...)`), a keydown handler (EventCard),
+// inside an async handler (MembersPanel/AdminConsole's `run(...)`), a keydown handler (EventCard),
 // or a plain onClick that used to read `if (confirm(msg))` — threading open/close state through a
 // dozen components to render a local dialog would be far more code than it saves.
 //
 // Rendering at the App root also keeps the dialog OUT of the DOM subtree of whatever opened it:
-// SharePanel, SecurityPanel and TrashPanel each sit under a `.modal-backdrop` whose onClick closes
+// SecurityPanel and TrashPanel each sit under a `.modal-backdrop` whose onClick closes
 // the panel, so a dialog nested inside one would dismiss its own host on every click.
 //
 // A standalone Zustand store (like useNotifications / useSession) rather than part of RootState —

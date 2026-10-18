@@ -1,13 +1,13 @@
 // The open board's companion rail: one panel, single-purpose tabs. Replaces the old
 // separate Share / Schedule modals. Each tab embeds the existing panel body:
-//   Members  — roster, roles, invite, board rules  (SharePanel, embedded)
-//   Events   — agenda, location, RSVP              (EventsPanel, embedded)
+//   Members  — roster, roles, invite, board rules  (MembersPanel)
+//   Events   — agenda, location, RSVP              (EventsPanel)
 //   Activity — presence + board history + trash    (BoardActivity + ActivityDrawer/TrashPanel)
 // On desktop it's a persistent right rail; on mobile TabView mounts it inside a Sheet.
 
 import { useState } from 'react';
 import { useStore } from '../store';
-import { SharePanel } from './SharePanel';
+import { MembersPanel } from './MembersPanel';
 import { EventsPanel } from './EventsPanel';
 import { BoardActivity } from './BoardActivity';
 import { ActivityDrawer } from './ActivityDrawer';
@@ -59,8 +59,8 @@ export function BoardPanel({ tabId, tabName, onOpenSprint }: {
       />
 
       <div className="board-panel-body">
-        {tab === 'members' && <SharePanel embedded tabId={tabId} tabName={tabName} onClose={() => {}} />}
-        {tab === 'events' && <EventsPanel embedded tabId={tabId} tabName={tabName} onClose={() => {}} />}
+        {tab === 'members' && <MembersPanel tabId={tabId} tabName={tabName} />}
+        {tab === 'events' && <EventsPanel tabId={tabId} />}
         {tab === 'sprints' && <SprintsPage tabId={tabId} onOpenSprint={(id) => onOpenSprint?.(id)} />}
         {tab === 'activity' && (
           <div className="activity-tab">

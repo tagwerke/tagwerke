@@ -1,4 +1,4 @@
-// Board access-list UI ("Share"). Lists members, lets an admin add existing users by
+// Board access-list UI (the Members tab of the board rail). Lists members, lets an admin add existing users by
 // email, change roles, and remove members. Any member can see the roster and leave.
 //
 // Member mutations are independent of the document write-queue, so they call the API
@@ -11,8 +11,6 @@ import { askConfirm } from '../confirm/useConfirm';
 import { useSession } from '../session/useSession';
 import { useStore } from '../store';
 import { EmailLookup } from './EmailLookup';
-import { ActivityDrawer } from './ActivityDrawer';
-import { TrashPanel } from './TrashPanel';
 import { BoardTokens } from './tokens/BoardTokens';
 import { Notice } from './common/Notice';
 import { EmptyState, Loading } from './common/EmptyState';
@@ -20,7 +18,7 @@ import { EmptyState, Loading } from './common/EmptyState';
 const ROLES: BoardRole[] = ['viewer', 'editor', 'admin'];
 const RANK: Record<BoardRole, number> = { viewer: 0, editor: 1, admin: 2 };
 
-export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: string; tabName: string; onClose: () => void; embedded?: boolean }) {
+export function MembersPanel({ tabId, tabName }: { tabId: string; tabName: string }) {
   const me = useSession((s) => s.user);
   const settings = useStore((s) => s.tabs[tabId]?.settings);
   const setTabSettings = useStore((s) => s.setTabSettings);
@@ -29,8 +27,6 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
   const [role, setRole] = useState<BoardRole>('editor');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [trashOpen, setTrashOpen] = useState(false);
 
   async function refresh() {
     try {
@@ -132,7 +128,7 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
     }
   }
 
-  const body = (
+  return (
     <>
       {error && <Notice>{error}</Notice>}
 
@@ -199,13 +195,6 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
           </form>
         )}
 
-        {!embedded && (myRole === 'editor' || myRole === 'admin') && (
-          <div className="share-footer">
-            <button className="btn ghost" onClick={() => setHistoryOpen(true)}>Board history</button>
-            <button className="btn ghost" onClick={() => setTrashOpen(true)}>Trash</button>
-          </div>
-        )}
-
         {isAdmin && (
           <div className="board-settings">
             <strong>Board settings</strong>
@@ -221,23 +210,6 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
         )}
 
         {isAdmin && <BoardTokens tabId={tabId} onChange={() => void refresh()} />}
-
-        {historyOpen && <ActivityDrawer kind="tab" id={tabId} boardId={tabId} title={tabName} onClose={() => setHistoryOpen(false)} />}
-        {trashOpen && <TrashPanel tabId={tabId} tabName={tabName} onClose={() => setTrashOpen(false)} />}
     </>
-  );
-
-  if (embedded) return <div className="panel-embed">{body}</div>;
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="share-panel" onClick={(e) => e.stopPropagation()}>
-        <header className="share-head">
-          <strong>Share “{tabName}”</strong>
-          <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
-        </header>
-        {body}
-      </div>
-    </div>
   );
 }

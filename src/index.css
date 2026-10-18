@@ -709,11 +709,11 @@ button.pill:hover { border-color: var(--line-strong); }
 }
 .notice-error { --notice: var(--danger); }
 .notice-success { --notice: var(--success); }
-.share-members { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.share-member { gap: 8px; padding: 6px 4px; }
-.share-email { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.share-email em { color: var(--ink-mute); font-style: normal; font-size: 12px; }
-.share-role { font-size: 12px; color: var(--ink-mute); text-transform: capitalize; }
+.share-members { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.share-member { gap: 8px; padding: 8px 2px; }
+.share-email { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-email em { color: var(--ink-mute); font-style: normal; font-size: 11px; }
+.share-role { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; text-transform: capitalize; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
 /* Empty + loading states (components/common/EmptyState.tsx). */
 .empty { color: var(--ink-mute); font-size: 13px; padding: 8px 4px; margin: 0; }
 .empty.block { text-align: center; padding: 28px 12px; }
@@ -733,13 +733,14 @@ button.pill:hover { border-color: var(--line-strong); }
   border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
   padding: 6px 8px; font-size: 13px; outline: none;
 }
-.share-add { display: flex; gap: 6px; margin-top: 4px; }
-.share-add input { flex: 1; }
+.share-member select { font-size: 11px; border-radius: 999px; padding: 3px 8px; }
+.share-add { display: flex; gap: 6px; margin-top: 14px; }
+.share-add input { flex: 1; height: 32px; }
 /* Direct child only: the Add button. A bare `.share-add button` also styled the nested lookup
    result rows (they're buttons inside this form) and fought their own styling. */
 .share-add > button {
-  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
-  padding: 6px 10px; font-size: 13px; cursor: pointer;
+  border: 1px solid var(--ink); border-radius: var(--r-sm); background: var(--ink); color: var(--bg);
+  padding: 6px 10px; font-size: 13px; font-weight: 600; cursor: pointer;
 }
 .share-add > button:disabled { opacity: 0.5; cursor: default; }
 
@@ -769,20 +770,17 @@ button.pill:hover { border-color: var(--line-strong); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .lookup .lookup-row.active, .lookup .lookup-row:hover { background: var(--ink); color: var(--bg); }
-.board-panel-body .lookup-input { height: 32px; }
-
 /* Events / schedule panel */
-.events-panel { width: min(520px, calc(100vw - 32px)); max-height: 80vh; overflow-y: auto; }
 .events-location { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
-.events-location > span { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-mute); }
+.events-location > span { font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--ink-mute); }
 .events-location input {
   border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
   padding: 8px 10px; font-size: 14px; outline: none;
 }
 .events-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
-.event-card { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px; }
+.event-card { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px; }
 .event-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.event-when { font-size: 14px; font-weight: 500; }
+.event-when { font-family: var(--mono); font-size: 11px; color: var(--pop); font-weight: 700; }
 .event-recur { color: var(--ink-mute); font-style: normal; font-size: 12px; }
 .event-occurrences { display: flex; flex-direction: column; gap: 4px; }
 .occurrence { display: flex; align-items: center; gap: 8px; font-size: 13px; }
@@ -790,11 +788,11 @@ button.pill:hover { border-color: var(--line-strong); }
 .occ-count { color: var(--ink-mute); font-size: 12px; }
 .occ-rsvp { display: flex; gap: 4px; }
 .rsvp-btn {
-  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
+  border: 1px solid var(--line); border-radius: 999px; background: var(--bg-elev);
   padding: 3px 8px; font-size: 12px; cursor: pointer;
 }
 .rsvp-btn[aria-pressed="true"] { background: var(--pop); color: #fff; border-color: var(--pop); }
-.events-add { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.events-add { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
 .events-add input[type="datetime-local"], .events-add select, .events-add input[type="text"], .events-add input[type="number"] {
   border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
   padding: 6px 8px; font-size: 13px; outline: none;
@@ -1503,7 +1501,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .trash-meta { font-size: 11px; color: var(--ink-mute); }
 
 /* ── board settings (Share panel; admin only) ────────────────────────── */
-.share-footer { margin-top: 10px; display: flex; gap: 6px; }
 .board-settings { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
 .board-settings strong { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-mute); }
 .board-setting { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
@@ -1747,7 +1744,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .board-panel { border-left: 1px solid var(--line); background: var(--bg); display: flex; flex-direction: column; min-width: 0; }
 .board-panel-tabs { margin: 8px 12px 0; }
 .board-panel-body { overflow-y: auto; padding: 16px; flex: 1; }
-.panel-embed { display: block; }
 .activity-tab { display: flex; flex-direction: column; gap: 14px; }
 .activity-tab .board-activity { border-bottom: 0; padding: 0; flex-direction: column; align-items: flex-start; gap: 8px; }
 .activity-actions { display: flex; gap: 8px; }
@@ -1839,32 +1835,11 @@ button.pill:hover { border-color: var(--line-strong); }
 
 /* Agenda rail item: tighter, mockup spacing. */
 
-/* Companion rail: restyle the embedded SharePanel / EventsPanel bodies so the reused
-   modal markup reads like the mockup's single-purpose panels. */
-.panel-embed { font-size: 13px; }
-
-/* Members (embedded SharePanel) */
-.board-panel-body .share-members { margin: 0 0 6px; }
-.board-panel-body .share-member { border-bottom: 1px solid var(--line); padding: 8px 2px; gap: 8px; }
-.board-panel-body .share-email { font-size: 13px; }
-.board-panel-body .share-email em { font-size: 11px; }
-.board-panel-body .share-role { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
-.board-panel-body .share-member select { font-size: 11px; border-radius: 999px; padding: 3px 8px; }
-.board-panel-body .share-add { margin-top: 14px; gap: 6px; }
-.board-panel-body .share-add input { flex: 1; height: 32px; border-radius: var(--r-sm); }
-.board-panel-body .share-add > button { border-radius: var(--r-sm); background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 600; }
+/* Companion rail: the Members / Events bodies size to the rail through the base styles above.
+   The lookup field is the one control the rail makes taller. */
+.board-panel-body .lookup-input { height: 32px; }
 .board-panel-body .board-settings { margin-top: 20px; padding-top: 14px; }
 .board-panel-body .board-settings strong { font-size: 9.5px; letter-spacing: 1.6px; }
-
-/* Events (embedded EventsPanel) */
-.board-panel-body .events-location { margin-bottom: 14px; }
-.board-panel-body .events-location > span { font-size: 9.5px; letter-spacing: 1.6px; }
-.board-panel-body .event-card { border-radius: var(--r-md); padding: 12px; }
-.board-panel-body .event-when { font-family: var(--mono); font-size: 11px; color: var(--pop); font-weight: 700; }
-.board-panel-body .event-recur { color: var(--ink-mute); }
-.board-panel-body .rsvp-btn { border-radius: 999px; }
-.board-panel-body .rsvp-btn.on { background: var(--pop); border-color: var(--pop); color: #fff; }
-.board-panel-body .events-add { margin-top: 6px; }
 
 /* Activity feed: presence rows read as a vertical list with time stamps. */
 .activity-tab .board-activity { gap: 10px; }

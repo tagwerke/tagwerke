@@ -31,7 +31,7 @@ function fmtDate(d: string): string {
   return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: string; tabName: string; onClose: () => void; embedded?: boolean }) {
+export function EventsPanel({ tabId }: { tabId: string }) {
   const me = useSession((s) => s.user);
   const tab = useStore((s) => s.tabs[tabId]);
   const setTabLocation = useStore((s) => s.setTabLocation);
@@ -80,7 +80,7 @@ export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: stri
     return occ.attendance.filter((a) => a.status === 'accepted').map((a) => roster[a.userId] ?? a.userId);
   }
 
-  const body = (
+  return (
     <>
       {error && <Notice>{error}</Notice>}
 
@@ -163,19 +163,5 @@ export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: stri
           <button type="submit" disabled={busy || !start}>Add event</button>
         </form>
     </>
-  );
-
-  if (embedded) return <div className="panel-embed">{body}</div>;
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="share-panel events-panel" onClick={(e) => e.stopPropagation()}>
-        <header className="share-head">
-          <strong>Schedule · {tabName}</strong>
-          <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
-        </header>
-        {body}
-      </div>
-    </div>
   );
 }

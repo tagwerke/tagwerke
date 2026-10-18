@@ -1,7 +1,7 @@
 // CSV importer wizard. First adapter of a shared import pipeline (SPRINT_PLAN.md Sprint 3) —
 // v1 scope: always creates a brand-new board (undo = delete the board), flat task list only.
 // No generic Stepper component: this is the only wizard in the app, so local step state is
-// enough (matches the ad hoc useState idiom NewTabDialog/SharePanel already use).
+// enough (matches the ad hoc useState idiom NewTabDialog/MembersPanel already use).
 
 import { useMemo, useState } from 'react';
 import Papa from 'papaparse';
