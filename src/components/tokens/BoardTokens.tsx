@@ -10,6 +10,7 @@ import { timeAgo } from '../../util/dates';
 import { TokenSecret } from './TokenSecret';
 import { toggled, tokenError, useStepUpRun } from './useStepUpRun';
 import { Notice } from '../common/Notice';
+import { EmptyState } from '../common/EmptyState';
 
 const SCOPES: { key: AgentExtraScope; label: string }[] = [
   { key: 'task:comment', label: 'Comment on tasks' },
@@ -99,7 +100,7 @@ export function BoardTokens({ tabId, onChange }: { tabId: string; onChange: () =
             <button className="row-action danger" onClick={() => void revoke(t)}>Revoke</button>
           </li>
         ))}
-        {!tokens.length && <li className="share-empty">No tokens.</li>}
+        {!tokens.length && <EmptyState as="li">No tokens.</EmptyState>}
       </ul>
 
       {!open ? (

@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { actionForField, actionsFor, type ChoiceOption, type FocusField, type TaskAction } from '../../tasks/actions';
 import type { ID } from '../../types';
+import { EmptyState } from './EmptyState';
 
 export function TaskActionMenu({ ids, tabId, focusField, x, y, onClose, onStep }: {
   ids: ID[];
@@ -137,7 +138,7 @@ export function TaskActionMenu({ ids, tabId, focusField, x, y, onClose, onStep }
       </div>
 
       <ul className="task-menu-list">
-        {rows.length === 0 && <li className="task-menu-empty muted">Nothing matches</li>}
+        {rows.length === 0 && <EmptyState as="li">No matches</EmptyState>}
         {rows.map((row, i) => {
           const isChoice = !!choices;
           const choice = isChoice ? (row as ChoiceOption) : null;

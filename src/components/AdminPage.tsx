@@ -11,6 +11,7 @@ import { AdminConsole } from './AdminConsole';
 import { AuditView } from './AuditView';
 import { Notice } from './common/Notice';
 import { Tabs } from './common/Segmented';
+import { Loading } from './common/EmptyState';
 
 type Gate = 'checking' | 'need-sudo' | 'ready';
 type Tab = 'manage' | 'audit';
@@ -64,7 +65,7 @@ export function AdminPage() {
     }
   }
 
-  if (gate === 'checking') return <div className="app app-loading" />;
+  if (gate === 'checking') return <div className="app app-loading"><Loading size="block" /></div>;
 
   if (gate === 'need-sudo') {
     return (

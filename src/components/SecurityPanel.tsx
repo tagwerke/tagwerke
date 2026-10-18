@@ -10,6 +10,7 @@ import { auth, type PasskeyInfo } from '../api/client';
 import { timeAgo } from '../util/dates';
 import { PersonalTokens } from './tokens/PersonalTokens';
 import { Notice } from './common/Notice';
+import { EmptyState } from './common/EmptyState';
 
 interface Enroll {
   qr: string;
@@ -185,7 +186,7 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
                   <button className="row-action danger" disabled={busy} onClick={() => void removePasskey(p.id, p.nickname)}>Remove</button>
                 </li>
               ))}
-              {!passkeys.length && <li className="share-empty">No passkeys yet.</li>}
+              {!passkeys.length && <EmptyState as="li">No passkeys yet.</EmptyState>}
             </ul>
             {pkSupported ? (
               <div className="passkey-add">

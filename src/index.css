@@ -713,7 +713,21 @@ button.pill:hover { border-color: var(--line-strong); }
 .share-email { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share-email em { color: var(--ink-mute); font-style: normal; font-size: 12px; }
 .share-role { font-size: 12px; color: var(--ink-mute); text-transform: capitalize; }
-.share-empty { color: var(--ink-mute); font-size: 13px; padding: 8px 4px; }
+/* Empty + loading states (components/common/EmptyState.tsx). */
+.empty { color: var(--ink-mute); font-size: 13px; padding: 8px 4px; margin: 0; }
+.empty.block { text-align: center; padding: 28px 12px; }
+.dd-list .empty, .task-menu-list .empty { text-align: center; padding: 12px; }
+.loading { display: flex; flex-direction: column; gap: 8px; padding: 10px 4px; }
+.loading.block { padding: 60px 24px; align-items: center; }
+.loading-bar {
+  display: block; width: 100%; max-width: 280px; height: 10px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--line) 25%, var(--line-strong) 50%, var(--line) 75%);
+  background-size: 200% 100%;
+  animation: loading-shimmer 1.4s ease-in-out infinite;
+}
+.loading-bar.short { width: 60%; }
+@keyframes loading-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .loading-bar { animation: none; } }
 .share-member select, .share-add select, .share-add input {
   border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
   padding: 6px 8px; font-size: 13px; outline: none;
@@ -744,7 +758,6 @@ button.pill:hover { border-color: var(--line-strong); }
   background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-md);
   box-shadow: var(--shadow-pop); max-height: 220px; overflow-y: auto;
 }
-.lookup-empty { padding: 8px; font-size: 13px; color: var(--ink-mute); }
 /* Resting rows = background colour (transparent over the panel). The highlighted row inverts to
    the opposite of the system theme — cream-on-dark in dark mode, dark-on-cream in light — the same
    inversion the old date-picker's selected cell used. */
@@ -834,7 +847,6 @@ button.pill:hover { border-color: var(--line-strong); }
   outline: none;
 }
 .search-results { max-height: 50vh; overflow-y: auto; margin-top: 10px; }
-.search-empty { color: var(--ink-mute); padding: 16px; text-align: center; font-size: 13px; }
 .search-hit {
   display: flex; align-items: baseline; gap: 10px;
   width: 100%; text-align: left;
@@ -921,7 +933,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .dd-option.is-selected { font-weight: 500; }
 .dd-option-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dd-check { color: var(--pop); flex: none; }
-.dd-empty { padding: 12px; color: var(--ink-mute); font-size: 13px; text-align: center; }
 
 /* hide TipTap empty placeholder cursor noise */
 .ProseMirror-focused { outline: none; }
@@ -1020,7 +1031,6 @@ button.pill:hover { border-color: var(--line-strong); }
 }
 .btn.ghost.is-active { border-color: var(--line-strong); color: var(--ink); background: rgba(0,0,0,0.03); }
 
-.muted { color: var(--ink-mute); }
 
 .loadout-planner {
   display: flex; flex-direction: column; justify-content: center; gap: 4px;
@@ -1710,7 +1720,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .board-canvas.no-panel { grid-template-columns: minmax(0, 1fr); }
 .board-content { min-width: 0; overflow: auto; }
 .board-content .tab-view-body { padding: 14px clamp(20px, 4vw, 56px) 48px; }
-.view-placeholder { padding: 60px clamp(20px, 4vw, 56px); font-size: 15px; }
 
 /* Companion rail */
 .board-panel { border-left: 1px solid var(--line); background: var(--bg); display: flex; flex-direction: column; min-width: 0; }
@@ -1923,7 +1932,7 @@ button.pill:hover { border-color: var(--line-strong); }
 .cal-agenda-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .cal-agenda-filter { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .cal-agenda { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px; }
-.cal-agenda-empty, .cal-agenda-more { font-size: 12px; padding: 4px 6px; }
+.cal-agenda-more { font-size: 12px; padding: 4px 6px; }
 .cal-agenda-more { border-top: 1px dashed var(--line); margin-top: 2px; }
 
 /* ── Notifications (bell + feed panel) ────────────────────────────────────── */
@@ -1936,7 +1945,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .notif-head-actions { display: flex; align-items: center; gap: 10px; }
 
 .notif-list { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; margin: 4px -6px 0; }
-.notif-empty { color: var(--ink-mute); text-align: center; padding: 28px 0; margin: 0; }
 
 .notif-row {
   display: flex; align-items: flex-start; gap: 10px;
@@ -2128,7 +2136,6 @@ button.pill:hover { border-color: var(--line-strong); }
   letter-spacing: 0; color: var(--ink); font-size: 11px;
 }
 .task-menu-list { list-style: none; margin: 0; padding: 4px; }
-.task-menu-empty { padding: 8px 8px 10px; font-size: 12px; }
 .task-menu-item.is-danger { color: var(--pop); }
 .task-menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-menu-hint,
@@ -2159,7 +2166,7 @@ button.pill:hover { border-color: var(--line-strong); }
   border-bottom: 1px solid var(--line);
   min-width: 0;
 }
-.work-table, .board-work > .view-placeholder { padding: 10px clamp(16px, 3vw, 32px) 0; }
+.work-table, .board-work > .empty { padding: 10px clamp(16px, 3vw, 32px) 0; }
 .work-spacer { flex: 1; }
 /* A count is something you read, not something you set, so it sits under the rows it counts
    rather than in the row of controls — where it was what pushed the view switcher onto a

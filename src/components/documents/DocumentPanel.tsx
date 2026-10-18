@@ -27,6 +27,7 @@ import {
   type TextStatus,
 } from '../../types';
 import { Notice } from '../common/Notice';
+import { Loading } from '../common/EmptyState';
 
 /** How often a running extraction is re-read. Runs are minutes at most (§4) and each poll is one
  *  small query, so this is frequent enough to feel live without being a busy loop. */
@@ -420,7 +421,7 @@ export function DocumentPanel({ documentId, onClose }: { documentId: ID; onClose
           </p>
         )}
 
-        {items === null && !error && !aiOff && <p className="share-empty">Loading…</p>}
+        {items === null && !error && !aiOff && <Loading as="p" />}
       </div>
     </div>
   );

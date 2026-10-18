@@ -7,6 +7,7 @@
 // It borrows Dropdown's CSS classes so the two read as one family.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { EmptyState } from './EmptyState';
 
 export interface MultiOption {
   value: string;
@@ -113,7 +114,7 @@ export function MultiSelect({ options, selected, onChange, noun, label }: {
             />
           )}
           <ul className="dd-list" role="listbox" aria-multiselectable="true">
-            {shown.length === 0 && <li className="dd-empty">no matches</li>}
+            {shown.length === 0 && <EmptyState size="block" as="li">No matches</EmptyState>}
             {shown.map((o, i) => {
               const on = selected.includes(o.value);
               return (

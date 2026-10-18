@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { api, type UserLookupResult } from '../api/client';
+import { EmptyState } from './common/EmptyState';
 
 interface Props {
   value: string;
@@ -113,7 +114,7 @@ export function EmailLookup({ value, onChange, exclude, disabled, placeholder }:
       {open && (
         <ul className="lookup-results" role="listbox">
           {shown.length === 0 ? (
-            <li className="lookup-empty">{loading ? 'Searching…' : 'No results'}</li>
+            <EmptyState as="li">{loading ? 'Searching…' : 'No matches'}</EmptyState>
           ) : (
             shown.map((u, i) => (
               <li key={u.id}>

@@ -22,6 +22,7 @@ import { ConfirmDialog } from './components/common/ConfirmDialog';
 import { Toast } from './components/common/Toast';
 import { InfoPane } from './components/InfoPane';
 import { TaskPage } from './components/TaskPage';
+import { Loading } from './components/common/EmptyState';
 import {
   usePath,
   boardPath,
@@ -46,7 +47,7 @@ export default function App() {
   }, [init]);
 
   if (status === 'loading') {
-    return <div className="app app-loading" />;
+    return <div className="app app-loading"><Loading size="block" /></div>;
   }
   if (status === 'unauthenticated') {
     return <AuthScreen />;

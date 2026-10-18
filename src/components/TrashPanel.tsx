@@ -7,6 +7,7 @@ import { api, ApiError, type TrashedTask } from '../api/client';
 import { useStore } from '../store';
 import { timeAgo } from '../util/dates';
 import { Notice } from './common/Notice';
+import { EmptyState, Loading } from './common/EmptyState';
 
 export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName: string; onClose: () => void }) {
   const members = useStore((s) => s.membersByBoard[tabId]);
@@ -69,8 +70,8 @@ export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName
               <button className="btn ghost tiny" disabled={busy} onClick={() => restore(t.id)}>Restore</button>
             </li>
           ))}
-          {tasks && tasks.length === 0 && <li className="share-empty">Trash is empty.</li>}
-          {!tasks && !error && <li className="share-empty">Loading…</li>}
+          {tasks && tasks.length === 0 && <EmptyState as="li">Trash is empty.</EmptyState>}
+          {!tasks && !error && <Loading as="li" />}
         </ul>
       </div>
     </div>

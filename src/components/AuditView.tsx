@@ -9,6 +9,7 @@ import { formatTimestamp, timeAgo } from '../util/dates';
 import { fieldLabel } from '../util/audit';
 import { RecordDrawer, type PreviewTarget } from './RecordDrawer';
 import { Notice } from './common/Notice';
+import { EmptyState } from './common/EmptyState';
 
 // A condition carries an optional client-only display label (e.g. an actor's email for an id);
 // stripped to the {field, op, value} wire shape before it hits the API.
@@ -300,7 +301,7 @@ export function AuditView() {
             {expanded === e.id && <div className="audit-payload">{renderPayload(e.payload)}</div>}
           </div>
         ))}
-        {!entries.length && !busy && <div className="share-empty">No matching entries.</div>}
+        {!entries.length && !busy && <EmptyState>No matching entries.</EmptyState>}
       </div>
 
       <div className="audit-foot">

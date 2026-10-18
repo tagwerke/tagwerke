@@ -27,6 +27,7 @@ import { formatTimestamp, timeAgo } from '../util/dates';
 import { fieldLabel, USER_FIELDS } from '../util/audit';
 import type { Comment } from '../types';
 import { Notice } from './common/Notice';
+import { EmptyState, Loading } from './common/EmptyState';
 
 type Kind = 'task' | 'tab';
 
@@ -325,9 +326,9 @@ export function ActivityDrawer({
             ),
           )}
           {!loading && items.length === 0 && (
-            <li className="share-empty">{isTask ? 'Nothing yet — say something below.' : 'No history yet.'}</li>
+            <EmptyState as="li">{isTask ? 'Nothing yet — say something below.' : 'No history yet.'}</EmptyState>
           )}
-          {loading && !error && <li className="share-empty">Loading…</li>}
+          {loading && !error && <Loading as="li" />}
         </ul>
 
         {/* The fold. Placed under the timeline, not above it, so it reads as "there is more

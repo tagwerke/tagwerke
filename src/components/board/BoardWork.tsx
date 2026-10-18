@@ -22,6 +22,7 @@ import {
   applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, NO_PRIORITY, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
 } from './workFilters';
 import type { BoardView, ID, Member, Sprint } from '../../types';
+import { EmptyState } from '../common/EmptyState';
 
 /** Shared empties. `?? []` would mint a new array each render and churn every memo below. */
 const NO_MEMBERS: Member[] = [];
@@ -378,9 +379,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
       )}
 
       {total === 0 && !noMatch && !editable ? (
-        <div className="view-placeholder muted">
-          No tasks on this board yet.
-        </div>
+        <EmptyState size="block">No tasks on this board yet.</EmptyState>
       ) : (
         <WorkTable
           tabId={tabId}

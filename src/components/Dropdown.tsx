@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { EmptyState } from './common/EmptyState';
 
 export interface DropdownOption {
   value: string;
@@ -108,7 +109,7 @@ export function Dropdown({ value, options, onChange, placeholder, searchable, se
             />
           )}
           <ul className="dd-list" role="listbox">
-            {shown.length === 0 && <li className="dd-empty">{q ? 'no matches' : 'no options'}</li>}
+            {shown.length === 0 && <EmptyState size="block" as="li">{q ? 'No matches' : 'No options'}</EmptyState>}
             {shown.map((o, i) => (
               <li
                 key={o.value}

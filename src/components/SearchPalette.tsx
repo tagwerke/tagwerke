@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
 import { TaskActionMenu } from './common/TaskActionMenu';
 import { extractDocText } from '../util/docText';
+import { EmptyState } from './common/EmptyState';
 
 interface Hit {
   kind: 'tab' | 'task' | 'note';
@@ -78,7 +79,7 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
           }}
         />
         <div className="search-results">
-          {hits.length === 0 && q && <div className="search-empty">no matches</div>}
+          {hits.length === 0 && q && <EmptyState size="block">No matches</EmptyState>}
           {hits.map((h, i) => (
             // A row, not a bare button: a task hit carries its own "move to board" action, and a
             // button cannot legally contain another one. Finding a task by name and sending it

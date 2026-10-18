@@ -10,6 +10,7 @@ import { timeAgo } from '../../util/dates';
 import { TokenSecret } from './TokenSecret';
 import { toggled, tokenError, useStepUpRun } from './useStepUpRun';
 import { Notice } from '../common/Notice';
+import { EmptyState } from '../common/EmptyState';
 
 const SCOPES: { key: PatScope; label: string }[] = [
   { key: 'tasks', label: 'Create and edit tasks' },
@@ -115,7 +116,7 @@ export function PersonalTokens() {
             <button className="row-action danger" onClick={() => void revoke(t)}>Revoke</button>
           </li>
         ))}
-        {!tokens.length && <li className="share-empty">No tokens yet.</li>}
+        {!tokens.length && <EmptyState as="li">No tokens yet.</EmptyState>}
       </ul>
 
       {!open ? (

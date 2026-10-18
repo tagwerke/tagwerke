@@ -15,6 +15,7 @@ import { ActivityDrawer } from './ActivityDrawer';
 import { TrashPanel } from './TrashPanel';
 import { BoardTokens } from './tokens/BoardTokens';
 import { Notice } from './common/Notice';
+import { EmptyState, Loading } from './common/EmptyState';
 
 const ROLES: BoardRole[] = ['viewer', 'editor', 'admin'];
 const RANK: Record<BoardRole, number> = { viewer: 0, editor: 1, admin: 2 };
@@ -168,8 +169,8 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
               </li>
             );
           })}
-          {members && members.length === 0 && <li className="share-empty">No members.</li>}
-          {!members && <li className="share-empty">Loading…</li>}
+          {members && members.length === 0 && <EmptyState as="li">No members.</EmptyState>}
+          {!members && <Loading as="li" />}
         </ul>
 
         {isAdmin && (

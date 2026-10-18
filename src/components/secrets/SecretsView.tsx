@@ -16,6 +16,7 @@ import { timeAgo as timeAgoIso } from '../../util/dates';
 import type { ID, SecretEntryDTO, SecretLinkDTO } from '../../types';
 import { StepUpDialog } from './StepUpDialog';
 import { EntryDialog, PolicyDialog, ShareDialog, type Run } from './SecretDialogs';
+import { EmptyState, Loading } from '../common/EmptyState';
 
 /** How long a revealed value stays on screen before it is dropped from memory. */
 const REVEAL_MS = 30_000;
@@ -197,22 +198,22 @@ export function SecretsView({ boardId }: { boardId: ID }) {
       <section className="secrets-card">
         <header className="secrets-head"><span className="secrets-title">Secrets</span></header>
         {load.kind === 'loading' ? (
-          <p className="secrets-empty">Loading…</p>
+          <Loading as="p" />
         ) : load.kind === 'off' ? (
-          <p className="secrets-empty">
+          <EmptyState size="block" as="p">
             Secrets aren’t enabled on this instance{load.detail ? <>: <code>{load.detail}</code></> : '.'} An operator has to
             set a valid <code>VAULT_KEY</code> on the server and restart it (see .env.example).
-          </p>
+          </EmptyState>
         ) : load.kind === 'blocked' ? (
-          <p className="secrets-empty">
+          <EmptyState size="block" as="p">
             This board’s secrets can only be opened from approved networks, and you’re connecting from{' '}
             <code>{load.ip ?? 'an address that isn’t on the list'}</code>. Connect through the office network or VPN, or ask
             another board admin to add your address.
-          </p>
+          </EmptyState>
         ) : (
-          <p className="secrets-empty">
+          <EmptyState size="block" as="p">
             {load.message} <button className="secret-linkish" onClick={() => void refresh()}>Retry</button>
-          </p>
+          </EmptyState>
         )}
       </section>
     );
@@ -238,7 +239,7 @@ export function SecretsView({ boardId }: { boardId: ID }) {
         {notice && <p className="secret-error" role="status">{notice}</p>}
 
         {entries.length === 0 ? (
-          <p className="secrets-empty">No secrets yet. Credentials in a note or a task are readable by everyone on the board, so they belong here.</p>
+          <EmptyState size="block" as="p">No secrets yet. Credentials in a note or a task are readable by everyone on the board, so they belong here.</EmptyState>
         ) : (
           <ul className="secret-list">
             {entries.map((e) => {

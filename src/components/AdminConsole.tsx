@@ -6,6 +6,7 @@ import { api, ApiError, type AdminInvite, type AdminUser, type OidcConfig } from
 import { askConfirm, type ConfirmRequest } from '../confirm/useConfirm';
 import { useSession } from '../session/useSession';
 import { Notice } from './common/Notice';
+import { EmptyState, Loading } from './common/EmptyState';
 
 export function AdminConsole() {
   const me = useSession((s) => s.user);
@@ -122,8 +123,8 @@ export function AdminConsole() {
               </button>
             </li>
           ))}
-          {invites && invites.length === 0 && <li className="share-empty">No invites.</li>}
-          {!invites && <li className="share-empty">Loading…</li>}
+          {invites && invites.length === 0 && <EmptyState as="li">No invites.</EmptyState>}
+          {!invites && <Loading as="li" />}
         </ul>
       </section>
 
@@ -234,7 +235,7 @@ export function AdminConsole() {
               </li>
             );
           })}
-          {!users && <li className="share-empty">Loading…</li>}
+          {!users && <Loading as="li" />}
         </ul>
       </section>
 

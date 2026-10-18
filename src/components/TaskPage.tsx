@@ -13,6 +13,7 @@ import { flush as flushPersist } from '../api/persist';
 import { navigate, boardTaskPath, boardPath } from '../util/router';
 import type { ID, TaskStatus } from '../types';
 import { newestFirst } from '../util/sprints';
+import { EmptyState } from './common/EmptyState';
 
 /** One row of the field rail. Only here to say the label/control wrapper once. */
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -89,7 +90,7 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
     // link) — there is nothing to show. Back to the board rather than a dead page.
     return (
       <main className="tab-view tab-open task-page">
-        <div className="view-placeholder muted">This task is gone.</div>
+        <EmptyState size="block">This task is gone.</EmptyState>
         <button className="btn ghost" onClick={close}>Back to board</button>
       </main>
     );

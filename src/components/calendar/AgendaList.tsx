@@ -8,6 +8,7 @@ import { matchesBlockFilter } from '../../util/filter';
 import { TaskRow } from '../common/TaskRow';
 import { boardTaskPath, navigate } from '../../util/router';
 import type { BlockFilter, ID } from '../../types';
+import { EmptyState } from '../common/EmptyState';
 
 const MAX_LINES = 8;
 
@@ -18,7 +19,7 @@ export function AgendaList({ tabId, filter }: { tabId: ID; filter?: BlockFilter 
 
   return (
     <ul className="cal-agenda">
-      {tasks.length === 0 && <li className="cal-agenda-empty muted">no matching tasks</li>}
+      {tasks.length === 0 && <EmptyState as="li">No matching tasks</EmptyState>}
       {tasks.slice(0, MAX_LINES).map((t) => (
         <TaskRow key={t.id} taskId={t.id} editable={false} onOpen={() => navigate(boardTaskPath(tabId, t.id))} />
       ))}

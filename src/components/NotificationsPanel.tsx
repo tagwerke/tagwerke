@@ -8,6 +8,7 @@ import { askConfirm } from '../confirm/useConfirm';
 import { PushOptIn } from './PushOptIn';
 import { timeAgo } from '../util/dates';
 import type { NotificationType } from '../types';
+import { EmptyState } from './common/EmptyState';
 
 /** A small glyph per notification kind — keeps the list scannable at a glance. */
 function NotifIcon({ type }: { type: NotificationType }) {
@@ -89,7 +90,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
 
         <div className="notif-list">
           {items.length === 0 ? (
-            <p className="notif-empty">You’re all caught up.</p>
+            <EmptyState size="block" as="p">You’re all caught up.</EmptyState>
           ) : (
             items.map((n) => (
               <button

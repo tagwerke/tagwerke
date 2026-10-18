@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError, type HistoryEntry, type PreviewRecord } from '../api/client';
 import { formatTimestamp, timeAgo } from '../util/dates';
 import { Notice } from './common/Notice';
+import { EmptyState, Loading } from './common/EmptyState';
 
 export interface PreviewTarget {
   type: string; // task | tab | user | board_member
@@ -62,7 +63,7 @@ export function RecordDrawer({ target, onClose }: { target: PreviewTarget; onClo
         </header>
 
         {record === undefined ? (
-          <div className="share-empty">Loading…</div>
+          <Loading />
         ) : record === null ? (
           <div className="record-tombstone">
             <strong>{target.fallbackLabel || `${target.type}:${target.id}`}</strong>
@@ -98,8 +99,8 @@ export function RecordDrawer({ target, onClose }: { target: PreviewTarget; onClo
                 <span className="record-history-time" title={h.createdAt}>{timeAgo(h.createdAt)}</span>
               </li>
             ))}
-            {history && history.length === 0 && <li className="share-empty">No changes recorded.</li>}
-            {!history && record !== undefined && <li className="share-empty">—</li>}
+            {history && history.length === 0 && <EmptyState as="li">No changes recorded.</EmptyState>}
+            {!history && record !== undefined && <Loading as="li" />}
           </ul>
         </div>
       </aside>

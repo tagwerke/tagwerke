@@ -8,6 +8,7 @@ import { useStore } from '../store';
 import { confirmDeleteEvent } from '../confirm/prompts';
 import { useSession } from '../session/useSession';
 import { Notice } from './common/Notice';
+import { EmptyState, Loading } from './common/EmptyState';
 
 // Common recurrence presets → RRULE. Raw entry is also allowed.
 const RECUR: { label: string; rrule: string | null }[] = [
@@ -94,7 +95,7 @@ export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: stri
         </label>
 
         <div className="events-list">
-          {events?.length === 0 && <div className="share-empty">No events yet.</div>}
+          {events?.length === 0 && <EmptyState>No events yet.</EmptyState>}
           {events?.map((ev) => (
             <div key={ev.id} className="event-card">
               <div className="event-head">
@@ -116,7 +117,7 @@ export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: stri
                 </button>
               </div>
               <div className="event-occurrences">
-                {ev.occurrences.length === 0 && <span className="share-empty">No upcoming dates in the next 60 days.</span>}
+                {ev.occurrences.length === 0 && <EmptyState as="span">No upcoming dates in the next 60 days.</EmptyState>}
                 {ev.occurrences.map((occ) => {
                   const mine = myStatus(occ);
                   const going = goingEmails(occ);
@@ -143,7 +144,7 @@ export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: stri
               </div>
             </div>
           ))}
-          {!events && <div className="share-empty">Loading…</div>}
+          {!events && <Loading />}
         </div>
 
         <form
