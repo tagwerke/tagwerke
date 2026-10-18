@@ -258,7 +258,6 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .board-group-delete {
   margin-left: auto;
-  opacity: 0;
   transition: opacity .12s;
 }
 .board-group-head:hover .board-group-delete { opacity: 1; }
@@ -429,7 +428,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .status-caret {
   margin-top: 4px; height: 18px; padding: 0 2px;
   background: transparent; border: none; cursor: pointer;
-  color: var(--ink-mute); opacity: 0;
+  color: var(--ink-mute);
   display: inline-flex; align-items: center;
   transition: opacity .12s;
 }
@@ -502,7 +501,7 @@ button.pill:hover { border-color: var(--line-strong); }
 /* Pressed comes last so it wins over every variant above (equal specificity, later in source). */
 .pill[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .pill-project-wrap { display: inline-flex; align-items: center; gap: 2px; }
-.pill-project-wrap .pill-delete { opacity: 0; width: 18px; height: 18px; transition: opacity .12s; }
+.pill-project-wrap .pill-delete { width: 18px; height: 18px; transition: opacity .12s; }
 .pill-project-wrap:hover .pill-delete,
 .pill-project-wrap:focus-within .pill-delete { opacity: 1; }
 .count { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
@@ -1144,18 +1143,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .drawer-head strong { font-family: var(--serif); font-style: italic; font-size: 19px; font-weight: 500; }
 .drawer-body { overflow-y: auto; padding: 16px 18px; flex: 1; }
 
-/* ── Touch devices: reveal hover-only affordances ─────────────────────────
-   Cards/chips hide their actions until hover; touch has no hover, so surface
-   them (a touch more visible) when the device is coarse-pointer. */
-@media (hover: none) {
-  .board-group-delete,
-.tab-card .tab-card-actions { opacity: 0.6; }
-  .status-caret { opacity: 0.4; }
-  .pill-project-wrap .pill-delete { opacity: 0.5; }
-  /* The task row's own touch affordances are handled further down, next to the rules they have to
-     override — these hover-reveal rules are more specific than anything that could sit here. */
-}
-
 /* ── Phone breakpoint ─────────────────────────────────────────────────────── */
 @media (max-width: 720px) {
   .app {
@@ -1457,7 +1444,7 @@ button.pill:hover { border-color: var(--line-strong); }
 .comment-mention { color: var(--ink-soft); font-weight: 600; }
 /* Your own name, so a mention is findable in a long thread without reading it. */
 .comment-mention.me { color: var(--pop); background: rgba(255,106,61,0.10); border-radius: 3px; padding: 0 2px; }
-.comment-actions { display: flex; gap: 2px; margin-top: 4px; opacity: 0; transition: opacity 0.12s ease; }
+.comment-actions { display: flex; gap: 2px; margin-top: 4px; transition: opacity 0.12s ease; }
 .comment:hover .comment-actions, .comment:focus-within .comment-actions { opacity: 1; }
 .comment-replies { list-style: none; margin: 6px 0 0; padding: 0 0 0 10px; display: flex; flex-direction: column; }
 .comment-replies .comment { border-bottom: none; padding-bottom: 4px; }
@@ -1478,10 +1465,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .comment-input:focus { outline: none; border-color: var(--pop); }
 .comment-composer-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
 .comment-suggest { position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); z-index: 40; max-height: 190px; overflow-y: auto; }
-/* Touch has no hover, so the row actions can't hide behind one. */
-@media (hover: none) {
-  .comment-actions { opacity: 1; }
-}
 
 /* ── trash view (recoverable soft-deletes) ───────────────────────────── */
 .trash-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
@@ -2235,16 +2218,12 @@ button.pill:hover { border-color: var(--line-strong); }
 }
 
 /* The row's two trailing affordances, after the strip (NOTES_SPLIT_PLAN §N3). */
-.task-row-menu, .task-row-open { opacity: 0; flex-shrink: 0; }
+.task-row-menu, .task-row-open { flex-shrink: 0; }
 .task-row:hover .task-row-menu,
 .task-row:hover .task-row-open,
 .task-row-menu:focus-visible,
 .task-row-open:focus-visible { opacity: 0.75; }
 .task-row-menu:hover, .task-row-open:hover { opacity: 1; }
-/* On touch there is no hover to reveal them, so they are simply always there. */
-@media (hover: none) {
-  .task-row-menu, .task-row-open { opacity: 0.6; }
-}
 
 /* ── Task mentions in a note (NOTES_SPLIT_PLAN §N4) ───────────────────────
    Deliberately quiet: a note is prose, and a page of loud chips would read
@@ -2391,7 +2370,7 @@ button.pill:hover { border-color: var(--line-strong); }
 .dd.is-chip .dd-trigger:hover,
 .dd.is-chip.open .dd-trigger { background: var(--page-accent-soft, var(--line)); border-color: transparent; }
 .dd.is-chip .dd-dot { width: 6px; height: 6px; }
-.dd.is-chip .dd-caret { width: 8px; height: 8px; opacity: 0; }
+.dd.is-chip .dd-caret { width: 8px; height: 8px; }
 .dd.is-chip .dd-trigger:hover .dd-caret,
 .dd.is-chip .dd-trigger:focus-visible .dd-caret,
 .dd.is-chip.open .dd-caret { opacity: 1; }
@@ -2485,3 +2464,17 @@ button.pill:hover { border-color: var(--line-strong); }
 .token-secret-value { display: block; padding: 8px; border-radius: var(--r-sm); background: var(--bg); border: 1px solid var(--line); font-size: 12px; word-break: break-all; user-select: all; }
 .token-secret-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .bot-badge { margin-left: 6px; color: var(--ink-mute); vertical-align: middle; }
+
+/* ── Hover-reveal controls ────────────────────────────────────────────────
+   Row/card actions are visible (dimmed) by default, so a touch screen — which has no hover — can
+   always reach them. Only a device with a real hover hides them until the row is hovered/focused.
+   The reveal rules sit next to each component and out-rank the hidden state below. */
+.board-group-delete, .tab-card .tab-card-actions, .comment-actions, .task-row-menu, .task-row-open { opacity: 0.6; }
+.status-caret { opacity: 0.4; }
+.pill-project-wrap .pill-delete { opacity: 0.5; }
+.dd.is-chip .dd-caret { opacity: 0.6; }
+@media (hover: hover) {
+  .board-group-delete, .comment-actions, .task-row-menu, .task-row-open, .status-caret,
+  .pill-project-wrap .pill-delete, .dd.is-chip .dd-caret { opacity: 0; }
+  .task-row:hover .status-caret, .status-caret:focus-visible { opacity: 0.55; }
+}
