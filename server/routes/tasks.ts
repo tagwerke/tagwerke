@@ -18,7 +18,7 @@ import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
 const rankField = z.string().refine(isValidRank, 'malformed rank').nullable().optional();
 
 /** Short, single-line label of a task for a notification body. */
-function taskLabel(text: string | null | undefined): string {
+export function taskLabel(text: string | null | undefined): string {
   const s = (text ?? '').trim();
   if (!s) return 'A task';
   return s.length > 80 ? `${s.slice(0, 79)}…` : s;
@@ -26,7 +26,7 @@ function taskLabel(text: string | null | undefined): string {
 
 /** Fire an "assigned to you" notification when assignment changed to a real, different user.
  *  Shared by PUT and PATCH — the two paths that ever set assigneeId (see NOTIFICATIONS.md §2). */
-function notifyAssigneeChange(
+export function notifyAssigneeChange(
   nextAssignee: string | null | undefined,
   prevAssignee: string | null | undefined,
   actorId: string,
@@ -42,7 +42,7 @@ function notifyAssigneeChange(
 // between deliverables, which is a structural change, not reorder noise (SUBTASKS_PLAN P1.3).
 // `sprintId` IS audited for the same reason (SPRINTS_PLAN): which sprint a task is scoped to is a
 // planning decision worth a trail, unlike rank. See AUDIT_IMPLEMENTATION_PLAN §B2.
-const AUDITED_FIELDS = ['text', 'description', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'parentTaskId', 'sprintId'] as const;
+export const AUDITED_FIELDS = ['text', 'description', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'parentTaskId', 'sprintId'] as const;
 
 // What a point-in-time restore puts back: the audited set MINUS the structural fields. Where a
 // task sits in the tree, and which sprint it's scoped to, are facts about the board as it is
@@ -121,7 +121,7 @@ const orphanBody = z.object({
 // when set, is constrained to a member of the task's home board (SPEC §5).
 
 /** True when `assigneeId` is null/undefined or names a member of `homeTabId`. */
-async function assigneeAllowed(homeTabId: string, assigneeId: string | null | undefined): Promise<boolean> {
+export async function assigneeAllowed(homeTabId: string, assigneeId: string | null | undefined): Promise<boolean> {
   if (assigneeId == null) return true;
   return (await boardRole(assigneeId, homeTabId)) != null;
 }
@@ -129,7 +129,7 @@ async function assigneeAllowed(homeTabId: string, assigneeId: string | null | un
 /** True when `sprintId` is null/undefined (backlog) or names a sprint on `homeTabId`. The DB's
  *  tasks_sprint_same_board FK would reject a mismatch too, but this turns it into a friendly 400
  *  instead of a 500 (same reasoning as parentRefusal). */
-async function sprintAllowed(homeTabId: string, sprintId: string | null | undefined): Promise<boolean> {
+export async function sprintAllowed(homeTabId: string, sprintId: string | null | undefined): Promise<boolean> {
   if (sprintId == null) return true;
   const rows = await db
     .select({ id: schema.sprints.id })
@@ -146,7 +146,7 @@ async function sprintAllowed(homeTabId: string, sprintId: string | null | undefi
  * The ORDER BY is safe because the column is COLLATE "C" — the DB's string order is byte order,
  * the same order shared/rank.ts assumes.
  */
-async function nextSiblingRank(homeTabId: string, parentTaskId: string | null): Promise<string> {
+export async function nextSiblingRank(homeTabId: string, parentTaskId: string | null): Promise<string> {
   const rows = await db
     .select({ rank: schema.tasks.rank })
     .from(schema.tasks)
@@ -205,7 +205,7 @@ async function coDeletedDescendantIds(id: string, deletedAt: Date): Promise<stri
 /** Why a proposed re-parent was refused — turned into a specific 400 so the client can say which. */
 type ParentRefusal = 'not-found' | 'other-board' | 'cycle' | 'too-deep';
 
-const PARENT_REFUSAL_MESSAGE: Record<ParentRefusal, string> = {
+export const PARENT_REFUSAL_MESSAGE: Record<ParentRefusal, string> = {
   'not-found': 'parent task does not exist',
   'other-board': 'parent task is not on the home board',
   cycle: 'a task cannot be nested under its own descendant',
@@ -228,7 +228,7 @@ const PARENT_REFUSAL_MESSAGE: Record<ParentRefusal, string> = {
  * Both walks are bounded by the depth limit, so they terminate even on data that is already
  * cyclic (an old row written before this check existed).
  */
-async function parentRefusal(
+export async function parentRefusal(
   homeTabId: string,
   id: string,
   parentTaskId: string | null | undefined,

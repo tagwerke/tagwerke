@@ -91,6 +91,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
           userId: schema.boardMembers.userId,
           email: schema.users.email,
           role: schema.boardMembers.role,
+          kind: schema.users.kind, // 'agent' members get a bot badge in the UI
         })
         .from(schema.boardMembers)
         .innerJoin(schema.users, eq(schema.users.id, schema.boardMembers.userId))

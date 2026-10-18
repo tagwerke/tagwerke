@@ -1,16 +1,18 @@
-// Issue (or rotate) the bearer token for ONE agent bound to ONE board (AGENT_API.md).
+// Issue (or revoke) a bearer token for an agent bound to ONE board (AGENT_API.md). The same thing a
+// board admin does from Share → API tokens, for when there is no browser to hand — an admin fallback.
 //
-//   tsx server/scripts/issue-agent-token.ts <boardId> <agentName> [--scopes board:read,task:comment] [--days 90]
-//   tsx server/scripts/issue-agent-token.ts --revoke <boardId> <agentName>
+//   tsx server/scripts/issue-agent-token.ts <boardId> <name> [--scopes task:comment,task:write] [--days 90]
+//   tsx server/scripts/issue-agent-token.ts --revoke <boardId> <name>
 //
-// Creates the agent user (<agentName>@agent.invalid, no password) if absent, makes it a VIEWER of
-// that board and of nothing else, revokes any live token it held, and prints a new secret ONCE.
-// An agent already attached to a different board is refused: one agent = one board.
+// Every token gets its OWN agent user (<name>-<random>@agent.invalid, no password), so the same name
+// can be used on different boards. The agent is an editor of that board when the token can write tasks
+// and a viewer otherwise, and a member of nothing else. `--revoke` revokes the board's live tokens
+// with that name and takes their agents off the board. The secret is printed ONCE.
 
 import 'dotenv/config';
 import { nanoid } from 'nanoid';
 import { connect } from './_db.ts';
-import { AGENT_PREFIX, AGENT_SCOPES, newToken } from '../auth/agent.ts';
+import { AGENT_PREFIX, AGENT_SCOPES, agentEmail, newToken } from '../auth/agent.ts';
 
 const args = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -21,15 +23,17 @@ const revoke = args.includes('--revoke');
 const positional = args.filter((a, i) => !a.startsWith('--') && !['--scopes', '--days'].includes(args[i - 1]));
 const [boardId, agentName] = positional;
 if (!boardId || !agentName || !/^[a-z0-9][a-z0-9-]{1,30}$/.test(agentName)) {
-  console.error('usage: issue-agent-token.ts [--revoke] <boardId> <agentName: a-z0-9->  [--scopes a,b] [--days n]');
+  console.error('usage: issue-agent-token.ts [--revoke] <boardId> <name: a-z0-9->  [--scopes a,b] [--days n]');
   process.exit(1);
 }
-const scopes = (flag('--scopes') ?? 'board:read,task:comment').split(',').map((s) => s.trim());
-const bad = scopes.filter((s) => !(AGENT_SCOPES as readonly string[]).includes(s));
+// `board:read` is always on; the flag lists the extras.
+const extras = (flag('--scopes') ?? 'task:comment').split(',').map((s) => s.trim()).filter((s) => s && s !== 'board:read');
+const bad = extras.filter((s) => !(AGENT_SCOPES as readonly string[]).includes(s));
 if (bad.length) {
-  console.error(`unknown scope(s): ${bad.join(', ')} (known: ${AGENT_SCOPES.join(', ')})`);
+  console.error(`unknown scope(s): ${bad.join(', ')} (known: ${AGENT_SCOPES.filter((s) => s !== 'board:read').join(', ')})`);
   process.exit(1);
 }
+const scopes = ['board:read', ...new Set(extras)];
 const days = Number(flag('--days') ?? 90);
 
 const client = await connect();
@@ -38,36 +42,33 @@ try {
   console.log(`Database: ${info.db} @ ${info.host ?? 'local socket'}`);
   const board = (await client.query(`SELECT id, name FROM tabs WHERE id = $1`, [boardId])).rows[0];
   if (!board) throw new Error(`no board ${boardId} in this database`);
-  const email = `${agentName}@agent.invalid`;
 
   await client.query('BEGIN');
-  let user = (await client.query(`SELECT id, kind FROM users WHERE email = $1`, [email])).rows[0];
-  if (user && user.kind !== 'agent') throw new Error(`${email} exists and is not an agent user`);
-  if (!user) {
-    if (revoke) throw new Error(`no agent named ${agentName}`);
-    user = { id: nanoid() };
-    await client.query(`INSERT INTO users (id, email, role, kind) VALUES ($1, $2, 'member', 'agent')`, [user.id, email]);
-  }
-  const other = await client.query(`SELECT tab_id FROM board_members WHERE user_id = $1 AND tab_id <> $2`, [user.id, boardId]);
-  if (other.rowCount) throw new Error(`${email} already belongs to another board — one agent, one board. Use a different name.`);
-
-  await client.query(`UPDATE agent_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [user.id]);
   if (revoke) {
+    const live = (
+      await client.query(
+        `UPDATE agent_tokens SET revoked_at = now() WHERE tab_id = $1 AND label = $2 AND revoked_at IS NULL RETURNING user_id`,
+        [boardId, agentName],
+      )
+    ).rows;
+    if (!live.length) throw new Error(`no live token named ${agentName} on this board`);
+    await client.query(`DELETE FROM board_members WHERE tab_id = $1 AND user_id = ANY($2::text[])`, [boardId, live.map((r) => r.user_id)]);
     await client.query('COMMIT');
-    console.log(`Revoked ${email}'s token(s).`);
+    console.log(`Revoked ${live.length} token(s) named ${agentName} on "${board.name}".`);
   } else {
-    await client.query(
-      `INSERT INTO board_members (tab_id, user_id, role) VALUES ($1, $2, 'viewer') ON CONFLICT (tab_id, user_id) DO UPDATE SET role = 'viewer'`,
-      [boardId, user.id],
-    );
+    const userId = nanoid();
+    const email = agentEmail(agentName);
+    const role = scopes.includes('task:write') ? 'editor' : 'viewer';
+    await client.query(`INSERT INTO users (id, email, role, kind) VALUES ($1, $2, 'member', 'agent')`, [userId, email]);
+    await client.query(`INSERT INTO board_members (tab_id, user_id, role) VALUES ($1, $2, $3)`, [boardId, userId, role]);
     const { token, hash } = newToken(AGENT_PREFIX);
     await client.query(
       `INSERT INTO agent_tokens (id, user_id, tab_id, token_hash, scopes, label, expires_at)
        VALUES ($1, $2, $3, $4, $5::jsonb, $6, now() + ($7 || ' days')::interval)`,
-      [nanoid(), user.id, boardId, hash, JSON.stringify(scopes), agentName, String(days)],
+      [nanoid(), userId, boardId, hash, JSON.stringify(scopes), agentName, String(days)],
     );
     await client.query('COMMIT');
-    console.log(`Agent ${email} -> board "${board.name}" (${boardId}), scopes [${scopes.join(', ')}], expires in ${days}d.`);
+    console.log(`Agent ${email} (${role}) -> board "${board.name}" (${boardId}), scopes [${scopes.join(', ')}], expires in ${days}d.`);
     console.log(`\nToken (shown once, store it now):\n${token}\n`);
   }
 } catch (err) {

@@ -3,12 +3,14 @@
 // cannot be confused. The board comes from the token; routes never accept a board id from the caller.
 
 import { createHash, randomBytes } from 'node:crypto';
+import { customAlphabet } from 'nanoid';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { db, schema } from '../db/client.ts';
 import { boardRole } from './boards.ts';
 
-export const AGENT_SCOPES = ['board:read', 'task:comment'] as const;
+// `board:read` is always on; the other two are picked when the token is created.
+export const AGENT_SCOPES = ['board:read', 'task:comment', 'task:write'] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 export const AGENT_PREFIX = 'tgw_agent_';
@@ -26,6 +28,17 @@ declare module 'fastify' {
   interface FastifyRequest {
     agent?: AgentContext;
   }
+}
+
+const suffix = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 6);
+
+/**
+ * The agent user's email for one token: `<slug>-<6 random>@agent.invalid`. The suffix is what lets
+ * two boards (or two tokens) use the same name, since every token gets its own agent user.
+ */
+export function agentEmail(label: string): string {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'agent';
+  return `${slug}-${suffix()}@agent.invalid`;
 }
 
 export function hashToken(token: string): string {
