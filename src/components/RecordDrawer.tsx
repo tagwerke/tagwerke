@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError, type HistoryEntry, type PreviewRecord } from '../api/client';
 import { formatTimestamp, timeAgo } from '../util/dates';
+import { Notice } from './common/Notice';
 
 export interface PreviewTarget {
   type: string; // task | tab | user | board_member
@@ -66,7 +67,7 @@ export function RecordDrawer({ target, onClose }: { target: PreviewTarget; onClo
           <div className="record-tombstone">
             <strong>{target.fallbackLabel || `${target.type}:${target.id}`}</strong>
             <p>This record no longer exists — it was deleted or purged.</p>
-            {error && <div className="share-error">{error}</div>}
+            {error && <Notice>{error}</Notice>}
           </div>
         ) : (
           <>

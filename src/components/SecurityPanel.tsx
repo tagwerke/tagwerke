@@ -9,6 +9,7 @@ import { askConfirm } from '../confirm/useConfirm';
 import { auth, type PasskeyInfo } from '../api/client';
 import { timeAgo } from '../util/dates';
 import { PersonalTokens } from './tokens/PersonalTokens';
+import { Notice } from './common/Notice';
 
 interface Enroll {
   qr: string;
@@ -123,8 +124,8 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
           <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
         </header>
 
-        {notice && <div className="auth-notice">{notice}</div>}
-        {error && <div className="share-error">{error}</div>}
+        {notice && <Notice tone="success">{notice}</Notice>}
+        {error && <Notice>{error}</Notice>}
 
         <div className="security-body">
           <p className="security-status">

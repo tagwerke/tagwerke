@@ -26,6 +26,7 @@ import {
   parseDateRaw,
   distinctValues,
 } from '../util/csvImport';
+import { Notice } from './common/Notice';
 
 type Step = 'upload' | 'map' | 'status' | 'preview' | 'result';
 
@@ -214,7 +215,7 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
             <span className="file-drop-hint">.csv up to a few thousand rows</span>
             <input type="file" accept=".csv,text/csv" onChange={handleFile} />
           </label>
-          {parseError && <div className="share-error">{parseError}</div>}
+          {parseError && <Notice>{parseError}</Notice>}
         </div>
       )}
 
@@ -304,7 +305,7 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
             <p>{unmatchedHeuristic} assignee(s) won't match a real user — kept as a display label instead.</p>
           )}
           {skipped > 0 && <p>{skipped} row(s) skipped (no title).</p>}
-          {submitError && <div className="share-error">{submitError}</div>}
+          {submitError && <Notice>{submitError}</Notice>}
           <div className="modal-actions">
             <button className="btn ghost" onClick={() => setStep('status')} disabled={submitting}>back</button>
             <button className="btn primary" onClick={submit} disabled={submitting || !normalizedRows.length}>

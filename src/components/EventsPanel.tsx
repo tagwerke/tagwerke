@@ -7,6 +7,7 @@ import { api, ApiError, type AttendanceStatus, type BoardEvent } from '../api/cl
 import { useStore } from '../store';
 import { confirmDeleteEvent } from '../confirm/prompts';
 import { useSession } from '../session/useSession';
+import { Notice } from './common/Notice';
 
 // Common recurrence presets → RRULE. Raw entry is also allowed.
 const RECUR: { label: string; rrule: string | null }[] = [
@@ -80,7 +81,7 @@ export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: stri
 
   const body = (
     <>
-      {error && <div className="share-error">{error}</div>}
+      {error && <Notice>{error}</Notice>}
 
       <label className="events-location">
           <span>Location</span>

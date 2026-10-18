@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn, browserSupportsWebAuthnAutofill } from '@simplewebauthn/browser';
 import { useSession } from '../session/useSession';
 import { ApiError, auth as authApi, type OidcPublic } from '../api/client';
+import { Notice } from './common/Notice';
 
 // A user cancelling/dismissing a passkey prompt throws NotAllowedError — treat as a no-op.
 function isPasskeyCancel(err: unknown): boolean {
@@ -256,8 +257,8 @@ export function AuthScreen() {
           </label>
         )}
 
-        {notice && <div className="auth-notice">{notice}</div>}
-        {error && <div className="auth-error">{error}</div>}
+        {notice && <Notice tone="success">{notice}</Notice>}
+        {error && <Notice>{error}</Notice>}
 
         {!pwDisabledLogin && (
           <button className="btn primary auth-submit" type="submit" disabled={busy}>

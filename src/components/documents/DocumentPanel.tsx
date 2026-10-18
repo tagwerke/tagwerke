@@ -26,6 +26,7 @@ import {
   type ItemKind,
   type TextStatus,
 } from '../../types';
+import { Notice } from '../common/Notice';
 
 /** How often a running extraction is re-read. Runs are minutes at most (§4) and each poll is one
  *  small query, so this is frequent enough to feel live without being a busy loop. */
@@ -302,7 +303,7 @@ export function DocumentPanel({ documentId, onClose }: { documentId: ID; onClose
           <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
         </header>
 
-        {error && <div className="share-error">{error}</div>}
+        {error && <Notice>{error}</Notice>}
 
         <div className="doc-panel-actions">
           {/* A plain link: the session cookie authenticates it, so there is nothing for JS to do. */}

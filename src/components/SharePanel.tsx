@@ -14,6 +14,7 @@ import { EmailLookup } from './EmailLookup';
 import { ActivityDrawer } from './ActivityDrawer';
 import { TrashPanel } from './TrashPanel';
 import { BoardTokens } from './tokens/BoardTokens';
+import { Notice } from './common/Notice';
 
 const ROLES: BoardRole[] = ['viewer', 'editor', 'admin'];
 const RANK: Record<BoardRole, number> = { viewer: 0, editor: 1, admin: 2 };
@@ -132,7 +133,7 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
 
   const body = (
     <>
-      {error && <div className="share-error">{error}</div>}
+      {error && <Notice>{error}</Notice>}
 
       <ul className="share-members">
           {members?.map((m) => {

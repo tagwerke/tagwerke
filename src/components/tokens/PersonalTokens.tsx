@@ -9,6 +9,7 @@ import { useStore } from '../../store';
 import { timeAgo } from '../../util/dates';
 import { TokenSecret } from './TokenSecret';
 import { toggled, tokenError, useStepUpRun } from './useStepUpRun';
+import { Notice } from '../common/Notice';
 
 const SCOPES: { key: PatScope; label: string }[] = [
   { key: 'tasks', label: 'Create and edit tasks' },
@@ -96,7 +97,7 @@ export function PersonalTokens() {
       <p className="security-status">
         Personal access tokens <span className="security-sub">— let your own scripts and agents act as you, on the boards you choose</span>
       </p>
-      {error && <div className="share-error">{error}</div>}
+      {error && <Notice>{error}</Notice>}
       {created && <TokenSecret token={created.token} onDone={() => setCreated(null)} />}
 
       <ul className="token-list">

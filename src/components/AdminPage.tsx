@@ -9,6 +9,7 @@ import { navigate } from '../util/router';
 import { useSession } from '../session/useSession';
 import { AdminConsole } from './AdminConsole';
 import { AuditView } from './AuditView';
+import { Notice } from './common/Notice';
 
 type Gate = 'checking' | 'need-sudo' | 'ready';
 type Tab = 'manage' | 'audit';
@@ -80,7 +81,7 @@ export function AdminPage() {
               <input inputMode="numeric" value={totp} onChange={(e) => setTotp(e.target.value)} placeholder="6-digit or backup code" />
             </label>
           )}
-          {error && <div className="auth-error">{error}</div>}
+          {error && <Notice>{error}</Notice>}
           <button className="btn primary auth-submit" type="submit" disabled={busy}>{busy ? '…' : 'Continue'}</button>
           {browserSupportsWebAuthn() && (
             <button type="button" className="btn auth-sso" disabled={busy} onClick={elevatePasskey}>Use a passkey</button>

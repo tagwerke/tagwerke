@@ -26,6 +26,7 @@ import { confirmRevertTask } from '../confirm/prompts';
 import { formatTimestamp, timeAgo } from '../util/dates';
 import { fieldLabel, USER_FIELDS } from '../util/audit';
 import type { Comment } from '../types';
+import { Notice } from './common/Notice';
 
 type Kind = 'task' | 'tab';
 
@@ -272,8 +273,8 @@ export function ActivityDrawer({
           </header>
         )}
 
-        {error && <div className="share-error">{error}</div>}
-        {commentsError && <div className="share-error">{commentsError}</div>}
+        {error && <Notice>{error}</Notice>}
+        {commentsError && <Notice>{commentsError}</Notice>}
         {note && <div className="history-note">{note}</div>}
         {historyDenied && <div className="history-note">Change history is available to editors of this board.</div>}
 

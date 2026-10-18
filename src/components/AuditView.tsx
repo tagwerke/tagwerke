@@ -8,6 +8,7 @@ import { api, ApiError, auditExportUrl, type AuditCondition, type AuditEntry, ty
 import { formatTimestamp, timeAgo } from '../util/dates';
 import { fieldLabel } from '../util/audit';
 import { RecordDrawer, type PreviewTarget } from './RecordDrawer';
+import { Notice } from './common/Notice';
 
 // A condition carries an optional client-only display label (e.g. an actor's email for an id);
 // stripped to the {field, op, value} wire shape before it hits the API.
@@ -256,7 +257,7 @@ export function AuditView() {
         <a className="btn ghost" href={auditExportUrl('ndjson', params())}>NDJSON</a>
       </div>
 
-      {error && <div className="share-error">{error}</div>}
+      {error && <Notice>{error}</Notice>}
 
       <div className="audit-table">
         <div className="audit-row audit-head">

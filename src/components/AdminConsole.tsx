@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError, type AdminInvite, type AdminUser, type OidcConfig } from '../api/client';
 import { askConfirm, type ConfirmRequest } from '../confirm/useConfirm';
 import { useSession } from '../session/useSession';
+import { Notice } from './common/Notice';
 
 export function AdminConsole() {
   const me = useSession((s) => s.user);
@@ -64,7 +65,7 @@ export function AdminConsole() {
 
   return (
     <div className="admin-console">
-      {error && <div className="share-error">{error}</div>}
+      {error && <Notice>{error}</Notice>}
 
       <section className="admin-section">
         <h4>Invites</h4>

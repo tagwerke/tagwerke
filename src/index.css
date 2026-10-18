@@ -11,6 +11,8 @@
   --accent: #2d2a25;
   --pop: #ff6a3d;
   --pop-2: #f7c948;
+  --danger: #b3321f;
+  --success: #2f7d4f;
   --shadow-card: 0 1px 0 rgba(27,24,20,0.04), 0 6px 18px -10px rgba(27,24,20,0.18);
   --shadow-pop:  0 1px 0 rgba(27,24,20,0.06), 0 18px 40px -16px rgba(27,24,20,0.30);
   --r-sm: 6px;
@@ -39,6 +41,8 @@
     --line: rgba(240, 235, 222, 0.10);
     --line-strong: rgba(240, 235, 222, 0.20);
     --accent: #f0ebde;
+    --danger: #ff8a73;
+    --success: #7bd49a;
     --shadow-card: 0 1px 0 rgba(0,0,0,0.2), 0 8px 20px -10px rgba(0,0,0,0.6);
     --shadow-pop: 0 1px 0 rgba(0,0,0,0.3), 0 18px 40px -16px rgba(0,0,0,0.8);
   }
@@ -1224,10 +1228,19 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .share-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .share-head strong { font-family: var(--serif); font-style: italic; font-size: 19px; font-weight: 500; }
-.share-error {
-  background: rgba(190,60,40,0.08); border: 1px solid rgba(190,60,40,0.3);
-  color: #a23; border-radius: var(--r-sm); padding: 7px 10px; font-size: 13px; margin-bottom: 10px;
+/* Inline banner (components/common/Notice.tsx): the one error / success / info look. */
+.notice {
+  --notice: var(--ink-soft);
+  color: var(--notice);
+  background: color-mix(in srgb, var(--notice) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--notice) 28%, transparent);
+  border-radius: var(--r-sm);
+  padding: 8px 11px;
+  font-size: 13px;
+  margin-bottom: 12px;
 }
+.notice-error { --notice: var(--danger); }
+.notice-success { --notice: var(--success); }
 .share-members { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .share-member { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
 .share-email { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1608,15 +1621,6 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .auth-reveal:hover { color: var(--ink); }
 .auth-reveal[aria-pressed="true"] { color: var(--pop); }
-.auth-error {
-  background: rgba(168, 88, 31, 0.08);
-  border: 1px solid rgba(168, 88, 31, 0.30);
-  color: #a8581f;
-  font-size: 13px;
-  border-radius: var(--r-sm);
-  padding: 8px 11px;
-  margin-bottom: 14px;
-}
 .auth-submit {
   width: 100%;
   height: 40px;
@@ -2015,17 +2019,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .board-activity .ba-name { color: var(--ink-soft); font-weight: 600; }
 .board-activity .ba-when { color: var(--ink-mute); }
 
-/* password-reset / success notice on the auth screen */
-.auth-notice {
-  font-size: 13px;
-  color: var(--ink-soft);
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 8px 11px;
-  margin-bottom: 14px;
-}
-
 /* ── security / two-factor panel ──────────────────────────────────────── */
 .security-body { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
 .security-status { font-size: 14px; color: var(--ink-soft); }
@@ -2233,7 +2226,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .history-panel > .history-toggle,
 .history-panel > .comment-composer,
 .history-panel > .history-note,
-.history-panel > .share-error { flex: none; }
+.history-panel > .notice { flex: none; }
 .history-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
 .history-panel > .history-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
 .history-entry { padding: 8px 2px; border-bottom: 1px solid var(--line); }

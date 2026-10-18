@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError, type TrashedTask } from '../api/client';
 import { useStore } from '../store';
 import { timeAgo } from '../util/dates';
+import { Notice } from './common/Notice';
 
 export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName: string; onClose: () => void }) {
   const members = useStore((s) => s.membersByBoard[tabId]);
@@ -52,7 +53,7 @@ export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName
           <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
         </header>
 
-        {error && <div className="share-error">{error}</div>}
+        {error && <Notice>{error}</Notice>}
 
         <ul className="trash-list">
           {tasks?.map((t) => (

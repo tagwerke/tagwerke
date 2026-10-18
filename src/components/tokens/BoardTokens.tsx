@@ -9,6 +9,7 @@ import { askConfirm } from '../../confirm/useConfirm';
 import { timeAgo } from '../../util/dates';
 import { TokenSecret } from './TokenSecret';
 import { toggled, tokenError, useStepUpRun } from './useStepUpRun';
+import { Notice } from '../common/Notice';
 
 const SCOPES: { key: AgentExtraScope; label: string }[] = [
   { key: 'task:comment', label: 'Comment on tasks' },
@@ -83,7 +84,7 @@ export function BoardTokens({ tabId, onChange }: { tabId: string; onChange: () =
     <div className="board-settings board-tokens">
       <strong>API tokens</strong>
       <span className="security-sub">For an agent working on this board. It can’t mark tasks done, delete anything or change members or settings.</span>
-      {error && <div className="share-error">{error}</div>}
+      {error && <Notice>{error}</Notice>}
       {created && <TokenSecret token={created.token} onDone={() => setCreated(null)} />}
 
       <ul className="token-list">
