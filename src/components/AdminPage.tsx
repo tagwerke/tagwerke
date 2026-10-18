@@ -71,12 +71,12 @@ export function AdminPage() {
         <form className="admin-sudo auth-card" onSubmit={elevate}>
           <h1 className="auth-title">Tagwerke</h1>
           <p className="auth-sub">Confirm it’s you to manage the workspace</p>
-          <label className="auth-field">
+          <label className="field">
             <span>password</span>
             <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
           </label>
           {totpEnabled && (
-            <label className="auth-field">
+            <label className="field">
               <span>two-factor code</span>
               <input inputMode="numeric" value={totp} onChange={(e) => setTotp(e.target.value)} placeholder="6-digit or backup code" />
             </label>

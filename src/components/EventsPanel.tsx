@@ -103,7 +103,7 @@ export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: stri
                   {ev.rrule && <em className="event-recur"> · repeats</em>}
                 </span>
                 <button
-                  className="icon-btn"
+                  className="row-action danger"
                   disabled={busy}
                   title="delete event"
                   onClick={() =>
@@ -112,7 +112,7 @@ export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: stri
                     })
                   }
                 >
-                  ✕
+                  Delete
                 </button>
               </div>
               <div className="event-occurrences">

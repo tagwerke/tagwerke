@@ -157,12 +157,12 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
                 )}
                 {(isAdmin || self) && (
                   <button
-                    className="icon-btn"
+                    className="row-action danger"
                     disabled={busy}
                     title={self ? 'leave board' : 'remove'}
                     onClick={() => void removeMember(m, self)}
                   >
-                    {self ? 'Leave' : '✕'}
+                    {self ? 'Leave' : 'Remove'}
                   </button>
                 )}
               </li>

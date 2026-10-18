@@ -184,7 +184,7 @@ export function AuthScreen() {
         <p className="auth-sub">{title}</p>
 
         {showEmail && (
-          <label className="auth-field">
+          <label className="field">
             <span>email</span>
             <input
               type="email"
@@ -198,7 +198,7 @@ export function AuthScreen() {
         )}
 
         {showPasswordField && (
-          <label className="auth-field">
+          <label className="field">
             <span>{mode === 'reset' ? 'new password' : 'password'}</span>
             <div className="auth-password">
             <input
@@ -229,7 +229,7 @@ export function AuthScreen() {
         )}
 
         {mode === 'login' && totpRequired && (
-          <label className="auth-field">
+          <label className="field">
             <span>two-factor code</span>
             <input
               type="text"
@@ -245,7 +245,7 @@ export function AuthScreen() {
         )}
 
         {mode === 'signup' && (
-          <label className="auth-field">
+          <label className="field">
             <span>invite code</span>
             <input
               type="text"
@@ -280,7 +280,7 @@ export function AuthScreen() {
                 {/* Enforced-SSO mode hides the password signup form, so a first-time user has
                     nowhere else to present an invite — offer an optional code beside the button. */}
                 {pwDisabledLogin && (
-                  <label className="auth-field">
+                  <label className="field">
                     <span>invite code</span>
                     <input
                       type="text"

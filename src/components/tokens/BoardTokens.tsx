@@ -96,7 +96,7 @@ export function BoardTokens({ tabId, onChange }: { tabId: string; onChange: () =
                 {scopeText(t.scopes)} · {t.expiresAt ? `expires ${new Date(t.expiresAt).toLocaleDateString()}` : 'no expiry'} · {t.lastUsedAt ? `used ${timeAgo(t.lastUsedAt)}` : 'never used'}
               </span>
             </div>
-            <button className="icon-btn" title="revoke token" onClick={() => void revoke(t)}>✕</button>
+            <button className="row-action danger" onClick={() => void revoke(t)}>Revoke</button>
           </li>
         ))}
         {!tokens.length && <li className="share-empty">No tokens.</li>}
@@ -106,11 +106,11 @@ export function BoardTokens({ tabId, onChange }: { tabId: string; onChange: () =
         <button className="btn ghost" onClick={() => { setOpen(true); setCreated(null); }}>New API token</button>
       ) : (
         <form className="token-form" onSubmit={(e) => void create(e)}>
-          <label className="auth-field">
+          <label className="field">
             <span>name</span>
             <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Release bot" maxLength={80} autoFocus />
           </label>
-          <label className="auth-field">
+          <label className="field">
             <span>expires</span>
             <select value={days} onChange={(e) => setDays(Number(e.target.value) as TokenDays)}>
               {TOKEN_DAYS.map((d) => <option key={d} value={d}>in {d} days</option>)}

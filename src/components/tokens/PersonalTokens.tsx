@@ -112,7 +112,7 @@ export function PersonalTokens() {
                 expires {new Date(t.expiresAt).toLocaleDateString()} · {t.lastUsedAt ? `used ${timeAgo(t.lastUsedAt)}${t.lastUsedIp ? ` from ${t.lastUsedIp}` : ''}` : 'never used'}
               </span>
             </div>
-            <button className="icon-btn" title="revoke token" onClick={() => void revoke(t)}>✕</button>
+            <button className="row-action danger" onClick={() => void revoke(t)}>Revoke</button>
           </li>
         ))}
         {!tokens.length && <li className="share-empty">No tokens yet.</li>}
@@ -122,11 +122,11 @@ export function PersonalTokens() {
         <button className="btn ghost" onClick={() => { setOpen(true); setCreated(null); }}>New token</button>
       ) : (
         <form className="token-form" onSubmit={(e) => void create(e)}>
-          <label className="auth-field">
+          <label className="field">
             <span>name</span>
             <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Chuck’s planning agent" maxLength={80} autoFocus />
           </label>
-          <label className="auth-field">
+          <label className="field">
             <span>expires</span>
             <select value={days} onChange={(e) => setDays(Number(e.target.value) as TokenDays)}>
               {TOKEN_DAYS.map((d) => <option key={d} value={d}>in {d} days</option>)}

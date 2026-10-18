@@ -156,7 +156,7 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
                   ))}
                 </ul>
               </div>
-              <label className="auth-field">
+              <label className="field">
                 <span>code</span>
                 <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" placeholder="6-digit code" autoFocus />
               </label>
@@ -166,7 +166,7 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
 
           {enabled && (
             <div className="security-disable">
-              <label className="auth-field">
+              <label className="field">
                 <span>code to disable</span>
                 <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" placeholder="current or backup code" />
               </label>
@@ -182,7 +182,7 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
                   <span className="passkey-name">{p.nickname}</span>
                   <span className="passkey-meta">added {timeAgo(p.createdAt)}{p.lastUsedAt ? ` · used ${timeAgo(p.lastUsedAt)}` : ''}</span>
                   <button className="link-btn" disabled={busy} onClick={() => renamePasskey(p.id, p.nickname)}>rename</button>
-                  <button className="icon-btn" disabled={busy} title="remove passkey" onClick={() => void removePasskey(p.id, p.nickname)}>✕</button>
+                  <button className="row-action danger" disabled={busy} onClick={() => void removePasskey(p.id, p.nickname)}>Remove</button>
                 </li>
               ))}
               {!passkeys.length && <li className="share-empty">No passkeys yet.</li>}

@@ -170,6 +170,15 @@ input, select, textarea { font: inherit; color: inherit; }
   font-size: 12px;
 }
 .link-btn:hover { color: var(--ink); }
+/* Row-level action: a small labelled text button. Destructive ones go red on hover; a bare ✕ is
+   reserved for closing a surface. */
+.row-action {
+  background: transparent; border: 0; padding: 4px 6px;
+  border-radius: var(--r-sm); font-size: 12px; color: var(--ink-soft);
+}
+.row-action:hover { color: var(--ink); background: var(--line); }
+.row-action.danger:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.row-action:disabled { opacity: 0.5; cursor: default; }
 
 /* ── Loadout (starred row) ────────────────────────────────────────────── */
 .loadout {
@@ -1146,17 +1155,22 @@ input, select, textarea { font: inherit; color: inherit; }
   margin: 0 0 14px;
   font-size: 22px;
 }
-.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
 .field > span { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-mute); }
 .field input, .field select {
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background: var(--bg-elev);
-  padding: 8px 10px;
+  padding: 10px 12px;
   outline: none;
   font-size: 14px;
+  transition: border-color .12s ease, box-shadow .12s ease;
 }
-.field input:focus, .field select:focus { border-color: var(--pop); }
+.field input:focus, .field select:focus {
+  border-color: var(--pop);
+  box-shadow: 0 0 0 3px rgba(255, 106, 61, 0.12);
+}
+.field input::placeholder { color: var(--ink-mute); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 /* Confirm dialog (src/components/common/ConfirmDialog.tsx). Sits ABOVE every other surface —
@@ -1255,7 +1269,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .share-add input { flex: 1; }
 /* Direct child only: the Add button. A bare `.share-add button` also styled the nested lookup
    result rows (they're buttons inside this form) and fought their own styling. */
-.share-add > button, .share-member .icon-btn {
+.share-add > button {
   border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev);
   padding: 6px 10px; font-size: 13px; cursor: pointer;
 }
@@ -1583,32 +1597,6 @@ input, select, textarea { font: inherit; color: inherit; }
   font-size: 13px;
   margin: 6px 0 24px;
 }
-.auth-field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-bottom: 14px;
-}
-.auth-field > span {
-  font-size: 11px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.auth-field input {
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--bg-elev);
-  padding: 10px 12px;
-  font-size: 14px;
-  outline: none;
-  transition: border-color .12s ease, box-shadow .12s ease;
-}
-.auth-field input:focus {
-  border-color: var(--pop);
-  box-shadow: 0 0 0 3px rgba(255, 106, 61, 0.12);
-}
-.auth-field input::placeholder { color: var(--ink-mute); }
 .auth-password { position: relative; display: flex; }
 .auth-password input { flex: 1; padding-right: 40px; }
 .auth-reveal {
@@ -2044,7 +2032,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background:var(--line); }
 .btn.auth-sso { width:100%; justify-content:center; border:1px solid var(--line-strong); color:var(--ink); background:var(--bg-paper); }
 .btn.auth-sso + .btn.auth-sso { margin-top:10px; }
-.btn.auth-sso + .auth-field { margin-top:14px; }
+.btn.auth-sso + .field { margin-top:14px; }
 .btn.auth-sso:hover { border-color:var(--ink); }
 .sso-form { display:flex; flex-direction:column; gap:12px; max-width:440px; }
 .sso-row { display:flex; flex-direction:column; gap:4px; }
@@ -2675,7 +2663,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .board-panel-body .share-email em { font-size: 11px; }
 .board-panel-body .share-role { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
 .board-panel-body .share-member select { font-size: 11px; border-radius: 999px; padding: 3px 8px; }
-.board-panel-body .share-member .icon-btn { font-size: 11px; color: var(--ink-mute); }
 .board-panel-body .share-add { margin-top: 14px; gap: 6px; }
 .board-panel-body .share-add input { flex: 1; height: 32px; border-radius: var(--r-sm); }
 .board-panel-body .share-add > button { border-radius: var(--r-sm); background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 600; }

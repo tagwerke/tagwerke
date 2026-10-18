@@ -99,7 +99,7 @@ export function AdminConsole() {
             <li key={inv.code} className="share-member">
               <span className="share-email"><code>{inv.code}</code> <em>{inv.usedCount ?? 0}/{inv.maxUses} used{inv.note ? ` · ${inv.note}` : ''}{inv.expiresAt ? ` · exp ${inv.expiresAt.slice(0, 10)}` : ''}</em></span>
               <button
-                className="icon-btn"
+                className="row-action danger"
                 disabled={busy}
                 title="revoke"
                 onClick={() =>
@@ -118,7 +118,7 @@ export function AdminConsole() {
                   )
                 }
               >
-                ✕
+                Revoke
               </button>
             </li>
           ))}
@@ -211,7 +211,7 @@ export function AdminConsole() {
                       reset passkeys
                     </button>
                     <button
-                      className="icon-btn"
+                      className={`row-action ${deactivated ? '' : 'danger'}`}
                       disabled={busy}
                       title={deactivated ? 'reactivate' : 'deactivate'}
                       onClick={() => {
@@ -227,7 +227,7 @@ export function AdminConsole() {
                         );
                       }}
                     >
-                      {deactivated ? '↺' : '⏻'}
+                      {deactivated ? 'Reactivate' : 'Deactivate'}
                     </button>
                   </>
                 )}
