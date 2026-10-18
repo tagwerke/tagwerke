@@ -19,7 +19,7 @@ export const PAT_SCOPES = ['tasks', 'comments', 'boards'] as const;
 export type PatScope = (typeof PAT_SCOPES)[number];
 
 /** A route's declaration: `'read'` (any token) or the one write scope it needs. */
-export type PatRouteAccess = 'read' | PatScope;
+type PatRouteAccess = 'read' | PatScope;
 
 export interface PatContext {
   id: string;

@@ -156,6 +156,7 @@ export function registerAuditHook(app: FastifyInstance): void {
     if (path.startsWith('/api/auth')) return; // sensitive + enriched in auth routes
 
     const coarse = isContentRoute(path);
+    const body = coarse ? null : (redact(req.body) as Record<string, unknown> | null);
     recordAudit({
       actorId: req.user?.id ?? null,
       action: `${req.method} ${req.routeOptions?.url ?? path}`,
@@ -166,7 +167,7 @@ export function registerAuditHook(app: FastifyInstance): void {
       scopeId: req.boardScope ?? null,
       method: req.method,
       // A write through a personal access token says so, even on the coarse (no-body) rows.
-      payload: req.pat ? { ...(coarse ? {} : (redact(req.body) as object | null)), ...tokenStamp(req) } : coarse ? null : redact(req.body),
+      payload: req.pat ? { ...body, ...tokenStamp(req) } : body,
       status: reply.statusCode,
     });
 

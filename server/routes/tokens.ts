@@ -19,20 +19,23 @@ import { recordAudit } from '../lib/audit.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Expiry is required — there is no "never".
+const days = z.union([z.literal(30), z.literal(90), z.literal(365)]);
+
 const createBody = z.object({
   label: z.string().trim().min(1).max(80),
-  scopes: z.array(z.enum(PAT_SCOPES)).max(PAT_SCOPES.length),
+  scopes: z.array(z.enum(PAT_SCOPES)),
   allBoards: z.boolean(),
   boardIds: z.array(z.string().min(1)).max(200),
   // Expiry is required — there is no "never".
-  days: z.union([z.literal(30), z.literal(90), z.literal(365)]),
+  days,
 });
 
 const agentTokenBody = z.object({
-  label: z.string().trim().min(1).max(60),
+  label: z.string().trim().min(1).max(80),
   // `board:read` is always on; these are the optional extras.
-  scopes: z.array(z.enum(['task:comment', 'task:write'])).max(2),
-  days: z.union([z.literal(30), z.literal(90), z.literal(365)]),
+  scopes: z.array(z.enum(['task:comment', 'task:write'])),
+  days,
 });
 
 const CREATE_RL = { max: 10, timeWindow: '1 minute' } as const;
@@ -148,7 +151,6 @@ export async function tokenRoutes(app: FastifyInstance): Promise<void> {
         .filter((r) => !r.expiresAt || r.expiresAt.getTime() > Date.now())
         .map((r) => ({
           id: r.id,
-          agentUserId: r.userId,
           label: r.label,
           scopes: r.scopes,
           createdAt: r.createdAt.toISOString(),

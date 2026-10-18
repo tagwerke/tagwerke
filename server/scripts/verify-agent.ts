@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- these scripts probe untyped JSON responses */
 // End-to-end check of the agent API (AGENT_API.md): bearer auth, one-board scoping, scopes,
-// provenance wrapping, comment neutralizing, and the rule that an agent can never act as a session
-// user, task writes (task:write), and the board-admin token management routes. Runs against the dev DB in throwaway boards it cleans up.
+// provenance wrapping, comment neutralizing, task writes (task:write), the board-admin token
+// management routes, and the rule that an agent can never act as a session user. Runs against the
+// dev DB in throwaway boards it cleans up.
 //
 //   npm run verify:agent
 

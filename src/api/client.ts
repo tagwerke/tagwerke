@@ -256,7 +256,7 @@ export const api = {
   tokens: {
     list: () => req<{ tokens: PersonalToken[] }>('/api/tokens'),
     create: (b: { label: string; scopes: PatScope[]; allBoards: boolean; boardIds: ID[]; days: TokenDays }) =>
-      req<CreatedToken & { allBoards: boolean; boardIds: ID[] }>('/api/tokens', { method: 'POST', body: JSON.stringify(b) }),
+      req<CreatedToken>('/api/tokens', { method: 'POST', body: JSON.stringify(b) }),
     revoke: (id: ID) => req(`/api/tokens/${id}`, { method: 'DELETE' }),
   },
   agentTokens: {
@@ -619,7 +619,8 @@ export interface BoardMember {
 
 export type PatScope = 'tasks' | 'comments' | 'boards';
 export type AgentExtraScope = 'task:comment' | 'task:write';
-export type TokenDays = 30 | 90 | 365;
+export const TOKEN_DAYS = [30, 90, 365] as const;
+export type TokenDays = (typeof TOKEN_DAYS)[number];
 
 /** A personal access token as listed — never the secret. */
 export interface PersonalToken {

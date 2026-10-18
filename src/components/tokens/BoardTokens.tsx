@@ -4,17 +4,16 @@
 // documents or secrets.
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type AgentExtraScope, type BoardToken, type CreatedToken, type TokenDays } from '../../api/client';
+import { api, type AgentExtraScope, type BoardToken, type CreatedToken, type TokenDays, TOKEN_DAYS } from '../../api/client';
 import { askConfirm } from '../../confirm/useConfirm';
 import { timeAgo } from '../../util/dates';
 import { TokenSecret } from './TokenSecret';
-import { tokenError, useStepUpRun } from './useStepUpRun';
+import { toggled, tokenError, useStepUpRun } from './useStepUpRun';
 
 const SCOPES: { key: AgentExtraScope; label: string }[] = [
   { key: 'task:comment', label: 'Comment on tasks' },
   { key: 'task:write', label: 'Create and edit tasks' },
 ];
-const DAYS: TokenDays[] = [30, 90, 365];
 
 const scopeText = (scopes: string[]) =>
   scopes.includes('task:write') ? 'reads, comments, creates and edits tasks'
@@ -80,15 +79,6 @@ export function BoardTokens({ tabId, onChange }: { tabId: string; onChange: () =
     }
   }
 
-  function toggle(key: AgentExtraScope): void {
-    setScopes((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
-
   return (
     <div className="board-settings board-tokens">
       <strong>API tokens</strong>
@@ -117,19 +107,19 @@ export function BoardTokens({ tabId, onChange }: { tabId: string; onChange: () =
         <form className="token-form" onSubmit={(e) => void create(e)}>
           <label className="auth-field">
             <span>name</span>
-            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Release bot" maxLength={60} autoFocus />
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Release bot" maxLength={80} autoFocus />
           </label>
           <label className="auth-field">
             <span>expires</span>
             <select value={days} onChange={(e) => setDays(Number(e.target.value) as TokenDays)}>
-              {DAYS.map((d) => <option key={d} value={d}>in {d} days</option>)}
+              {TOKEN_DAYS.map((d) => <option key={d} value={d}>in {d} days</option>)}
             </select>
           </label>
           <fieldset className="token-fieldset">
             <legend>It reads this board, and also:</legend>
             {SCOPES.map((s) => (
               <label key={s.key} className="board-setting">
-                <input type="checkbox" checked={scopes.has(s.key)} onChange={() => toggle(s.key)} />
+                <input type="checkbox" checked={scopes.has(s.key)} onChange={() => setScopes(toggled(scopes, s.key))} />
                 {s.label}
               </label>
             ))}

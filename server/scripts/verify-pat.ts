@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- these scripts probe untyped JSON responses */
 // End-to-end check of personal access tokens (PAT_PLAN.md): bearer auth, deny-by-default, board
 // reach, scopes, token management, and the audit stamp. Runs against the dev DB in throwaway
 // users and boards that it cleans up.

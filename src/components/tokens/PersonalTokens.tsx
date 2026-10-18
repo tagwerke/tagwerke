@@ -3,12 +3,12 @@
 // is implied; the checkboxes cover writing only. Nothing is ticked by default.
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type CreatedToken, type PatScope, type PersonalToken, type TokenDays } from '../../api/client';
+import { api, type CreatedToken, type PatScope, type PersonalToken, type TokenDays, TOKEN_DAYS } from '../../api/client';
 import { askConfirm } from '../../confirm/useConfirm';
 import { useStore } from '../../store';
 import { timeAgo } from '../../util/dates';
 import { TokenSecret } from './TokenSecret';
-import { tokenError, useStepUpRun } from './useStepUpRun';
+import { toggled, tokenError, useStepUpRun } from './useStepUpRun';
 
 const SCOPES: { key: PatScope; label: string }[] = [
   { key: 'tasks', label: 'Create and edit tasks' },
@@ -16,19 +16,11 @@ const SCOPES: { key: PatScope; label: string }[] = [
   { key: 'boards', label: 'Create boards, rename them and their sprints' },
 ];
 
-const DAYS: TokenDays[] = [30, 90, 365];
 
 function boardsText(t: PersonalToken, names: Record<string, string>): string {
   if (t.allBoards) return 'all your boards, including future ones';
   if (!t.boardIds.length) return 'no boards';
   return t.boardIds.map((id) => names[id] ?? 'a deleted board').join(', ');
-}
-
-function toggled<T>(set: Set<T>, v: T): Set<T> {
-  const next = new Set(set);
-  if (next.has(v)) next.delete(v);
-  else next.add(v);
-  return next;
 }
 
 export function PersonalTokens() {
@@ -136,7 +128,7 @@ export function PersonalTokens() {
           <label className="auth-field">
             <span>expires</span>
             <select value={days} onChange={(e) => setDays(Number(e.target.value) as TokenDays)}>
-              {DAYS.map((d) => <option key={d} value={d}>in {d} days</option>)}
+              {TOKEN_DAYS.map((d) => <option key={d} value={d}>in {d} days</option>)}
             </select>
           </label>
           <fieldset className="token-fieldset">

@@ -27,6 +27,14 @@ export function useStepUpRun(): { run: <T>(fn: () => Promise<T>) => Promise<T | 
   return { run, dialog };
 }
 
+/** A copy of `set` with `v` added, or removed if it was there. */
+export function toggled<T>(set: Set<T>, v: T): Set<T> {
+  const next = new Set(set);
+  if (next.has(v)) next.delete(v);
+  else next.add(v);
+  return next;
+}
+
 /** The server's message for a failed token request, without the `METHOD /path -> 400` prefix. */
 export function tokenError(err: unknown): string {
   if (err instanceof ApiError) return err.data?.error ?? `Request failed (${err.status})`;

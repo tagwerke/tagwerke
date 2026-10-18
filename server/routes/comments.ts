@@ -259,7 +259,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
     recordAudit({
       actorId: userId, action: 'comment_delete', targetType: 'task_comment', targetId: id,
       scopeId: before.tabId, method: 'DELETE', status: 200,
-      payload: { taskId: before.taskId, byAuthor: true, body: before.body, ...tokenStamp(req) },
+      payload: { taskId: before.taskId, body: before.body, ...tokenStamp(req) },
     });
     publishComment(before.tabId, 'delete', dto, userId);
     return reply.send({ ok: true });
