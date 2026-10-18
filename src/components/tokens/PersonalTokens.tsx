@@ -11,6 +11,7 @@ import { TokenSecret } from './TokenSecret';
 import { toggled, tokenError, useStepUpRun } from './useStepUpRun';
 import { Notice } from '../common/Notice';
 import { EmptyState } from '../common/EmptyState';
+import { Section } from '../common/Section';
 
 const SCOPES: { key: PatScope; label: string }[] = [
   { key: 'tasks', label: 'Create and edit tasks' },
@@ -94,76 +95,75 @@ export function PersonalTokens() {
   }
 
   return (
-    <div className="security-tokens">
-      <p className="security-status">
-        Personal access tokens <span className="security-sub">— let your own scripts and agents act as you, on the boards you choose</span>
-      </p>
-      {error && <Notice>{error}</Notice>}
-      {created && <TokenSecret token={created.token} onDone={() => setCreated(null)} />}
+    <Section title="Personal access tokens" description="Let your own scripts and agents act as you, on the boards you choose.">
+      <div className="security-tokens">
+        {error && <Notice>{error}</Notice>}
+        {created && <TokenSecret token={created.token} onDone={() => setCreated(null)} />}
 
-      <ul className="token-list">
-        {tokens.map((t) => (
-          <li key={t.id} className="token-item">
-            <div className="token-main">
-              <span className="token-name">{t.label}</span>
-              <span className="token-meta">
-                {t.scopes.length ? `can ${t.scopes.join(', ')}` : 'read only'} · {boardsText(t, names)}
-              </span>
-              <span className="token-meta">
-                expires {new Date(t.expiresAt).toLocaleDateString()} · {t.lastUsedAt ? `used ${timeAgo(t.lastUsedAt)}${t.lastUsedIp ? ` from ${t.lastUsedIp}` : ''}` : 'never used'}
-              </span>
-            </div>
-            <button className="row-action danger" onClick={() => void revoke(t)}>Revoke</button>
-          </li>
-        ))}
-        {!tokens.length && <EmptyState as="li">No tokens yet.</EmptyState>}
-      </ul>
+        <ul className="token-list">
+          {tokens.map((t) => (
+            <li key={t.id} className="token-item">
+              <div className="token-main">
+                <span className="token-name">{t.label}</span>
+                <span className="token-meta">
+                  {t.scopes.length ? `can ${t.scopes.join(', ')}` : 'read only'} · {boardsText(t, names)}
+                </span>
+                <span className="token-meta">
+                  expires {new Date(t.expiresAt).toLocaleDateString()} · {t.lastUsedAt ? `used ${timeAgo(t.lastUsedAt)}${t.lastUsedIp ? ` from ${t.lastUsedIp}` : ''}` : 'never used'}
+                </span>
+              </div>
+              <button className="row-action danger" onClick={() => void revoke(t)}>Revoke</button>
+            </li>
+          ))}
+          {!tokens.length && <EmptyState as="li">No tokens yet.</EmptyState>}
+        </ul>
 
-      {!open ? (
-        <button className="btn ghost" onClick={() => { setOpen(true); setCreated(null); }}>New token</button>
-      ) : (
-        <form className="token-form" onSubmit={(e) => void create(e)}>
-          <label className="field">
-            <span>name</span>
-            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Chuck’s planning agent" maxLength={80} autoFocus />
-          </label>
-          <label className="field">
-            <span>expires</span>
-            <select value={days} onChange={(e) => setDays(Number(e.target.value) as TokenDays)}>
-              {TOKEN_DAYS.map((d) => <option key={d} value={d}>in {d} days</option>)}
-            </select>
-          </label>
-          <fieldset className="token-fieldset">
-            <legend>It can read the boards below, and also:</legend>
-            {SCOPES.map((s) => (
-              <label key={s.key} className="board-setting">
-                <input type="checkbox" checked={scopes.has(s.key)} onChange={() => setScopes(toggled(scopes, s.key))} />
-                {s.label}
-              </label>
-            ))}
-          </fieldset>
-          <fieldset className="token-fieldset">
-            <legend>Boards</legend>
-            <label className="board-setting">
-              <input type="checkbox" checked={allBoards} onChange={(e) => setAllBoards(e.target.checked)} />
-              All my boards, including future ones
+        {!open ? (
+          <button className="btn ghost" onClick={() => { setOpen(true); setCreated(null); }}>New token</button>
+        ) : (
+          <form className="token-form" onSubmit={(e) => void create(e)}>
+            <label className="field">
+              <span>name</span>
+              <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Chuck’s planning agent" maxLength={80} autoFocus />
             </label>
-            {!allBoards && tabOrder.map((id) => (
-              <label key={id} className="board-setting">
-                <input type="checkbox" checked={boardIds.has(id)} onChange={() => setBoardIds(toggled(boardIds, id))} />
-                {tabs[id]?.name}
+            <label className="field">
+              <span>expires</span>
+              <select value={days} onChange={(e) => setDays(Number(e.target.value) as TokenDays)}>
+                {TOKEN_DAYS.map((d) => <option key={d} value={d}>in {d} days</option>)}
+              </select>
+            </label>
+            <fieldset className="token-fieldset">
+              <legend>It can read the boards below, and also:</legend>
+              {SCOPES.map((s) => (
+                <label key={s.key} className="board-setting">
+                  <input type="checkbox" checked={scopes.has(s.key)} onChange={() => setScopes(toggled(scopes, s.key))} />
+                  {s.label}
+                </label>
+              ))}
+            </fieldset>
+            <fieldset className="token-fieldset">
+              <legend>Boards</legend>
+              <label className="board-setting">
+                <input type="checkbox" checked={allBoards} onChange={(e) => setAllBoards(e.target.checked)} />
+                All my boards, including future ones
               </label>
-            ))}
-            {!allBoards && !boardIds.size && <span className="security-sub">No boards ticked: the token can’t see any.</span>}
-          </fieldset>
-          <p className="security-sub">A token never reaches secrets, members, board settings or your account security, whatever is ticked.</p>
-          <div className="token-form-actions">
-            <button type="button" className="btn ghost" onClick={() => setOpen(false)}>Cancel</button>
-            <button type="submit" className="btn primary" disabled={busy || !label.trim()}>{busy ? '…' : 'Create token'}</button>
-          </div>
-        </form>
-      )}
-      {dialog}
-    </div>
+              {!allBoards && tabOrder.map((id) => (
+                <label key={id} className="board-setting">
+                  <input type="checkbox" checked={boardIds.has(id)} onChange={() => setBoardIds(toggled(boardIds, id))} />
+                  {tabs[id]?.name}
+                </label>
+              ))}
+              {!allBoards && !boardIds.size && <span className="security-sub">No boards ticked: the token can’t see any.</span>}
+            </fieldset>
+            <p className="security-sub">A token never reaches secrets, members, board settings or your account security, whatever is ticked.</p>
+            <div className="token-form-actions">
+              <button type="button" className="btn ghost" onClick={() => setOpen(false)}>Cancel</button>
+              <button type="submit" className="btn primary" disabled={busy || !label.trim()}>{busy ? '…' : 'Create token'}</button>
+            </div>
+          </form>
+        )}
+        {dialog}
+      </div>
+    </Section>
   );
 }
