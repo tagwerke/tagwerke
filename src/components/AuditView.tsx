@@ -142,7 +142,7 @@ function AddFilter({ onAdd }: { onAdd: (c: UICondition) => void }) {
 
   return (
     <div className="audit-addfilter" ref={ref}>
-      <button className="audit-chip audit-chip-add" onClick={() => setOpen((o) => !o)}>+ filter</button>
+      <button className="pill audit-chip audit-chip-add" onClick={() => setOpen((o) => !o)}>+ filter</button>
       {open && (
         <div className="audit-addfilter-menu">
           <select value={field} onChange={(e) => setField(e.target.value as AuditField)}>
@@ -228,7 +228,7 @@ export function AuditView() {
       {/* Condition chips + add-filter builder */}
       <div className="audit-chips">
         {conditions.map((c, i) => (
-          <span key={`${c.field}:${c.op}:${c.value}`} className={`audit-chip ${c.op === 'isnot' ? 'is-not' : ''}`}>
+          <span key={`${c.field}:${c.op}:${c.value}`} className={`pill audit-chip ${c.op === 'isnot' ? 'is-not' : ''}`}>
             <span className="audit-chip-field">{FIELD_LABELS[c.field]}</span>
             <span className="audit-chip-op">{c.op === 'isnot' ? 'is not' : 'is'}</span>
             <span className="audit-chip-value">{c.label ?? c.value}</span>

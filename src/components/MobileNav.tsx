@@ -42,11 +42,11 @@ export function MobileNav({ onOpen }: { onOpen: (panel: Panel) => void }) {
 
   return (
     <nav className="mobile-nav" aria-label="Primary">
-      <button className={`mnav-item ${isHome ? 'is-active' : ''}`} onClick={onHome} aria-current={isHome}>
+      <button className="mnav-item" onClick={onHome} aria-current={isHome}>
         <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden><path d="M3 8.5L10 3l7 5.5M5 7.5V16h10V7.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
         <span>board</span>
       </button>
-      <button className={`mnav-item ${isPlanner ? 'is-active' : ''}`} onClick={onPlanner} aria-current={isPlanner}>
+      <button className="mnav-item" onClick={onPlanner} aria-current={isPlanner}>
         <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden><rect x="3" y="4" width="14" height="13" rx="1.8" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M3 8h14M6.5 2.5v3M13.5 2.5v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
         <span>planner</span>
       </button>

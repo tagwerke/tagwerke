@@ -437,7 +437,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
       )}
 
       {total > 0 && (
-        <div className="work-count">{total} task{total === 1 ? '' : 's'} · {doneCount} done</div>
+        <div className="count work-count">{total} task{total === 1 ? '' : 's'} · {doneCount} done</div>
       )}
 
       {menu && (

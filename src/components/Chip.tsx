@@ -32,10 +32,10 @@ export function Chip({ kind, priority, color, onClick, title, children }: ChipPr
   return (
     <button
       type="button"
-      className={`chip chip-${kind}${priority ? ` p${priority}` : ''}`}
+      className={`pill pill-${kind}${priority ? ` p${priority}` : ''}`}
       onClick={handleClick}
       title={title}
-      style={color ? { '--chip-color': color } as React.CSSProperties : undefined}
+      style={color ? { '--pill-color': color } as React.CSSProperties : undefined}
     >
       {children}
     </button>

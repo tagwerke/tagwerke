@@ -128,7 +128,8 @@ export function EventsPanel({ tabId, tabName, onClose, embedded }: { tabId: stri
                         {(['accepted', 'tentative', 'declined'] as AttendanceStatus[]).map((st) => (
                           <button
                             key={st}
-                            className={`rsvp-btn ${mine === st ? 'on' : ''}`}
+                            className="rsvp-btn"
+                            aria-pressed={mine === st}
                             disabled={busy}
                             onClick={() => run(() => api.events.rsvp(ev.id, occ.date, st))}
                           >

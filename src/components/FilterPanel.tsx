@@ -62,7 +62,7 @@ export function FilterPanel({ onClose }: { onClose: () => void }) {
     <div className="popover" ref={rootRef}>
       <div className="popover-row">
         <strong>project</strong>
-        <div className="chip-row">
+        <div className="pill-row">
           {projectOrder.map((pid) => {
             const p = projects[pid];
             if (!p) return null;
@@ -70,17 +70,18 @@ export function FilterPanel({ onClose }: { onClose: () => void }) {
             const isLast = projectOrder.length <= 1;
             const tabCount = Object.values(tabs).filter((t) => t.projectId === pid && t.type !== 'today').length;
             return (
-              <span key={pid} className="chip-project-wrap">
+              <span key={pid} className="pill-project-wrap">
                 <button
-                  className={`chip chip-project ${active ? 'active' : ''}`}
-                  style={{ '--chip-color': p.color } as React.CSSProperties}
+                  className="pill pill-project"
+                  aria-pressed={active}
+                  style={{ '--pill-color': p.color } as React.CSSProperties}
                   onClick={() => toggleProject(pid)}
                 >
                   {p.name}
                 </button>
                 {!isLast && (
                   <button
-                    className="icon-btn delete chip-delete"
+                    className="icon-btn delete pill-delete"
                     aria-label={`delete project ${p.name}`}
                     title="delete project"
                     onClick={() => {
@@ -104,26 +105,26 @@ export function FilterPanel({ onClose }: { onClose: () => void }) {
       {owners.length > 0 && (
         <div className="popover-row">
           <strong>owner</strong>
-          <div className="chip-row">
+          <div className="pill-row">
             {owners.map((o) => (
-              <button key={o} className={`chip chip-owner ${filter.owners.includes(o) ? 'active' : ''}`} onClick={() => toggleOwner(o)}>{o}</button>
+              <button key={o} className="pill pill-owner" aria-pressed={filter.owners.includes(o)} onClick={() => toggleOwner(o)}>{o}</button>
             ))}
           </div>
         </div>
       )}
       <div className="popover-row">
         <strong>priority</strong>
-        <div className="chip-row">
+        <div className="pill-row">
           {([1, 2, 3] as const).map((p) => (
-            <button key={p} className={`chip chip-priority p${p} ${filter.priorities.includes(p) ? 'active' : ''}`} onClick={() => togglePriority(p)}>{PRIORITY_LABELS[p]}</button>
+            <button key={p} className={`pill pill-priority p${p}`} aria-pressed={filter.priorities.includes(p)} onClick={() => togglePriority(p)}>{PRIORITY_LABELS[p]}</button>
           ))}
         </div>
       </div>
       <div className="popover-row">
         <strong>dates</strong>
-        <div className="chip-row">
-          <button className={`chip ${filter.hasDate ? 'active' : ''}`} onClick={() => setFilter({ hasDate: !filter.hasDate })}>has date</button>
-          <button className={`chip ${filter.dueSoon ? 'active' : ''}`} onClick={() => setFilter({ dueSoon: !filter.dueSoon })}>due soon</button>
+        <div className="pill-row">
+          <button className="pill" aria-pressed={filter.hasDate} onClick={() => setFilter({ hasDate: !filter.hasDate })}>has date</button>
+          <button className="pill" aria-pressed={filter.dueSoon} onClick={() => setFilter({ dueSoon: !filter.dueSoon })}>due soon</button>
         </div>
       </div>
       <div className="popover-actions">

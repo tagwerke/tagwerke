@@ -44,31 +44,32 @@ export function ScopeStrip() {
             Clicking it un-scopes. */}
         {scoped && (
           <button
-            className="chip chip-space"
+            className="pill pill-space"
             title={`Clear ${scoped.name} scope`}
             onClick={() => setFilter({ projectIds: [] })}
           >
             <span className="scope-dot" style={{ background: scoped.color }} />
             {scoped.name}
-            <span className="chip-x" aria-hidden>×</span>
+            <span className="pill-x" aria-hidden>×</span>
           </button>
         )}
         {([1, 2, 3] as const).map((p) => (
           <button
             key={p}
-            className={`chip chip-priority p${p} ${filter.priorities.includes(p) ? 'active' : ''}`}
+            className={`pill pill-priority p${p}`}
+            aria-pressed={filter.priorities.includes(p)}
             onClick={() => togglePriority(p)}
             title={`${PRIORITY_LABELS[p]} priority`}
           >
             {PRIORITY_LABELS[p]}
           </button>
         ))}
-        <button className={`chip ${filter.hasDate ? 'active' : ''}`} onClick={() => setFilter({ hasDate: !filter.hasDate })}>has date</button>
-        <button className={`chip ${filter.dueSoon ? 'active' : ''}`} onClick={() => setFilter({ dueSoon: !filter.dueSoon })}>due soon</button>
+        <button className="pill" aria-pressed={filter.hasDate} onClick={() => setFilter({ hasDate: !filter.hasDate })}>has date</button>
+        <button className="pill" aria-pressed={filter.dueSoon} onClick={() => setFilter({ dueSoon: !filter.dueSoon })}>due soon</button>
       </div>
 
       <div className="scope-right">
-        <span className="scope-count">{boardCount} board{boardCount === 1 ? '' : 's'}</span>
+        <span className="count">{boardCount} board{boardCount === 1 ? '' : 's'}</span>
         {facetCount > 0 && <button className="scope-clear" onClick={clearFacets}>Clear</button>}
       </div>
     </div>

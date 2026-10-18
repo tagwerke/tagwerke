@@ -26,7 +26,7 @@ export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (p
         <button className="sheet-row" onClick={() => onOpen('notifications')}>
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8 2a3.5 3.5 0 00-3.5 3.5c0 3-1.5 4-1.5 4h10s-1.5-1-1.5-4A3.5 3.5 0 008 2zM6.5 12a1.5 1.5 0 003 0" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
           <span>notifications</span>
-          {unread > 0 && <span className="sheet-badge">{unread > 9 ? '9+' : unread}</span>}
+          {unread > 0 && <span className="pill pill-solid sheet-badge">{unread > 9 ? '9+' : unread}</span>}
         </button>
         <button className="sheet-row" onClick={() => onOpen('import')}>
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8 10V2m0 0L5 5m3-3l3 3M3 11v2a1 1 0 001 1h8a1 1 0 001-1v-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
@@ -35,7 +35,7 @@ export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (p
         <button className="sheet-row" onClick={() => onOpen('filter')}>
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M2 3h12M4 8h8M6 13h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           <span>filter</span>
-          {filterCount > 0 && <span className="sheet-badge">{filterCount}</span>}
+          {filterCount > 0 && <span className="pill pill-solid sheet-badge">{filterCount}</span>}
         </button>
         {filterCount > 0 && (
           <button className="sheet-row" onClick={() => { resetFilter(); onClose(); }}>

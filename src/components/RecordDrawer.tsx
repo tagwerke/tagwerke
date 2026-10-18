@@ -73,7 +73,7 @@ export function RecordDrawer({ target, onClose }: { target: PreviewTarget; onClo
           <>
             <h3 className="record-title">
               {record.title}
-              {record.deleted && <span className="record-deleted">deleted</span>}
+              {record.deleted && <span className="pill pill-soft pill-caps">deleted</span>}
             </h3>
             <dl className="record-fields">
               {record.fields.map((f) => (

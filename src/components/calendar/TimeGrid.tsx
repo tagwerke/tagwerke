@@ -92,7 +92,7 @@ export function TimeGrid({
         {days.map((day) => (
           <div className="cal-allday-cell" key={day}>
             {allDayOn(events, day).map((e) => (
-              <span className="cal-allday-chip" key={e.id} title={e.title ?? '1:1'}>{e.title || '1:1'}</span>
+              <span className="pill pill-soft" key={e.id} title={e.title ?? '1:1'}>{e.title || '1:1'}</span>
             ))}
           </div>
         ))}

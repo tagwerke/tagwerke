@@ -104,7 +104,7 @@ function SpaceItem({ project, active, onSelect }: { project: Project; active: bo
         <span className="space-dot" style={{ background: project.color }} />
         <span className="space-name">{project.name}</span>
       </button>
-      <span className="space-count">{count}</span>
+      <span className="count space-count">{count}</span>
       <button
         className="space-gear"
         title="Space settings"

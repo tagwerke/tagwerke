@@ -142,7 +142,7 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
               <li key={m.userId} className="share-member">
                 <span className="share-email">
                   {m.email}{self && <em> (you)</em>}
-                  {m.kind === 'agent' && <span className="bot-badge" title="An API token's bot">bot</span>}
+                  {m.kind === 'agent' && <span className="pill pill-caps bot-badge" title="An API token's bot">bot</span>}
                 </span>
                 {isAdmin && !self ? (
                   <select

@@ -165,7 +165,8 @@ export function EventEditor({
               {RSVP_ORDER.map((st) => (
                 <button
                   key={st}
-                  className={`rsvp-btn ${myRsvp === st ? 'on' : ''}`}
+                  className="rsvp-btn"
+                  aria-pressed={myRsvp === st}
                   onClick={() => me && rsvpEvent(event.id, eventDay, me.id, st)}
                 >
                   {RSVP_LABEL[st]}
@@ -183,7 +184,8 @@ export function EventEditor({
                 {STATUS_ORDER.map((s) => (
                   <button
                     key={s}
-                    className={`status-chip status-${s} ${(filter?.statuses ?? []).includes(s) ? 'on' : ''}`}
+                    className="pill md"
+                    aria-pressed={(filter?.statuses ?? []).includes(s)}
                     onClick={() => toggleStatus(s)}
                     title={`filter: ${STATUS_LABEL[s]}`}
                   >
