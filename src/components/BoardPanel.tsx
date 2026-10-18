@@ -13,6 +13,7 @@ import { BoardActivity } from './BoardActivity';
 import { ActivityDrawer } from './ActivityDrawer';
 import { TrashPanel } from './TrashPanel';
 import { SprintsPage } from './SprintsPage';
+import { Tabs } from './common/Segmented';
 
 type PanelTab = 'members' | 'events' | 'activity' | 'sprints';
 
@@ -43,12 +44,19 @@ export function BoardPanel({ tabId, tabName, onOpenSprint }: {
 
   return (
     <aside className="board-panel">
-      <div className="board-panel-tabs">
-        <button className={tab === 'members' ? 'on' : ''} onClick={() => setTab('members')}>Members</button>
-        <button className={tab === 'events' ? 'on' : ''} onClick={() => setTab('events')}>Events</button>
-        <button className={tab === 'sprints' ? 'on' : ''} onClick={() => setTab('sprints')}>Sprints</button>
-        <button className={tab === 'activity' ? 'on' : ''} onClick={() => setTab('activity')}>Activity</button>
-      </div>
+      <Tabs
+        fill
+        className="board-panel-tabs"
+        label="Board panel"
+        options={[
+          { value: 'members', label: 'Members' },
+          { value: 'events', label: 'Events' },
+          { value: 'sprints', label: 'Sprints' },
+          { value: 'activity', label: 'Activity' },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
       <div className="board-panel-body">
         {tab === 'members' && <SharePanel embedded tabId={tabId} tabName={tabName} onClose={() => {}} />}

@@ -12,6 +12,7 @@ import { TimeGrid } from './TimeGrid';
 import { EventEditor } from './EventEditor';
 import { dayOf } from './geometry';
 import type { CalendarEvent } from '../../types';
+import { Segmented } from '../common/Segmented';
 
 interface EditorTarget {
   day: string;
@@ -115,10 +116,13 @@ export function CalendarView() {
           </div>
           <input type="date" className="calendar-date-input" value={plannerDate} onChange={(e) => e.target.value && setPlannerDate(e.target.value)} />
         </div>
-        <div className="seg calendar-modes">
-          <button className={plannerMode === 'day' ? 'on' : ''} onClick={() => setPlannerMode('day')}>Day</button>
-          <button className={plannerMode === 'week' ? 'on' : ''} onClick={() => setPlannerMode('week')}>Week</button>
-        </div>
+        <Segmented
+          className="calendar-modes"
+          label="Calendar range"
+          options={[{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }]}
+          value={plannerMode}
+          onChange={setPlannerMode}
+        />
       </header>
 
       {error && <div className="calendar-error">{error}</div>}

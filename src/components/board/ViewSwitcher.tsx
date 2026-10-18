@@ -9,6 +9,7 @@
 
 import { useStore } from '../../store';
 import { BOARD_VIEWS, type BoardView } from '../../types';
+import { Segmented } from '../common/Segmented';
 
 const LABEL: Record<BoardView, string> = { table: 'Table', notes: 'Notes', files: 'Files', secrets: 'Secrets' };
 
@@ -17,18 +18,12 @@ export function ViewSwitcher({ view, onChange }: { view: BoardView; onChange: (v
   const isAdmin = useStore((s) => (s.activeTabId ? s.tabs[s.activeTabId]?.role === 'admin' : false));
   const views = isAdmin ? BOARD_VIEWS : BOARD_VIEWS.filter((v) => v !== 'secrets');
   return (
-    <div className="seg board-views" role="tablist" aria-label="Board view">
-      {views.map((v) => (
-        <button
-          key={v}
-          role="tab"
-          aria-selected={view === v}
-          className={view === v ? 'on' : ''}
-          onClick={() => onChange(v)}
-        >
-          {LABEL[v]}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      className="board-views"
+      label="Board view"
+      options={views.map((v) => ({ value: v, label: LABEL[v] }))}
+      value={view}
+      onChange={onChange}
+    />
   );
 }

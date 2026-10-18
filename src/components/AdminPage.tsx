@@ -10,6 +10,7 @@ import { useSession } from '../session/useSession';
 import { AdminConsole } from './AdminConsole';
 import { AuditView } from './AuditView';
 import { Notice } from './common/Notice';
+import { Tabs } from './common/Segmented';
 
 type Gate = 'checking' | 'need-sudo' | 'ready';
 type Tab = 'manage' | 'audit';
@@ -100,10 +101,13 @@ export function AdminPage() {
           <span>app</span>
         </button>
         <strong className="admin-page-title">Admin</strong>
-        <nav className="admin-tabs">
-          <button className={tab === 'manage' ? 'is-active' : ''} onClick={() => setTab('manage')}>Manage</button>
-          <button className={tab === 'audit' ? 'is-active' : ''} onClick={() => setTab('audit')}>Audit log</button>
-        </nav>
+        <Tabs
+          className="admin-tabs"
+          label="Admin section"
+          options={[{ value: 'manage', label: 'Manage' }, { value: 'audit', label: 'Audit log' }]}
+          value={tab}
+          onChange={setTab}
+        />
       </header>
       <div className="admin-page-body">{tab === 'manage' ? <AdminConsole /> : <AuditView />}</div>
     </div>
