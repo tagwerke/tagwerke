@@ -14,15 +14,13 @@ import { ensureCurrentSprint } from '../lib/sprints.ts';
 
 // Opt-in per-board guardrails (AUDIT_IMPLEMENTATION_PLAN §F4). Admin-only to change.
 const settingsBody = z.object({
-  requireReview: z.boolean().optional(),
   restrictDelete: z.union([z.literal('admin'), z.null()]).optional(),
 });
-type BoardSettings = { requireReview?: boolean; restrictDelete?: 'admin' };
+type BoardSettings = { restrictDelete?: 'admin' };
 
 /** Merge a settings patch onto the stored bag; a null clears that key. */
 function mergeSettings(existing: BoardSettings, patch: z.infer<typeof settingsBody>): BoardSettings {
   const out: BoardSettings = { ...existing };
-  if (patch.requireReview !== undefined) out.requireReview = patch.requireReview;
   if (patch.restrictDelete !== undefined) {
     if (patch.restrictDelete === null) delete out.restrictDelete;
     else out.restrictDelete = patch.restrictDelete;

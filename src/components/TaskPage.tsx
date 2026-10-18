@@ -110,8 +110,8 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
         <div className="task-page-main">
           <div className="task-page-title-row">
             {/* Same two calls TaskRow makes. setTaskMeta used to be wired here instead, which
-                skipped the requireReview gate and the sub-task cascade offer — a board's approval
-                rule held on a row but not on the task's own page. */}
+                skipped the sub-task cascade offer — it held on a row but not on the task's own
+                page. */}
             <StatusControl
               status={status}
               disabled={!editable}

@@ -331,8 +331,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
    * Completing a parent that still has open sub-tasks: warn, never block (SUBTASKS_PLAN D5).
    *
    * The parent's status is NOT derived from its children — a deliverable can legitimately be done
-   * while a follow-up sits open beneath it, and deriving it would also route around the
-   * requireReview approval gate. So the parent's own status is already applied by the time this
+   * while a follow-up sits open beneath it. So the parent's own status is already applied by the time this
    * runs; all this does is offer to sweep the rest, which is the thing everyone wants and almost
    * nobody implements. Declining is a real answer, not a nag to be repeated.
    */
@@ -343,17 +342,6 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       return st !== 'done' && st !== 'cancelled';
     });
     if (open.length) set({ pendingCascade: { taskIds: [id], count: open.length } });
-  };
-
-  // On a board with requireReview set, `done` is reachable only via the in_review → done approval —
-  // the server rejects a direct jump (auth/boards.ts). Mirror that here so "mark done" instead
-  // submits the task for review (→ in_review), avoiding an optimistic done that the server bounces.
-  // Approving an already-in_review task (the reviewer's done) passes through unchanged.
-  const reviewGate = (id: ID, target: TaskStatus): TaskStatus => {
-    if (target !== 'done') return target;
-    const t = get().tasks[id];
-    if (!t || (t.status ?? 'todo') === 'in_review') return target;
-    return get().tabs[t.homeTabId]?.settings?.requireReview ? 'in_review' : target;
   };
 
   return {
@@ -456,7 +444,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         // than partial-merging, keeping the persisted bag exactly what the UI shows.
         enqueue(() =>
           api.tabs.update(id, {
-            settings: { requireReview: settings.requireReview ?? false, restrictDelete: settings.restrictDelete ?? null },
+            settings: { restrictDelete: settings.restrictDelete ?? null },
           }),
         );
       },
@@ -670,9 +658,8 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         patchTask(id, { parentTaskId: parent, rank });
       },
       setTaskStatus(id, status) {
-        const next = reviewGate(id, status);
-        patchTask(id, { status: next, done: next === 'done' });
-        offerCascade(id, next);
+        patchTask(id, { status, done: status === 'done' });
+        offerCascade(id, status);
       },
       setTaskAssignee(id, assigneeId) {
         patchTask(id, { assigneeId });
@@ -681,9 +668,8 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         const t = get().tasks[id];
         if (!t) return;
         const target: TaskStatus = (t.status ?? 'todo') === 'done' ? 'todo' : 'done';
-        const next = reviewGate(id, target);
-        patchTask(id, { status: next, done: next === 'done' });
-        offerCascade(id, next);
+        patchTask(id, { status: target, done: target === 'done' });
+        offerCascade(id, target);
       },
       deleteTask(id) {
         // The SUBTREE goes with it (SUBTASKS_PLAN D7) — a parent is a commitment and its sub-tasks

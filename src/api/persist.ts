@@ -105,8 +105,6 @@ function changedFields(p: Task, t: Task): TaskPatch | null {
   // Missing from this diff since sprints shipped, so a sprint was only ever set locally and every
   // refresh put the task back in the backlog. An explicit null is what moves it to the backlog.
   if ((p.sprintId ?? null) !== (t.sprintId ?? null)) patch.sprintId = t.sprintId ?? null;
-  // approvedBy/approvedAt are DB-managed (set on the in_review → done transition) and never
-  // sent from the client.
   return Object.keys(patch).length ? patch : null;
 }
 

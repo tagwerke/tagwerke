@@ -14,7 +14,6 @@ export type TabType = 'normal' | 'today';
 
 /** Opt-in per-board guardrails (accountability model §F). Absent keys = off (flat/fast). */
 export interface BoardSettings {
-  requireReview?: boolean; // route Done through in_review; capture the approver
   restrictDelete?: 'admin'; // only board admins may delete content here
 }
 
@@ -57,11 +56,8 @@ export interface Task {
   status?: TaskStatus;
   // P0: real user id of the assignee (a member of the home board). Supersedes `owner`.
   assigneeId?: ID;
-  // Accountability chain (§F1): who signs off. approvedBy/approvedAt mirror the
-  // in_review → done approval (DB-managed; read-only on the client).
+  // Who reviews it (a member of the home board). `in_review` is just a status; nothing gates on it.
   reviewerId?: ID;
-  approvedBy?: ID;
-  approvedAt?: number;
   date?: string;
   priority?: 1 | 2 | 3;
   // Sibling order within `parentTaskId` — a fractional index key compared lexicographically

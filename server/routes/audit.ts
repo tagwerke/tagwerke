@@ -227,13 +227,12 @@ async function resolveTab(id: string): Promise<PreviewRecord | null> {
   const [t] = await db.select().from(schema.tabs).where(eq(schema.tabs.id, id)).limit(1);
   if (!t) return null;
   const [c] = await db.select({ n: sql<number>`count(*)` }).from(schema.boardMembers).where(eq(schema.boardMembers.tabId, id));
-  const s = (t.settings ?? {}) as { requireReview?: boolean; restrictDelete?: string };
+  const s = (t.settings ?? {}) as { restrictDelete?: string };
   return {
     type: 'tab', id, deleted: false, title: t.name,
     fields: [
       F('members', Number(c?.n ?? 0)),
       F('type', t.type),
-      F('require review', s.requireReview ? 'yes' : 'no'),
       F('restrict delete', s.restrictDelete === 'admin' ? 'admins only' : 'no'),
       ...(t.location ? [F('location', t.location)] : []),
     ],

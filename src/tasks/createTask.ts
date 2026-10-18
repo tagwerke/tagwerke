@@ -31,18 +31,6 @@ export interface CreateTaskOptions {
   after?: ID;
 }
 
-/**
- * On a board that requires review, `done` is reachable only through the in_review → done approval;
- * the server rejects a direct jump, including on create (`routes/tasks.ts`). Mirror that here so
- * quick-adding "ship it /done" submits for review instead of firing a write the server bounces —
- * a rejected write is poison to the outbox, which drops it and repulls the world. This is the same
- * rule `store.reviewGate` applies to an existing task, applied at birth.
- */
-function gateStatus(tabId: ID, status: TaskStatus | undefined): TaskStatus | undefined {
-  if (status !== 'done') return status;
-  return useStore.getState().tabs[tabId]?.settings?.requireReview ? 'in_review' : status;
-}
-
 /** Create a task on a board and return its id. */
 export function createTaskInBoard(tabId: ID, opts: CreateTaskOptions): ID {
   const store = useStore.getState();
@@ -61,7 +49,7 @@ export function createTaskInBoard(tabId: ID, opts: CreateTaskOptions): ID {
   }
 
   const id = `t_${nanoid(8)}`;
-  const status = gateStatus(tabId, fields?.status);
+  const status = fields?.status;
   store.upsertTask({
     id,
     homeTabId: tabId,

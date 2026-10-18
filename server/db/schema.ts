@@ -163,8 +163,8 @@ export const tabs = pgTable(
     location: text('location'),
     createdBy: text('created_by'), // attribution; access derives from board_members
     // Opt-in per-board guardrails (accountability model, AUDIT_IMPLEMENTATION_PLAN §F).
-    // Migration-free growth: a jsonb bag, e.g. { requireReview?: boolean,
-    // restrictDelete?: 'admin' }. Default {} = flat/fast (today's behavior).
+    // Migration-free growth: a jsonb bag, e.g. { restrictDelete?: 'admin' }.
+    // Default {} = flat/fast (today's behavior). A stored legacy `requireReview` key is ignored.
     settings: jsonb('settings').notNull().default({}),
   },
 );
@@ -227,9 +227,9 @@ export const tasks = pgTable(
     status: text('status').notNull().default('todo'),
     // P0: real user id of the assignee, constrained in app logic to a member of the home board.
     assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
-    // Accountability chain (AUDIT_IMPLEMENTATION_PLAN §F1): who signs off. Constrained in
-    // app logic to a member of the home board, like assigneeId. approvedBy/approvedAt are a
-    // denormalized display mirror of the `in_review → done` approval — the audit log is truth.
+    // Who reviews it. Constrained in app logic to a member of the home board, like assigneeId.
+    // approvedBy/approvedAt are LEGACY: the approval gate was removed, nothing writes them any
+    // more; old values stay so history is intact.
     reviewerId: text('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
     approvedBy: text('approved_by'),
     approvedAt: timestamp('approved_at', { withTimezone: true }),

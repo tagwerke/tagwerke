@@ -23,9 +23,20 @@ automatically on boot — always take a backup before upgrading.
 - **Point-in-time restore for a task** — every row in a task's History drawer is now a point you
   can put the task back to. Its title, status, assignee, reviewer, due date and priority are
   reconstructed from the audit trail and rewritten; where the task sits on the board is left
-  alone. Values today's board would refuse (an assignee who has since left, `done` on a board that
-  now requires review) are kept as they are and reported rather than forced, and the restore is
-  itself recorded — so it can be walked back from the same list.
+  alone. Values today's board would refuse (an assignee who has since left) are kept as they are
+  and reported rather than forced, and the restore is itself recorded — so it can be walked back
+  from the same list.
+
+### Removed
+
+- **"Require review before Done"** — the board setting, the approval gate and the "Task approved"
+  notification are gone. `in_review` is now an ordinary status that nothing gates on. Reviewer is
+  still a field, and old approval stamps stay in the database but are no longer shown or written.
+
+### Changed
+
+- **Only a comment's author can delete it.** Board admins can no longer remove other people's
+  comments.
 
 ### Fixed
 

@@ -6,7 +6,6 @@ const FIELD_LABELS: Record<string, string> = {
   status: 'status',
   assigneeId: 'assignee',
   reviewerId: 'reviewer',
-  approvedBy: 'approver',
   date: 'due',
   priority: 'priority',
   homeTabId: 'board',
@@ -23,7 +22,7 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 /** Which audited fields hold a user id (so a value can be resolved to a person). */
-export const USER_FIELDS = new Set(['assigneeId', 'reviewerId', 'approvedBy']);
+export const USER_FIELDS = new Set(['assigneeId', 'reviewerId']);
 
 export function fieldLabel(field: string): string {
   return FIELD_LABELS[field] ?? field;

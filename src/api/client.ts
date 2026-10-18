@@ -177,7 +177,7 @@ export const api = {
     // for board metadata (name/category/star/date/settings) only.
     update: (
       id: ID,
-      patch: { name?: string; projectId?: ID; starred?: boolean; starredPosition?: number | null; dateKey?: string | null; location?: string | null; settings?: { requireReview?: boolean; restrictDelete?: 'admin' | null } },
+      patch: { name?: string; projectId?: ID; starred?: boolean; starredPosition?: number | null; dateKey?: string | null; location?: string | null; settings?: { restrictDelete?: 'admin' | null } },
     ) => submitMutation(M('PATCH', `/api/tabs/${id}`, patch)),
     remove: (id: ID) => submitMutation(M('DELETE', `/api/tabs/${id}`)),
     reorder: (order: ID[]) => submitMutation(M('POST', '/api/tabs/reorder', { order })),
@@ -549,8 +549,7 @@ export interface MoveResult {
 
 /**
  * The outcome of a point-in-time restore. `restored` names the fields that actually changed;
- * `skipped` names the ones the server refused to write back and why (a member who has left, a
- * board that now requires review). Both are reported to the user — a restore that quietly did
+ * `skipped` names the ones the server refused to write back and why (a member who has left). Both are reported to the user — a restore that quietly did
  * less than it said is worse than one that explains itself. `task` is the row as written.
  */
 export interface RevertResult {

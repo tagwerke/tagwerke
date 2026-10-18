@@ -2,8 +2,7 @@
 //
 // Deliberately NOT a modal. A parent's status is its owner's to set, and a deliverable can
 // legitimately be done while a follow-up sits open beneath it — so the status change already
-// happened and this only offers to finish the job. Blocking it would also route around the
-// requireReview approval gate, which is the one thing the accountability layer must not lose.
+// happened and this only offers to finish the job.
 //
 // It is what keeps a completed parent honest without deriving its status from its children.
 

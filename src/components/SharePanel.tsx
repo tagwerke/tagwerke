@@ -206,14 +206,6 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
             <label className="board-setting">
               <input
                 type="checkbox"
-                checked={!!settings?.requireReview}
-                onChange={(e) => setTabSettings(tabId, { ...settings, requireReview: e.target.checked })}
-              />
-              Require review before Done
-            </label>
-            <label className="board-setting">
-              <input
-                type="checkbox"
                 checked={settings?.restrictDelete === 'admin'}
                 onChange={(e) => setTabSettings(tabId, { ...settings, restrictDelete: e.target.checked ? 'admin' : undefined })}
               />

@@ -80,7 +80,6 @@ export function ActivityDrawer({
   embedded?: boolean;
 }) {
   const members = useStore((s) => s.membersByBoard[boardId]);
-  const myRole = useStore((s) => s.tabs[boardId]?.role);
   // For naming what a row points at: a move's boards, a sprint, a parent task.
   const tabs = useStore((s) => s.tabs);
   const sprints = useStore((s) => s.sprintsByBoard[boardId]);
@@ -288,7 +287,6 @@ export function ActivityDrawer({
                 tabId={boardId}
                 taskId={id}
                 meId={meId}
-                canModerate={myRole === 'admin'}
               />
             ) : (
               <li key={item.entry.id} className="history-entry">

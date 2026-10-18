@@ -2,9 +2,9 @@
 // `task_comments` in db/schema.ts for why they are deliberately outside the Yjs doc.
 //
 // Roles (D6): `viewer` may READ and WRITE comments — read-only stakeholder feedback is most of
-// the value of comments and the one genuinely useful thing a viewer can do. Editing is
-// author-only (nobody rewrites someone else's words, admins included); deleting is author or
-// board admin, and is soft (D7), so a thread never grows a hole.
+// the value of comments and the one genuinely useful thing a viewer can do. Editing and deleting
+// are author-only (nobody rewrites or removes someone else's words, admins included); deleting is
+// soft (D7), so a thread never grows a hole.
 //
 // Every write records its own audit row (targetType 'task_comment', scoped to the board) and
 // publishes a live frame on the board channel. Notification fan-out is §4 of the plan: mentions
@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
-import { requireBoardRole, boardRole, hasBoardRole } from '../auth/boards.ts';
+import { requireBoardRole, boardRole } from '../auth/boards.ts';
 import { recordAudit } from '../lib/audit.ts';
 import { notify } from '../lib/notify.ts';
 import { publish, boardChannel } from '../lib/bus.ts';
@@ -236,15 +236,13 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true, comment: dto });
   });
 
-  // Soft-delete a comment. Author, or a board admin.
+  // Soft-delete a comment. Author only.
   app.delete('/api/comments/:id', { preHandler: requireBoardRole('viewer', commentBoard) }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const before = (await db.select().from(schema.taskComments).where(eq(schema.taskComments.id, id)).limit(1))[0];
     if (!before) return reply.code(404).send({ error: 'not found' });
     const userId = req.user!.id;
-    const isAuthor = before.authorId === userId;
-    if (!isAuthor && !(await hasBoardRole(userId, before.tabId, 'admin')))
-      return reply.code(403).send({ error: 'only the author or a board admin can delete a comment' });
+    if (before.authorId !== userId) return reply.code(403).send({ error: 'only the author can delete a comment' });
     if (before.deletedAt) return reply.send({ ok: true }); // already gone — idempotent
 
     const deletedAt = new Date();
@@ -260,7 +258,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
     recordAudit({
       actorId: userId, action: 'comment_delete', targetType: 'task_comment', targetId: id,
       scopeId: before.tabId, method: 'DELETE', status: 200,
-      payload: { taskId: before.taskId, byAuthor: isAuthor, body: before.body },
+      payload: { taskId: before.taskId, byAuthor: true, body: before.body },
     });
     publishComment(before.tabId, 'delete', dto, userId);
     return reply.send({ ok: true });

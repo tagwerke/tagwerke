@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { and, desc, eq, inArray, isNotNull, isNull, notInArray, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
-import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, boardRequiresReview, paramTabId } from '../auth/boards.ts';
+import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
 import { lastKnownTitle, stateAsOf } from '../lib/taskHistory.ts';
 import { notify } from '../lib/notify.ts';
@@ -307,12 +307,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // non-probeable, matching auth/boards.ts.
       if (before && before.homeTabId !== b.data.homeTabId && !(await hasBoardRole(userId, before.homeTabId, 'editor')))
         return reply.code(404).send({ error: 'not found' });
-      // requireReview guardrail (§F): on a review-required board, `done` is reachable only via the
-      // in_review → done approval — never a direct jump (including creating a task straight to done).
-      // An already-done task re-written by a full-sync/move keeps passing (before.status === 'done').
-      if (status === 'done' && before?.status !== 'in_review' && before?.status !== 'done'
-          && (await boardRequiresReview(b.data.homeTabId)))
-        return reply.code(403).send({ error: 'this board requires review before a task can be marked done' });
       const hasTitle = b.data.text.trim().length > 0;
       // Sibling order: an explicit rank wins; otherwise KEEP the existing one (a PUT that omits it
       // must never wipe the ordering — the resurrect path and older clients both do that); and only
@@ -408,24 +402,11 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         const refusal = await parentRefusal(homeTabId, id, b.data.parentTaskId);
         if (refusal) return reply.code(400).send({ error: PARENT_REFUSAL_MESSAGE[refusal] });
       }
-      // requireReview guardrail (§F): on a review-required board, `done` is reachable only via the
-      // in_review → done approval (the `approving` capture below). Reject a direct jump; an already-
-      // done task (idempotent re-write) still passes.
-      if (b.data.status === 'done' && before.status !== 'in_review' && before.status !== 'done'
-          && (await boardRequiresReview(homeTabId)))
-        return reply.code(403).send({ error: 'this board requires review before a task can be marked done' });
-
       // Keep the derived `done` mirror in sync whenever status is patched.
       const set = { ...b.data } as Record<string, unknown>;
       if (b.data.status !== undefined) set.done = b.data.status === 'done';
       // Retain the last non-empty title for Trash; emptying the text never clears it (§G).
       if (typeof b.data.text === 'string' && b.data.text.trim().length > 0) set.lastTitle = b.data.text;
-      // Approval capture (F3): the in_review → done transition stamps the approver.
-      const approving = b.data.status === 'done' && before.status === 'in_review';
-      if (approving) {
-        set.approvedBy = req.user!.id;
-        set.approvedAt = new Date();
-      }
       // Re-parented without a new rank: the old key was ordered against a DIFFERENT set of
       // siblings, so it means nothing under the new parent. Give it an append position there.
       if (b.data.parentTaskId !== undefined && b.data.rank === undefined && b.data.parentTaskId !== before.parentTaskId) {
@@ -433,15 +414,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       }
       await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
 
-      // Enriched audit: field diffs, plus an explicit approval row for legibility.
+      // Enriched audit: field diffs.
       const changes = diffChanges(before as Record<string, unknown>, b.data as Record<string, unknown>, AUDITED_FIELDS);
       auditEdit(req, { action: 'PATCH /api/tasks/:id', targetType: 'task', targetId: id, scopeId: homeTabId, changes });
-      if (approving) {
-        recordAudit({
-          actorId: req.user!.id, action: 'task_approved', targetType: 'task', targetId: id,
-          scopeId: homeTabId, method: 'PATCH', status: 200, payload: { reviewerId: before.reviewerId ?? null },
-        });
-      }
 
       // Notifications (NOTIFICATIONS.md §2). All key off before/after we already have in hand.
       const actor = req.user!.id;
@@ -452,13 +427,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const reviewerId = b.data.reviewerId ?? before.reviewerId;
       if (b.data.status === 'in_review' && before.status !== 'in_review' && reviewerId && reviewerId !== actor) {
         notify(reviewerId, { type: 'review_requested', title: 'Review requested', body: taskLabel(text), tabId: homeTabId, actorId: actor });
-      }
-      // Approved — the reviewer signed off (in_review → done). Tell whoever did the work.
-      if (approving) {
-        const recipient = before.assigneeId ?? before.createdBy;
-        if (recipient && recipient !== actor) {
-          notify(recipient, { type: 'task_approved', title: 'Task approved', body: taskLabel(text), tabId: homeTabId, actorId: actor });
-        }
       }
       return reply.send({ ok: true });
     },
@@ -784,7 +752,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       if (!point) return reply.code(404).send({ error: 'that history entry is no longer available' });
 
       const homeTabId = before.homeTabId;
-      const requiresReview = await boardRequiresReview(homeTabId);
       const set: Record<string, unknown> = {};
       const skipped: { field: string; reason: string }[] = [];
       for (const field of REVERTABLE_FIELDS) {
@@ -808,12 +775,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           skipped.push({ field, reason: 'that person is no longer a member of this board' });
           continue;
         }
-        // The review guardrail (§F) is a rule about how `done` is REACHED, so a revert can't be a
-        // side door into it any more than a PATCH can.
-        if (field === 'status' && value === 'done' && before.status !== 'in_review' && before.status !== 'done' && requiresReview) {
-          skipped.push({ field, reason: 'this board requires review before a task can be marked done' });
-          continue;
-        }
         set[field] = value;
       }
 
@@ -827,13 +788,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
       if (set.status !== undefined) set.done = set.status === 'done';
       if (typeof set.text === 'string' && set.text.trim()) set.lastTitle = set.text;
-      // Rolling a task back OUT of done retires its approval stamp with it: approvedBy/approvedAt
-      // describe the in_review → done transition, and left behind they would show an approver for
-      // work that is open again. Who approved what, and when, stays in the trail.
-      if (set.status !== undefined && set.status !== 'done' && before.status === 'done') {
-        set.approvedBy = null;
-        set.approvedAt = null;
-      }
       await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
       const after = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0] ?? before;
 

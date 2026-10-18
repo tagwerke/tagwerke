@@ -175,12 +175,11 @@ const reviewerAction: TaskAction = {
   label: 'Reviewer',
   key: 'v',
   field: 'reviewer',
-  // Surfaced only where review is actually in play: a board that opted in, or a task already
-  // carrying a reviewer/approval. A default board stays flat (AUDIT_IMPLEMENTATION_PLAN §F7).
+  // Surfaced only where review is actually in play: a task already carrying a reviewer or sitting
+  // in review. A default board stays flat (AUDIT_IMPLEMENTATION_PLAN §F7).
   enabled: (ctx) => {
     if (!canEdit(ctx.tabId) || !membersOf(ctx.tabId).length) return false;
-    const requires = useStore.getState().tabs[ctx.tabId]?.settings?.requireReview;
-    return !!requires || tasksOf(ctx.ids).some((t) => t.reviewerId || t.approvedBy || t.status === 'in_review');
+    return tasksOf(ctx.ids).some((t) => t.reviewerId || t.status === 'in_review');
   },
   options: (ctx) => peopleOptions(ctx, 'reviewerId'),
 };

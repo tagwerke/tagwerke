@@ -44,13 +44,11 @@ interface Props {
   tabId: ID;
   taskId: ID;
   meId?: ID;
-  /** Board admin — may delete anyone's comment. */
-  canModerate: boolean;
   /** False for a reply, which cannot itself be replied to (D4). */
   replyable?: boolean;
 }
 
-export function CommentItem({ comment, replies = [], tabId, taskId, meId, canModerate, replyable = true }: Props) {
+export function CommentItem({ comment, replies = [], tabId, taskId, meId, replyable = true }: Props) {
   const [replying, setReplying] = useState(false);
   const [editing, setEditing] = useState(false);
   const post = useComments((s) => s.post);
@@ -61,7 +59,7 @@ export function CommentItem({ comment, replies = [], tabId, taskId, meId, canMod
   const author = comment.authorName ?? 'deleted user';
 
   async function onDelete(): Promise<void> {
-    if (!(await confirmDeleteComment({ authorName: comment.authorName, mine }))) return;
+    if (!(await confirmDeleteComment())) return;
     void remove(taskId, comment.id);
   }
 
@@ -106,7 +104,7 @@ export function CommentItem({ comment, replies = [], tabId, taskId, meId, canMod
               Edit
             </button>
           )}
-          {(mine || canModerate) && (
+          {mine && (
             <button type="button" className="btn ghost tiny" onClick={() => void onDelete()}>
               Delete
             </button>
@@ -123,7 +121,6 @@ export function CommentItem({ comment, replies = [], tabId, taskId, meId, canMod
               tabId={tabId}
               taskId={taskId}
               meId={meId}
-              canModerate={canModerate}
               replyable={false}
             />
           ))}
