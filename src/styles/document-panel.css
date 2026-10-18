@@ -2,8 +2,8 @@
    Owned by the review-panel work; the file list's styles are in documents.css. Reuse the app's
    existing custom properties and class idioms from index.css. */
 
-/* The panel itself reuses .share-panel (chrome, scrolling, and the phone bottom-sheet treatment
-   index.css already gives that class) and only widens it: a review list carries a quote per row,
+/* The panel itself reuses .modal + .modal-scroll (chrome, scrolling, and the phone bottom-sheet treatment
+   index.css already gives those classes) and only widens it: a review list carries a quote per row,
    and 460px turns every one of them into six ragged lines. */
 .document-panel {
   width: min(720px, calc(100vw - 32px));
@@ -12,7 +12,7 @@
 
 .doc-panel-head { align-items: flex-start; gap: 12px; }
 .doc-panel-title { min-width: 0; }
-.doc-panel-title strong { display: block; overflow-wrap: anywhere; }
+.doc-panel-title h2 { font-size: 17px; white-space: normal; overflow-wrap: anywhere; }
 .doc-panel-sub {
   margin-top: 3px;
   font-size: 12px;
@@ -266,7 +266,7 @@
 .doc-item-btn.reject.is-on { color: var(--pop); border-color: var(--pop); background: rgba(255,106,61,0.07); }
 
 @media (max-width: 720px) {
-  /* index.css sheet-ifies .share-panel at this width; .document-panel's wider rule above would
+  /* index.css sheet-ifies .modal at this width; .document-panel's wider rule above would
      otherwise win on later-stylesheet order and leave a phone with a floating 720px card. */
   .document-panel { width: 100%; max-width: none; max-height: 88vh; }
 }

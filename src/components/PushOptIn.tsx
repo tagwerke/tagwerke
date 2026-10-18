@@ -133,7 +133,7 @@ export function PushOptIn() {
     return <div className="notif-push">Push is blocked in your browser settings for this site.</div>;
   }
   return (
-    <button className="btn ghost notif-push-btn" disabled={state === 'busy'} onClick={() => void enable()}>
+    <button className="btn ghost tiny notif-push-btn" disabled={state === 'busy'} onClick={() => void enable()}>
       {state === 'busy' ? 'Enabling…' : 'Enable push on this device'}
     </button>
   );

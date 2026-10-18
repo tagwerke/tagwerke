@@ -1,6 +1,6 @@
 // The notification feed panel (NOTIFICATIONS.md, Phase 3). Opened from the TopBar/MobileNav bell.
 // Lists the latest notifications, lets you mark them read, and navigates to the related board on
-// click. Reuses the share-panel modal shell for styling consistency.
+// click. Uses the shared modal shell; push opt-in and Clear live in the footer so the feed leads.
 
 import { useStore } from '../store';
 import { useNotifications } from '../notifications/useNotifications';
@@ -52,41 +52,34 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
+  const confirmClear = () =>
+    void askConfirm({
+      title: 'Clear all notifications?',
+      body: (
+        <p>
+          {items.length === 1 ? 'The one notification' : `All ${items.length} notifications`} in your
+          feed {items.length === 1 ? 'is' : 'are'} deleted. The work they point at is untouched.
+        </p>
+      ),
+      confirmLabel: 'Clear feed',
+    }).then((ok) => {
+      if (ok) clearAll();
+    });
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="share-panel" onClick={(e) => e.stopPropagation()}>
-        <header className="share-head">
-          <strong>Notifications</strong>
-          <div className="notif-head-actions">
-            {unread > 0 && (
-              <button className="link-btn" onClick={markAllRead}>Mark all read</button>
-            )}
-            {items.length > 0 && (
-              <button
-                className="link-btn"
-                onClick={() =>
-                  void askConfirm({
-                    title: 'Clear all notifications?',
-                    body: (
-                      <p>
-                        {items.length === 1 ? 'The one notification' : `All ${items.length} notifications`} in your
-                        feed {items.length === 1 ? 'is' : 'are'} deleted. The work they point at is untouched.
-                      </p>
-                    ),
-                    confirmLabel: 'Clear feed',
-                  }).then((ok) => {
-                    if (ok) clearAll();
-                  })
-                }
-              >
-                Clear
-              </button>
-            )}
-            <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
-          </div>
+      <div className="modal modal-scroll" role="dialog" aria-modal="true" aria-label="Notifications" onClick={(e) => e.stopPropagation()}>
+        <header className="modal-head">
+          <h2>Notifications</h2>
+          <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
         </header>
 
-        <PushOptIn />
+        {items.length > 0 && (
+          <div className="notif-bar">
+            <span className="count">{unread > 0 ? `${unread} unread` : 'All read'}</span>
+            {unread > 0 && <button className="link-btn" onClick={markAllRead}>Mark all read</button>}
+          </div>
+        )}
 
         <div className="notif-list">
           {items.length === 0 ? (
@@ -109,6 +102,11 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
             ))
           )}
         </div>
+
+        <footer className="notif-foot">
+          <PushOptIn />
+          {items.length > 0 && <button className="row-action danger" onClick={confirmClear}>Clear all</button>}
+        </footer>
       </div>
     </div>
   );

@@ -48,9 +48,9 @@ export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="share-panel" onClick={(e) => e.stopPropagation()}>
-        <header className="share-head">
-          <strong>Trash — {tabName}</strong>
+      <div className="modal modal-scroll" role="dialog" aria-modal="true" aria-label="Trash" onClick={(e) => e.stopPropagation()}>
+        <header className="modal-head">
+          <h2>Trash — {tabName}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
         </header>
 
@@ -67,7 +67,7 @@ export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName
                   {t.deletedAt ? ` · ${timeAgo(t.deletedAt)}` : ''}
                 </span>
               </div>
-              <button className="btn ghost tiny" disabled={busy} onClick={() => restore(t.id)}>Restore</button>
+              <button className="row-action" disabled={busy} onClick={() => restore(t.id)}>Restore</button>
             </li>
           ))}
           {tasks && tasks.length === 0 && <EmptyState as="li">Trash is empty.</EmptyState>}

@@ -283,15 +283,15 @@ export function DocumentPanel({ documentId, onClose }: { documentId: ID; onClose
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="share-panel document-panel"
+        className="modal modal-scroll document-panel"
         role="dialog"
         aria-modal="true"
         aria-label={doc?.filename ?? 'Document'}
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="share-head doc-panel-head">
+        <header className="modal-head doc-panel-head">
           <div className="doc-panel-title">
-            <strong>{doc?.filename ?? 'Document'}</strong>
+            <h2>{doc?.filename ?? 'Document'}</h2>
             {doc && (
               <div className="doc-panel-sub">
                 {formatBytes(doc.size)} · {typeLabel(doc.mime)}

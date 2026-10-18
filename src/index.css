@@ -682,20 +682,12 @@ button.pill:hover { border-color: var(--line-strong); }
 .file-drop-title em { font-style: normal; color: var(--pop); text-decoration: underline; text-underline-offset: 2px; }
 .file-drop-hint { font-size: 12px; color: var(--ink-mute); }
 
-/* Share panel (board access list) */
-.share-panel {
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  padding: 20px;
-  width: min(460px, calc(100vw - 32px));
-  box-shadow: var(--shadow-pop);
-  /* Long rosters / history / trash must scroll inside the panel, not run off-screen. */
-  max-height: min(78vh, 720px);
-  overflow-y: auto;
-}
-.share-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.share-head strong { font-family: var(--serif); font-style: italic; font-size: 19px; font-weight: 500; }
+/* Modal header + scroll (every panel-style modal: Security, Trash, Notifications, History, Document).
+   Long rosters / history / trash must scroll inside the modal, not run off-screen. */
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.modal-head h2 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-scroll { overflow-y: auto; }
+@media (min-width: 721px) { .modal-scroll { max-height: min(78vh, 720px); } }
 /* Inline banner (components/common/Notice.tsx): the one error / success / info look. */
 .notice {
   --notice: var(--ink-soft);
@@ -1201,7 +1193,7 @@ button.pill:hover { border-color: var(--line-strong); }
 
   /* Sheet-ify the centered modals so they meet the thumb. */
   .modal-backdrop { align-items: flex-end; padding: 0; }
-  .modal, .picker, .search-palette, .share-panel, .confirm-dialog {
+  .modal, .picker, .search-palette, .confirm-dialog {
     width: 100%;
     max-width: none;
     border-radius: var(--r-lg) var(--r-lg) 0 0;
@@ -1263,8 +1255,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .board-activity .ba-when { color: var(--ink-mute); }
 
 /* ── security / two-factor panel ──────────────────────────────────────── */
-.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.modal-head h2 { margin: 0; }
 .security-modal { overflow-y: auto; }
 @media (min-width: 721px) { .security-modal { width: min(520px, calc(100vw - 32px)); max-height: min(84vh, 780px); } }
 .security-body { display: flex; flex-direction: column; gap: 14px; padding-top: 16px; }
@@ -1412,10 +1402,11 @@ button.pill:hover { border-color: var(--line-strong); }
 
 /* ── per-object history drawer (Layer A) ─────────────────────────────── */
 /* The panel is a column so the TIMELINE scrolls and the composer stays pinned at the bottom.
-   `.share-panel` scrolls as one block, which put the comment box below the fold of a long thread —
+   A plain scrolling modal scrolls as one block, which put the comment box below the fold of a long thread —
    the same "buried" problem the drawer was opened to fix, one level down. */
 .history-panel { max-width: 440px; display: flex; flex-direction: column; overflow: hidden; }
-.history-panel > .share-head,
+@media (min-width: 721px) { .history-panel { max-height: min(78vh, 720px); } }
+.history-panel > .modal-head,
 .history-panel > .history-toggle,
 .history-panel > .comment-composer,
 .history-panel > .history-note,
@@ -1939,7 +1930,8 @@ button.pill:hover { border-color: var(--line-strong); }
   min-width: 16px; height: 16px; padding: 0 4px;
   justify-content: center; font-size: 10px; line-height: 1;
 }
-.notif-head-actions { display: flex; align-items: center; gap: 10px; }
+.notif-bar { display: flex; align-items: center; justify-content: space-between; margin: -6px 0 6px; }
+.notif-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 
 .notif-list { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; margin: 4px -6px 0; }
 
@@ -1960,9 +1952,8 @@ button.pill:hover { border-color: var(--line-strong); }
 .notif-time { color: var(--ink-mute); font-size: 12px; }
 .notif-dot { flex: none; width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--pop); }
 
-.notif-push { color: var(--ink-mute); font-size: 13px; padding: 2px 2px 8px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.notif-push { display: flex; align-items: center; gap: 10px; color: var(--ink-mute); font-size: 12px; }
 .notif-push-on { color: var(--ink-soft); }
-.notif-push-btn { width: 100%; justify-content: center; margin-bottom: 8px; }
 
 /* ── Sub-tasks outside the document (SUBTASKS_PLAN P5) ──────────────────────────────────────
    A grouped table cuts ACROSS a family — a parent and its child land in different

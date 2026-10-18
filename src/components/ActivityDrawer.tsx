@@ -266,10 +266,10 @@ export function ActivityDrawer({
   const loading = entries === null || (isTask && commentsLoading && !comments);
 
   const panel = (
-      <div className={`share-panel history-panel ${embedded ? 'is-embedded' : ''}`} onClick={embedded ? undefined : (e) => e.stopPropagation()}>
+      <div className={`modal history-panel ${embedded ? 'is-embedded' : ''}`} onClick={embedded ? undefined : (e) => e.stopPropagation()}>
         {!embedded && (
-          <header className="share-head">
-            <strong>{isTask ? 'Activity' : 'History'} — {title}</strong>
+          <header className="modal-head">
+            <h2>{isTask ? 'Activity' : 'History'} — {title}</h2>
             <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
           </header>
         )}
