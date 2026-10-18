@@ -1639,12 +1639,12 @@ button.pill:hover { border-color: var(--line-strong); }
 
 /* ── Open board: stripped header + view toggle + content|panel canvas ─────── */
 .tab-view.tab-open { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
-.board-head { display: flex; align-items: center; gap: 12px; padding: 14px clamp(16px, 3vw, 32px) 10px; }
-.board-head-title { display: flex; flex-direction: column; min-width: 0; margin-right: auto; }
+.board-head { display: flex; align-items: center; gap: 12px; padding: 16px clamp(16px, 3vw, 32px) 6px; }
+.board-head-title { display: flex; flex-direction: column; gap: 5px; min-width: 0; margin-right: auto; }
 .board-eyebrow { font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase; font-weight: 700; color: var(--page-accent, var(--pop)); }
 .board-title { background: none; border: 0; padding: 0; font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 27px; letter-spacing: -0.5px; line-height: 1.1; color: var(--ink); outline: none; width: 100%; }
 .board-title:focus { background: rgba(0,0,0,0.03); border-radius: var(--r-sm); }
-.board-head-right { display: flex; align-items: center; gap: 8px; }
+.board-head-right { display: flex; align-items: center; gap: 6px; }
 .presence.avatar-stack { margin-right: 2px; }
 .panel-toggle.on { background: var(--ink); color: var(--bg); }
 
@@ -1736,8 +1736,8 @@ button.pill:hover { border-color: var(--line-strong); }
 .board-panel-tabs { margin: 8px 12px 0; }
 .board-panel-body { overflow-y: auto; padding: 16px; flex: 1; }
 .activity-tab { display: flex; flex-direction: column; gap: 14px; }
-.activity-tab .board-activity { border-bottom: 0; padding: 0; flex-direction: column; align-items: flex-start; gap: 8px; }
-.activity-actions { display: flex; gap: 8px; }
+.activity-tab .board-activity { border-bottom: 0; padding: 0; flex-direction: column; align-items: flex-start; gap: 10px; }
+.activity-actions { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 
 /* Phones: the companion rail stacks under the content (Phase 8 makes it a sheet). */
 @media (max-width: 720px) {
@@ -1813,11 +1813,6 @@ button.pill:hover { border-color: var(--line-strong); }
   .task-page-body { grid-template-columns: minmax(0, 1fr); }
 }
 
-.cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
-.cal-ev { font-size: 10.5px; padding: 2px 6px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cal-ev.task { background: color-mix(in srgb, #1f8a76 14%, transparent); color: #1f8a76; font-weight: 600; }
-.cal-ev.meet { background: color-mix(in srgb, var(--pop) 14%, transparent); color: var(--pop); font-weight: 600; font-family: var(--mono); }
 /* ── Polish pass: align shipped UI with the internal mockups ──────────────── */
 
 /* Sidebar brand sits smaller than the top-bar brand (shell-d). */
@@ -1833,13 +1828,9 @@ button.pill:hover { border-color: var(--line-strong); }
 .board-panel-body .board-settings strong { font-size: 9.5px; letter-spacing: 1.6px; }
 
 /* Activity feed: presence rows read as a vertical list with time stamps. */
-.activity-tab .board-activity { gap: 10px; }
 .activity-tab .ba-chip { flex-direction: row; align-items: baseline; gap: 6px; font-size: 12px; }
 .activity-tab .ba-name { color: var(--ink); }
-.activity-actions { padding-top: 12px; border-top: 1px solid var(--line); }
 
-/* View toggle + presence header spacing, matching board-final-hybrid. */
-.board-head { padding: 16px clamp(16px, 3vw, 32px) 6px; }
 /* ── Calendar (events time grid) ──────────────────────────────────────────
    A day/week hour grid. Header row + all-day row + scroll body share one grid
    template (a fixed time gutter + one 1fr per day) so columns line up. */
@@ -1920,8 +1911,7 @@ button.pill:hover { border-color: var(--line-strong); }
 .cal-agenda-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .cal-agenda-filter { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .cal-agenda { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px; }
-.cal-agenda-more { font-size: 12px; padding: 4px 6px; }
-.cal-agenda-more { border-top: 1px dashed var(--line); margin-top: 2px; }
+.cal-agenda-more { font-size: 12px; padding: 4px 6px; border-top: 1px dashed var(--line); margin-top: 2px; }
 
 /* ── Notifications (bell + feed panel) ────────────────────────────────────── */
 .notif-bell { position: relative; }
@@ -1975,8 +1965,8 @@ button.pill:hover { border-color: var(--line-strong); }
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
+  font-size: 0.92em;
 }
-.task-parent-inline { font-size: 0.92em; }
 .task-parent-inline:hover .task-parent-name { text-decoration: underline; }
 .task-parent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-parent-sep { opacity: 0.6; }
@@ -2208,12 +2198,13 @@ button.pill:hover { border-color: var(--line-strong); }
 .wt-row[data-drop='before']::before { top: -1px; }
 .wt-row[data-drop='after']::after { bottom: -1px; }
 .wt-cb { display: flex; align-items: center; justify-content: center; }
-.wt-title-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wt-title-cell { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wt-title {
   flex: 1; min-width: 0; border: 0; background: none; padding: 0; text-align: left;
   font: inherit; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: text;
 }
-.wt-title:hover { text-decoration: underline; text-underline-offset: 2px; }
+.wt-title:hover { background: var(--line); border-radius: 3px; }
 .wt-row.is-done .wt-title { text-decoration: line-through; color: var(--ink-mute); }
 .wt-cell {
   border: 0; background: none; padding: 3px 4px; border-radius: var(--r-sm);
@@ -2320,16 +2311,19 @@ button.pill:hover { border-color: var(--line-strong); }
 .wt-twisty.is-leaf { visibility: hidden; }
 .wt-twisty:hover { color: var(--ink); }
 /* A hairline back to the parent, so an indent reads as descent rather than padding. */
-.wt-title-cell { position: relative; }
 .wt-status { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .wt-status .list-dot { flex-shrink: 0; }
 
-.wt-row.is-add { border-bottom: none; min-height: 40px; align-items: center; }
+.wt-row.is-add { border-bottom: 1px solid var(--line); min-height: 40px; align-items: center; }
+.wt-row.is-add:hover { background: var(--bg-paper); }
+/* The add line is a row, not a box floating in the table. */
 .wt-row.is-add .quick-add {
   grid-column: 2 / -1;
   margin-bottom: 0;
-  border-style: dashed;
+  border: 0;
   background: transparent;
+  height: 100%;
+  padding: 0;
 }
 .wt-row.is-add .quick-add:focus-within { background: var(--bg-paper); }
 
@@ -2354,8 +2348,6 @@ button.pill:hover { border-color: var(--line-strong); }
    One definition, up at .board-head — this section only adds what is new.
    The board's own controls (?, star, panel) sit together on the right; the
    app's navigation left with the top strip entirely. */
-.board-head-title { gap: 5px; }
-.board-head-right { gap: 6px; }
 
 /* ── The table cursor: moving through rows like a document ────────────────── */
 .work-table:focus { outline: none; }
@@ -2375,15 +2367,6 @@ button.pill:hover { border-color: var(--line-strong); }
 /* A sub-task says so at the far left, where the eye lands before it reads the indent. */
 .wt-sub-mark { color: var(--ink-mute); flex-shrink: 0; opacity: 0.7; }
 
-/* The add line is a row, not a box floating in the table. */
-.wt-row.is-add .quick-add {
-  border: 0;
-  background: transparent;
-  height: 100%;
-  padding: 0;
-}
-.wt-row.is-add { border-bottom: 1px solid var(--line); }
-.wt-row.is-add:hover { background: var(--bg-paper); }
 
 /* ── The project chip ─────────────────────────────────────────────────────
    A board's project was a label; it is a choice now, so it has to look like
@@ -2460,8 +2443,6 @@ button.pill:hover { border-color: var(--line-strong); }
 /* ── The table as an editor (TABLE_EDITING_PLAN) ──────────────────────────
    The title is edited in place and `↗` is the only way out of a row, so the
    title stops looking like a link and the arrow gets a column of its own. */
-.wt-title { cursor: text; }
-.wt-title:hover { text-decoration: none; background: var(--line); border-radius: 3px; }
 .wt-open {
   display: flex; align-items: center; justify-content: center;
   color: var(--ink-mute);
