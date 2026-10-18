@@ -13,6 +13,9 @@
   --pop-2: #f7c948;
   --danger: #b3321f;
   --success: #2f7d4f;
+  --status-progress: #2563eb;
+  --status-review: #7c3aed;
+  --status-done: var(--accent);
   --shadow-card: 0 1px 0 rgba(27,24,20,0.04), 0 6px 18px -10px rgba(27,24,20,0.18);
   --shadow-pop:  0 1px 0 rgba(27,24,20,0.06), 0 18px 40px -16px rgba(27,24,20,0.30);
   --r-sm: 6px;
@@ -43,6 +46,8 @@
     --accent: #f0ebde;
     --danger: #ff8a73;
     --success: #7bd49a;
+    --status-progress: #6ea0ff;
+    --status-review: #b497ff;
     --shadow-card: 0 1px 0 rgba(0,0,0,0.2), 0 8px 20px -10px rgba(0,0,0,0.6);
     --shadow-pop: 0 1px 0 rgba(0,0,0,0.3), 0 18px 40px -16px rgba(0,0,0,0.8);
   }
@@ -170,6 +175,34 @@ input, select, textarea { font: inherit; color: inherit; }
 .row-action:hover { color: var(--ink); background: var(--line); }
 .row-action.danger:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .row-action:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Shared primitives ────────────────────────────────────────────────────
+   .surface-pop  — every floating surface (menus, popovers, dropdown panels): one bg/border/radius/shadow.
+   .menu-item    — one row inside such a surface.
+   .list-row     — one row of a plain list (passkeys, tokens, members, trash).
+   Component blocks below keep only their own layout (position, width, padding, internals). */
+.surface-pop, .status-menu, .popover, .dd-panel, .task-menu, .audit-addfilter-menu, .audit-val-menu {
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+}
+.menu-item, .status-option, .dd-option, .task-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 6px 10px;
+  border: 0; border-radius: var(--r-sm);
+  background: transparent; text-align: left;
+  font-size: 13px; color: var(--ink);
+  cursor: pointer; user-select: none;
+}
+.menu-item:hover, .status-option:hover, .dd-option:hover, .task-menu-item:hover,
+.menu-item.is-active, .dd-option.is-active, .task-menu-item.is-active { background: var(--line); }
+.menu-item:disabled { opacity: 0.5; cursor: default; }
+.list-row, .share-member, .passkey-item, .trash-item, .token-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 4px; border-bottom: 1px solid var(--line);
+}
+.list-row:last-child, .trash-item:last-child { border-bottom: none; }
 
 /* ── Loadout (starred row) ────────────────────────────────────────────── */
 .loadout {
@@ -404,52 +437,23 @@ input, select, textarea { font: inherit; color: inherit; }
 .status-caret:hover { opacity: 1; }
 
 /* in-progress / in-review get an always-visible accent dot on the ring. */
-.task-indicator.status-in_progress { border-color: #2563eb; }
-.task-indicator.status-in_progress .dot { background: #2563eb; opacity: 1; }
-.task-indicator.status-in_review { border-color: #7c3aed; }
-.task-indicator.status-in_review .dot { background: #7c3aed; opacity: 1; }
+.task-indicator.status-in_progress { border-color: var(--status-progress); }
+.task-indicator.status-in_progress .dot { background: var(--status-progress); opacity: 1; }
+.task-indicator.status-in_review { border-color: var(--status-review); }
+.task-indicator.status-in_review .dot { background: var(--status-review); opacity: 1; }
 
 .status-menu {
   position: absolute; top: 22px; left: 0; z-index: 50;
-  list-style: none; margin: 0; padding: 4px;
-  background: var(--bg); border: 1px solid var(--line-strong); border-radius: 8px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.12); min-width: 144px;
+  list-style: none; margin: 0; padding: 4px; min-width: 144px;
 }
-.status-option {
-  display: flex; align-items: center; gap: 8px;
-  padding: 5px 8px; border-radius: 6px; cursor: pointer;
-  font-size: 13px; color: var(--ink); white-space: nowrap;
-}
-.status-option:hover { background: var(--line); }
+.status-option { white-space: nowrap; }
 .status-option.is-selected { font-weight: 600; }
 .status-swatch { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); flex: none; }
 .status-option.status-todo .status-swatch { background: transparent; border: 1.5px solid var(--line-strong); }
-.status-option.status-in_progress .status-swatch { background: #2563eb; }
-.status-option.status-in_review .status-swatch { background: #7c3aed; }
-.status-option.status-done .status-swatch { background: var(--accent, #16a34a); }
+.status-option.status-in_progress .status-swatch { background: var(--status-progress); }
+.status-option.status-in_review .status-swatch { background: var(--status-review); }
+.status-option.status-done .status-swatch { background: var(--status-done); }
 .status-option.status-cancelled .status-swatch { background: var(--ink-mute); }
-
-/* Date picker popover. */
-.date-picker {
-  position: absolute; top: 20px; left: 0; z-index: 60;
-  background: var(--bg); border: 1px solid var(--line-strong); border-radius: 10px;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.16); padding: 8px; width: 232px;
-}
-.date-picker-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 6px; }
-.dp-title { font-size: 13px; font-weight: 600; color: var(--ink); }
-.dp-nav { background: transparent; border: none; color: var(--ink-mute); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
-.dp-nav:hover { background: var(--line); color: var(--ink); }
-.date-picker-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
-.dp-dow { text-align: center; font-size: 10px; color: var(--ink-mute); padding: 2px 0; }
-.dp-cell { aspect-ratio: 1; border: none; background: transparent; color: var(--ink); border-radius: 6px; font-size: 12px; cursor: pointer; }
-.dp-cell.empty { cursor: default; }
-.dp-cell:not(.empty):hover { background: var(--line); }
-.dp-cell.today { font-weight: 700; }
-.dp-cell.selected { background: var(--ink); color: var(--bg); }
-.date-picker-foot { display: flex; gap: 6px; padding-top: 8px; }
-.dp-quick { flex: 1; background: var(--bg-elev); border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 4px; font-size: 11px; cursor: pointer; }
-.dp-quick:hover { background: var(--line); }
-.dp-quick.clear { color: var(--ink-mute); flex: 0 0 auto; }
 
 /* Chips */
 .chip {
@@ -728,7 +732,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .notice-error { --notice: var(--danger); }
 .notice-success { --notice: var(--success); }
 .share-members { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.share-member { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.share-member { gap: 8px; padding: 6px 4px; }
 .share-email { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share-email em { color: var(--ink-mute); font-style: normal; font-size: 12px; }
 .share-role { font-size: 12px; color: var(--ink-mute); text-transform: capitalize; }
@@ -766,7 +770,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .lookup-empty { padding: 8px; font-size: 13px; color: var(--ink-mute); }
 /* Resting rows = background colour (transparent over the panel). The highlighted row inverts to
    the opposite of the system theme — cream-on-dark in dark mode, dark-on-cream in light — the same
-   inversion the date-picker's selected cell uses. */
+   inversion the old date-picker's selected cell used. */
 .lookup .lookup-row {
   display: block; width: 100%; text-align: left;
   padding: 7px 8px; border: 0; border-radius: var(--r-sm); background: transparent;
@@ -828,11 +832,7 @@ input, select, textarea { font: inherit; color: inherit; }
   /* Anchored under the topbar's right edge (popover now lives at .app level). */
   right: clamp(16px, 4vw, 48px); top: 64px;
   margin-top: 8px;
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
   padding: 14px;
-  box-shadow: var(--shadow-pop);
   z-index: 40;
   width: min(360px, calc(100vw - 32px));
 }
@@ -922,10 +922,6 @@ input, select, textarea { font: inherit; color: inherit; }
   position: absolute;
   top: calc(100% + 4px); left: 0; right: 0;
   display: flex; flex-direction: column;
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-pop);
   z-index: 60;
 }
 .dd-search {
@@ -946,17 +942,7 @@ input, select, textarea { font: inherit; color: inherit; }
   max-height: 240px;
   overflow-y: auto;
 }
-.dd-option {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--ink-soft);
-  user-select: none;
-}
-.dd-option.is-active { background: var(--line); color: var(--ink); }
-.dd-option.is-selected { color: var(--ink); font-weight: 500; }
+.dd-option.is-selected { font-weight: 500; }
 .dd-option-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dd-check { color: var(--pop); flex: none; }
 .dd-empty { padding: 12px; color: var(--ink-mute); font-size: 13px; text-align: center; }
@@ -1374,7 +1360,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .audit-chip-add { cursor: pointer; color: var(--ink-soft); }
 .audit-chip-add:hover { border-color: var(--line-strong); color: var(--ink); }
 .audit-addfilter { position: relative; display: inline-flex; }
-.audit-addfilter-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 60; display: flex; gap: 6px; align-items: center; padding: 8px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-pop); }
+.audit-addfilter-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 60; display: flex; gap: 6px; align-items: center; padding: 8px; }
 .audit-addfilter-menu select, .audit-addfilter-menu input { border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-paper); color: var(--ink); padding: 5px 7px; font-size: 12px; }
 .audit-addfilter-menu input { width: 150px; }
 .audit-presets { display: inline-flex; gap: 4px; }
@@ -1383,7 +1369,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .audit-val { position: relative; display: inline-flex; max-width: 100%; }
 .audit-val-btn { border: 0; background: none; color: inherit; font: inherit; padding: 0; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .audit-val-btn:hover { text-decoration: underline dotted; text-underline-offset: 2px; }
-.audit-val-menu { position: absolute; top: calc(100% + 2px); left: 0; z-index: 60; display: flex; flex-direction: column; min-width: 132px; padding: 4px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-pop); }
+.audit-val-menu { position: absolute; top: calc(100% + 2px); left: 0; z-index: 60; display: flex; flex-direction: column; min-width: 132px; padding: 4px; }
 .audit-val-menu button { text-align: left; border: 0; background: none; color: var(--ink); font-size: 12px; padding: 6px 8px; border-radius: var(--r-sm); cursor: pointer; }
 .audit-val-menu button:hover { background: var(--line); }
 
@@ -1425,7 +1411,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .security-passkeys { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
 .security-sub { font-weight: 400; color: var(--ink-mute); font-size: 12px; }
 .passkey-list { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.passkey-item { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.passkey-item { padding: 6px 4px; font-size: 13px; }
 .passkey-name { font-weight: 600; }
 .passkey-meta { flex: 1; color: var(--ink-mute); font-size: 12px; }
 .passkey-add { display: flex; gap: 6px; margin-top: 8px; }
@@ -1516,8 +1502,7 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* ── trash view (recoverable soft-deletes) ───────────────────────────── */
 .trash-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
-.trash-item { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line); }
-.trash-item:last-child { border-bottom: none; }
+.trash-item { padding: 8px 2px; }
 .trash-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .trash-text { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trash-text.is-untitled { color: var(--ink-mute); font-style: italic; }
@@ -1779,9 +1764,9 @@ input, select, textarea { font: inherit; color: inherit; }
 /* One status palette, shared with the doc indicator and the action menu's swatches (§D). These
    are the indicator's values, because those are the ones the app has trained everyone on. */
 .list-dot.status-todo { background: var(--ink-mute); }
-.list-dot.status-in_progress { background: #2563eb; }
-.list-dot.status-in_review { background: #7c3aed; }
-.list-dot.status-done { background: var(--accent); }
+.list-dot.status-in_progress { background: var(--status-progress); }
+.list-dot.status-in_review { background: var(--status-review); }
+.list-dot.status-done { background: var(--status-done); }
 .list-dot.status-cancelled { background: var(--line-strong); }
 /* ── Sprints page (SPRINTS_PLAN.md) ──────────────────────────────────────── */
 /* The sprint list lives in the board panel's 320px rail, not on a page of its own — so no page
@@ -2049,9 +2034,9 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .subtask-seg { display: block; min-width: 2px; }
 .subtask-seg.status-todo { background: rgba(0, 0, 0, 0.16); }
-.subtask-seg.status-in_progress { background: #2d8fce; }
-.subtask-seg.status-in_review { background: #7c3aed; }
-.subtask-seg.status-done { background: #16a34a; }
+.subtask-seg.status-in_progress { background: var(--status-progress); }
+.subtask-seg.status-in_review { background: var(--status-review); }
+.subtask-seg.status-done { background: var(--status-done); }
 .subtask-seg.status-cancelled { background: rgba(0, 0, 0, 0.10); }
 .subtask-count { font-size: 0.78em; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
 
@@ -2152,10 +2137,6 @@ input, select, textarea { font: inherit; color: inherit; }
   max-width: 280px;
   max-height: 60vh;
   overflow: auto;
-  background: var(--bg-elev);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  box-shadow: var(--shadow-pop);
   outline: none;
 }
 .task-menu-head {
@@ -2183,20 +2164,6 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .task-menu-list { list-style: none; margin: 0; padding: 4px; }
 .task-menu-empty { padding: 8px 8px 10px; font-size: 12px; }
-.task-menu-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: none;
-  text-align: left;
-  font-size: 13px;
-  color: var(--ink);
-}
-.task-menu-item.is-active { background: var(--bg-paper); }
 .task-menu-item.is-danger { color: var(--pop); }
 .task-menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-menu-hint,
@@ -2214,9 +2181,9 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 /* One status palette (§D): these are the doc indicator's values, which the list dot now shares. */
 .task-menu-swatch.status-todo { background: transparent; }
-.task-menu-swatch.status-in_progress { background: #2563eb; border-color: #2563eb; }
-.task-menu-swatch.status-in_review { background: #7c3aed; border-color: #7c3aed; }
-.task-menu-swatch.status-done { background: var(--accent); border-color: var(--accent); }
+.task-menu-swatch.status-in_progress { background: var(--status-progress); border-color: var(--status-progress); }
+.task-menu-swatch.status-in_review { background: var(--status-review); border-color: var(--status-review); }
+.task-menu-swatch.status-done { background: var(--status-done); border-color: var(--status-done); }
 .task-menu-swatch.status-cancelled { background: var(--ink-mute); border-color: var(--ink-mute); }
 
 /* ── The work view: one component, two layouts (NOTES_SPLIT_PLAN §N2) ────── */
@@ -2568,7 +2535,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .security-tokens { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
 .board-tokens .btn, .security-tokens .btn { align-self: flex-start; }
 .token-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.token-item { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.token-item { gap: 8px; padding: 6px 4px; }
 .token-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .token-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .token-meta { font-size: 12px; color: var(--ink-mute); }
