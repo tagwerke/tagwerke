@@ -30,17 +30,13 @@
   margin-bottom: 8px;
 }
 .doc-strip-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
   color: var(--ink-soft);
   margin-right: auto;
 }
 
 .doc-strip-error {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: #a8581f;
 }
 
@@ -50,7 +46,7 @@
   border: 1px dashed var(--line-strong);
   border-radius: var(--r-sm);
   text-align: center;
-  font-size: 13px;
+  font-size: var(--fs-md);
   color: var(--ink-mute);
 }
 
@@ -95,7 +91,7 @@
 .doc-name {
   flex: 0 1 auto;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 500;
   color: var(--ink);
   overflow: hidden;
@@ -104,7 +100,7 @@
 }
 .doc-meta {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink-mute);
   white-space: nowrap;
 }
@@ -113,7 +109,7 @@
    so where it is read, which is the lesson the hover-only comment button already taught
    (COMMENTS_PLAN §8). */
 .doc-note {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink-mute);
 }
 .doc-note.is-bad { color: #a8581f; }
