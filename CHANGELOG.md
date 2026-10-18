@@ -10,6 +10,11 @@ automatically on boot — always take a backup before upgrading.
 
 ### Added
 
+- **API tokens** — personal access tokens (Security) let your own scripts and agents act as you on
+  the boards you tick, with separate permissions for tasks, comments and boards; board admins can
+  also mint a token for a project's agent (Share → API tokens) that reads the board and can comment
+  and create or edit tasks. Tokens are shown once, expire (30/90/365 days), can be revoked any time,
+  and never reach secrets, members, board settings or account security. See `docs/access-tokens.md`.
 - **Board filters and search** — the board's Sprint, Assignee, Status and Priority filters are multi-select, with
   a search box at the right (matches titles, Esc clears) and a Clear filters button. Your sprint and
   assignee choices are remembered per board. When a sub-task matches but its parent doesn't, the

@@ -75,6 +75,7 @@ Full guide (backup/restore, upgrades, SSO, running without Docker):
 |---|---|
 | [docs/self-hosting.md](docs/self-hosting.md) | Install, upgrade, backup/restore, security features, limitations |
 | [docs/data-residency.md](docs/data-residency.md) | Where data lives, what crosses the network, sub-processors (none), GDPR tooling — the document to hand to your security reviewer |
+| [docs/access-tokens.md](docs/access-tokens.md) | API tokens for your own scripts and agents: what they can reach, how to create and revoke them |
 | [SECURITY.md](SECURITY.md) | Reporting vulnerabilities, security posture |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute (DCO required) |
