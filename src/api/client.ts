@@ -250,6 +250,21 @@ export const api = {
       req(`/api/tabs/${tabId}/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
     remove: (tabId: ID, userId: ID) => req(`/api/tabs/${tabId}/members/${userId}`, { method: 'DELETE' }),
   },
+  // ── Access tokens (PAT_PLAN.md) ───────────────────────────────────────────────
+  // Account-level personal access tokens, and the per-board tokens a board admin mints for a
+  // project's agent. Creating either needs a fresh step-up (a 401 `sudo required` the caller handles).
+  tokens: {
+    list: () => req<{ tokens: PersonalToken[] }>('/api/tokens'),
+    create: (b: { label: string; scopes: PatScope[]; allBoards: boolean; boardIds: ID[]; days: TokenDays }) =>
+      req<CreatedToken & { allBoards: boolean; boardIds: ID[] }>('/api/tokens', { method: 'POST', body: JSON.stringify(b) }),
+    revoke: (id: ID) => req(`/api/tokens/${id}`, { method: 'DELETE' }),
+  },
+  agentTokens: {
+    list: (tabId: ID) => req<{ tokens: BoardToken[] }>(`/api/tabs/${tabId}/agent-tokens`),
+    create: (tabId: ID, b: { label: string; scopes: AgentExtraScope[]; days: TokenDays }) =>
+      req<CreatedToken>(`/api/tabs/${tabId}/agent-tokens`, { method: 'POST', body: JSON.stringify(b) }),
+    revoke: (tabId: ID, tokenId: ID) => req(`/api/tabs/${tabId}/agent-tokens/${tokenId}`, { method: 'DELETE' }),
+  },
   events: {
     list: (tabId: ID) => req<{ events: BoardEvent[]; roster: { userId: ID; email: string }[] }>(`/api/tabs/${tabId}/events`),
     create: (tabId: ID, b: { start?: string | null; end?: string | null; rrule?: string | null }) =>
@@ -598,6 +613,44 @@ export interface BoardMember {
   userId: ID;
   email: string;
   role: BoardRole;
+  /** 'agent' for a bot minted from an API token (shown with a badge). */
+  kind?: 'human' | 'agent';
+}
+
+export type PatScope = 'tasks' | 'comments' | 'boards';
+export type AgentExtraScope = 'task:comment' | 'task:write';
+export type TokenDays = 30 | 90 | 365;
+
+/** A personal access token as listed — never the secret. */
+export interface PersonalToken {
+  id: ID;
+  label: string;
+  scopes: PatScope[];
+  allBoards: boolean;
+  boardIds: ID[];
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+}
+
+/** A per-board agent token as listed — never the secret. */
+export interface BoardToken {
+  id: ID;
+  label: string | null;
+  scopes: string[];
+  createdAt: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+}
+
+/** What creating a token returns. `token` is the secret and is shown exactly once. */
+export interface CreatedToken {
+  id: ID;
+  token: string;
+  label: string;
+  scopes: string[];
+  expiresAt: string;
 }
 
 /** A minimal user row from the add-member lookup (id + email only). */

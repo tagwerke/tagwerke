@@ -8,7 +8,7 @@ import { api, ApiError } from '../../api/client';
 import { useSession } from '../../session/useSession';
 import { useEscape } from './useEscape';
 
-export function StepUpDialog({ onDone }: { onDone: (ok: boolean) => void }) {
+export function StepUpDialog({ onDone, reason = 'Secrets need a fresh sign-in. This lasts ten minutes.' }: { onDone: (ok: boolean) => void; reason?: string }) {
   const totpEnabled = useSession((s) => s.user?.totpEnabled);
   const [password, setPassword] = useState('');
   const [totp, setTotp] = useState('');
@@ -48,7 +48,7 @@ export function StepUpDialog({ onDone }: { onDone: (ok: boolean) => void }) {
     <div className="modal-backdrop secret-modal-backdrop" onClick={() => onDone(false)}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={(e) => void submit(e)}>
         <h2>Confirm it’s you</h2>
-        <p className="secret-modal-lede">Secrets need a fresh sign-in. This lasts ten minutes.</p>
+        <p className="secret-modal-lede">{reason}</p>
         <label className="field">
           <span>Password</span>
           <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />

@@ -8,6 +8,7 @@ import { useSession } from '../session/useSession';
 import { askConfirm } from '../confirm/useConfirm';
 import { auth, type PasskeyInfo } from '../api/client';
 import { timeAgo } from '../util/dates';
+import { PersonalTokens } from './tokens/PersonalTokens';
 
 interface Enroll {
   qr: string;
@@ -194,6 +195,8 @@ export function SecurityPanel({ onClose }: { onClose: () => void }) {
               <p className="security-secret">This browser doesn’t support passkeys.</p>
             )}
           </div>
+
+          <PersonalTokens />
         </div>
       </div>
     </div>

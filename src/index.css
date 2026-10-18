@@ -3635,3 +3635,20 @@ input, select, textarea { font: inherit; color: inherit; }
    two read as one column and TITLE labels only the title. */
 .wt-head .wt-cb { display: flex; align-items: center; justify-content: center; }
 .wt-open-th { padding: 0; }
+
+/* Access tokens (PAT_PLAN.md): Security > Personal access tokens, Share > API tokens */
+.security-tokens { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.board-tokens .btn, .security-tokens .btn { align-self: flex-start; }
+.token-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.token-item { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.token-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.token-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.token-meta { font-size: 12px; color: var(--ink-mute); }
+.token-form { display: flex; flex-direction: column; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-elev); }
+.token-fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.token-fieldset legend { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-mute); padding: 0; margin-bottom: 4px; }
+.token-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.token-secret { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--pop); border-radius: var(--r-sm); background: var(--bg-elev); font-size: 13px; }
+.token-secret-value { display: block; padding: 8px; border-radius: var(--r-sm); background: var(--bg); border: 1px solid var(--line); font-size: 12px; word-break: break-all; user-select: all; }
+.token-secret-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bot-badge { margin-left: 6px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-mute); vertical-align: middle; }

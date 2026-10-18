@@ -18,6 +18,8 @@ function NotifIcon({ type }: { type: NotificationType }) {
       return <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><circle cx="7" cy="7" r="4" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
     case 'task_approved':
       return <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+    case 'token_created':
+      return <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><circle cx="5.5" cy="10.5" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M7.4 8.6L13 3M11 5l1.6 1.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
     case 'board_added':
       return <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><rect x="2.5" y="3" width="11" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M2.5 6h11" stroke="currentColor" strokeWidth="1.4"/></svg>;
     // Both comment kinds share the speech bubble — the headline already says which one it is

@@ -13,6 +13,7 @@ import { useStore } from '../store';
 import { EmailLookup } from './EmailLookup';
 import { ActivityDrawer } from './ActivityDrawer';
 import { TrashPanel } from './TrashPanel';
+import { BoardTokens } from './tokens/BoardTokens';
 
 const ROLES: BoardRole[] = ['viewer', 'editor', 'admin'];
 const RANK: Record<BoardRole, number> = { viewer: 0, editor: 1, admin: 2 };
@@ -138,7 +139,10 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
             const self = m.userId === me?.id;
             return (
               <li key={m.userId} className="share-member">
-                <span className="share-email">{m.email}{self && <em> (you)</em>}</span>
+                <span className="share-email">
+                  {m.email}{self && <em> (you)</em>}
+                  {m.kind === 'agent' && <span className="bot-badge" title="An API token's bot">bot</span>}
+                </span>
                 {isAdmin && !self ? (
                   <select
                     value={m.role}
@@ -213,6 +217,8 @@ export function SharePanel({ tabId, tabName, onClose, embedded }: { tabId: strin
             </label>
           </div>
         )}
+
+        {isAdmin && <BoardTokens tabId={tabId} onChange={() => void refresh()} />}
 
         {historyOpen && <ActivityDrawer kind="tab" id={tabId} boardId={tabId} title={tabName} onClose={() => setHistoryOpen(false)} />}
         {trashOpen && <TrashPanel tabId={tabId} tabName={tabName} onClose={() => setTrashOpen(false)} />}

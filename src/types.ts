@@ -101,6 +101,7 @@ export type NotificationType =
   | 'review_requested'
   | 'task_approved'
   | 'board_added'
+  | 'token_created'
   | 'comment_mention'
   | 'comment_added';
 
