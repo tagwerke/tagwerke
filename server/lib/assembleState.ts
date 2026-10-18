@@ -40,10 +40,12 @@ export function taskDTO(t: typeof schema.tasks.$inferSelect): Record<string, unk
   };
 }
 
-export async function assembleState(userId: string) {
+/** `reaches` narrows the boards returned (a personal access token sees only the ones it was given).
+ *  `projects` — the caller's own categories — are not narrowed: creating a board needs one. */
+export async function assembleState(userId: string, reaches: (tabId: string) => boolean = () => true) {
   // The user's boards (via membership) joined to shared tab content. The membership
   // row carries this user's personal view state for each board.
-  const membershipRows = await db
+  const allMembershipRows = await db
     .select({
       id: schema.tabs.id,
       name: schema.tabs.name,
@@ -62,6 +64,7 @@ export async function assembleState(userId: string) {
     .innerJoin(schema.tabs, eq(schema.boardMembers.tabId, schema.tabs.id))
     .where(eq(schema.boardMembers.userId, userId))
     .orderBy(asc(schema.boardMembers.position));
+  const membershipRows = allMembershipRows.filter((t) => reaches(t.id));
 
   const tabIds = membershipRows.map((t) => t.id);
 

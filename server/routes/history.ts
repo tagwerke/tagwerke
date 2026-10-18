@@ -75,13 +75,13 @@ export async function historyRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
 
   // A task's change timeline. Gated on editor+ of the task's home board.
-  app.get('/api/tasks/:id/history', { preHandler: requireBoardRole('editor', taskBoard) }, async (req) => {
+  app.get('/api/tasks/:id/history', { preHandler: requireBoardRole('editor', taskBoard), config: { pat: 'read' } }, async (req) => {
     const { id } = req.params as { id: string };
     return { entries: await historyFor('task', id) };
   });
 
   // A board's change timeline. Gated on editor+ of the board itself.
-  app.get('/api/tabs/:id/history', { preHandler: requireBoardRole('editor', paramTabId) }, async (req) => {
+  app.get('/api/tabs/:id/history', { preHandler: requireBoardRole('editor', paramTabId), config: { pat: 'read' } }, async (req) => {
     const { id } = req.params as { id: string };
     return { entries: await boardHistory(id) };
   });

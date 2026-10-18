@@ -83,7 +83,7 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
   // List the access list. Any member may see who else is on the board.
   app.get(
     '/api/tabs/:id/members',
-    { preHandler: requireBoardRole('viewer', paramTabId) },
+    { preHandler: requireBoardRole('viewer', paramTabId), config: { pat: 'read' } },
     async (req) => {
       const { id } = req.params as { id: string };
       const rows = await db

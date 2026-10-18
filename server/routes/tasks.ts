@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { and, desc, eq, inArray, isNotNull, isNull, notInArray, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
+import { patReaches, tokenStamp } from '../auth/pat.ts';
 import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
 import { lastKnownTitle, stateAsOf } from '../lib/taskHistory.ts';
@@ -281,7 +282,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   // you can edit.
   app.put(
     '/api/tasks/:id',
-    { preHandler: requireBoardRole('editor', (req) => (req.body as { homeTabId?: string })?.homeTabId) },
+    { preHandler: requireBoardRole('editor', (req) => (req.body as { homeTabId?: string })?.homeTabId), config: { pat: 'tasks' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const b = upsertBody.safeParse(req.body);
@@ -305,7 +306,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // secret) by re-homing it to their own board. A legitimate cross-board move requires editor on
       // the board the task is LEAVING too; deny otherwise. 404 (not 403) keeps a board you can't see
       // non-probeable, matching auth/boards.ts.
-      if (before && before.homeTabId !== b.data.homeTabId && !(await hasBoardRole(userId, before.homeTabId, 'editor')))
+      // A token adds one condition: the board the task is LEAVING must be one it reaches, or a token
+      // ticked for board A could pull a task id from board B into A.
+      if (before && before.homeTabId !== b.data.homeTabId
+          && (!patReaches(req, before.homeTabId) || !(await hasBoardRole(userId, before.homeTabId, 'editor'))))
         return reply.code(404).send({ error: 'not found' });
       const hasTitle = b.data.text.trim().length > 0;
       // Sibling order: an explicit rank wins; otherwise KEEP the existing one (a PUT that omits it
@@ -370,7 +374,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         recordAudit({
           actorId: userId, action: 'PUT /api/tasks/:id', targetType: 'task', targetId: id,
           scopeId: values.homeTabId, method: 'PUT', status: 200,
-          payload: { created: { text: values.text, status: values.status } },
+          payload: { created: { text: values.text, status: values.status }, ...tokenStamp(req) },
         });
       }
       // Notify a newly-assigned user — covers "create a task already assigned to someone" (which
@@ -382,7 +386,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.patch(
     '/api/tasks/:id',
-    { preHandler: requireBoardRole('editor', taskBoard) },
+    { preHandler: requireBoardRole('editor', taskBoard), config: { pat: 'tasks' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const b = patchBody.safeParse(req.body);
@@ -461,7 +465,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post(
     '/api/tasks/:id/move',
-    { preHandler: requireBoardRole('editor', taskBoard) },
+    { preHandler: requireBoardRole('editor', taskBoard), config: { pat: 'tasks' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const b = z.object({ toTabId: z.string().min(1) }).safeParse(req.body);
@@ -479,7 +483,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       }
       // Editor on the destination too — the preHandler only proved it on the board being left.
       // 404 (not 403) keeps a board the caller can't see non-probeable, matching auth/boards.ts.
-      if (!(await hasBoardRole(userId, toTabId, 'editor'))) return reply.code(404).send({ error: 'not found' });
+      if (!patReaches(req, toTabId) || !(await hasBoardRole(userId, toTabId, 'editor')))
+        return reply.code(404).send({ error: 'not found' });
       // Opt-in preventive control (F4), mirrored from delete: a board that restricts deletion to
       // admins is trying to stop work disappearing off it, and moving a task to a board its admins
       // cannot see does exactly that. Without this the control has a hole shaped like this route.
@@ -547,6 +552,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         payload: {
           fromTabId,
           toTabId,
+          ...tokenStamp(req),
           snapshot: { text: before.text },
           ...(kids.length ? { subtaskCount: kids.length } : {}),
           // Named, not just counted: "who lost this task" is the question the trail has to answer.
@@ -567,7 +573,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete(
     '/api/tasks/:id',
-    { preHandler: requireBoardRole('editor', taskBoard) },
+    { preHandler: requireBoardRole('editor', taskBoard), config: { pat: 'tasks' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const userId = req.user!.id;
@@ -597,7 +603,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       recordAudit({
         actorId: userId, action: 'DELETE /api/tasks/:id', targetType: 'task', targetId: id,
         scopeId: t.homeTabId, method: 'DELETE', status: 200,
-        payload: { snapshot: { text: t.text, status: t.status }, ...(kids.length ? { subtaskCount: kids.length } : {}) },
+        payload: { snapshot: { text: t.text, status: t.status }, ...(kids.length ? { subtaskCount: kids.length } : {}), ...tokenStamp(req) },
       });
       return reply.send({ ok: true, subtaskCount: kids.length });
     },
@@ -625,7 +631,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   // Restore a trashed task (editor+ on its board). Idempotent. See §G/§H.
   app.post(
     '/api/tasks/:id/restore',
-    { preHandler: requireBoardRole('editor', taskBoard) },
+    { preHandler: requireBoardRole('editor', taskBoard), config: { pat: 'tasks' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const trashed = (await db
@@ -705,6 +711,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         actorId: req.user!.id, action: 'task_restore', targetType: 'task', targetId: id,
         scopeId: req.boardScope ?? null, method: 'POST', status: 200,
         payload: {
+          ...tokenStamp(req),
           ...(kids.length ? { subtaskCount: kids.length } : {}),
           ...(set.parentTaskId === null ? { promotedToRoot: true } : {}),
           // On the record: restore put a title back that the row itself no longer carried.
@@ -738,7 +745,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post(
     '/api/tasks/:id/revert',
-    { preHandler: requireBoardRole('editor', taskBoard) },
+    { preHandler: requireBoardRole('editor', taskBoard), config: { pat: 'tasks' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const b = revertBody.safeParse(req.body);
@@ -795,7 +802,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       recordAudit({
         actorId: req.user!.id, action: 'task_revert', targetType: 'task', targetId: id,
         scopeId: homeTabId, method: 'POST', status: 200,
-        payload: { entryId: b.data.entryId, at: point.at, changes, ...(skipped.length ? { skipped } : {}) },
+        payload: { entryId: b.data.entryId, at: point.at, changes, ...(skipped.length ? { skipped } : {}), ...tokenStamp(req) },
       });
 
       // A revert can hand a task to someone — same notification as any other assignment (§2).
@@ -811,7 +818,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   // Trash: a board's soft-deleted tasks (editor+). Powers the Trash view / restore surface.
   app.get(
     '/api/tabs/:id/trash',
-    { preHandler: requireBoardRole('editor', paramTabId) },
+    { preHandler: requireBoardRole('editor', paramTabId), config: { pat: 'read' } },
     async (req) => {
       const { id } = req.params as { id: string };
       const rows = await db

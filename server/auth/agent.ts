@@ -11,7 +11,7 @@ import { boardRole } from './boards.ts';
 export const AGENT_SCOPES = ['board:read', 'task:comment'] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
-const TOKEN_PREFIX = 'tgw_agent_';
+export const AGENT_PREFIX = 'tgw_agent_';
 
 export interface AgentContext {
   tokenId: string;
@@ -32,9 +32,10 @@ export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-/** A fresh secret. 256 bits of randomness, so a plain SHA-256 is a sound at-rest hash. */
-export function newToken(): { token: string; hash: string } {
-  const token = TOKEN_PREFIX + randomBytes(32).toString('base64url');
+/** A fresh secret (agent or personal access token). 256 bits of randomness, so a plain SHA-256 is a
+ *  sound at-rest hash. */
+export function newToken(prefix: string): { token: string; hash: string } {
+  const token = prefix + randomBytes(32).toString('base64url');
   return { token, hash: hashToken(token) };
 }
 
@@ -51,7 +52,7 @@ export async function requireAgent(req: FastifyRequest, reply: FastifyReply): Pr
   const deny = () => reply.code(401).send({ error: 'unauthenticated' });
   const header = req.headers.authorization;
   const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
-  if (!token.startsWith(TOKEN_PREFIX)) return deny();
+  if (!token.startsWith(AGENT_PREFIX)) return deny();
 
   const row = (
     await db

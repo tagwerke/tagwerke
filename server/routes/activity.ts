@@ -15,7 +15,7 @@ export async function activityRoutes(app: FastifyInstance): Promise<void> {
   // Presence for a board: who has seen/edited it and when. Members only.
   app.get(
     '/api/tabs/:id/activity',
-    { preHandler: requireBoardRole('viewer', paramTabId) },
+    { preHandler: requireBoardRole('viewer', paramTabId), config: { pat: 'read' } },
     async (req) => {
       const { id } = req.params as { id: string };
       const rows = await db

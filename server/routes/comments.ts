@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
+import { tokenStamp } from '../auth/pat.ts';
 import { requireBoardRole, boardRole } from '../auth/boards.ts';
 import { recordAudit } from '../lib/audit.ts';
 import { notify } from '../lib/notify.ts';
@@ -138,7 +139,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
 
   // The thread on one task, oldest first (a conversation reads forwards, unlike the history
   // timeline). Tombstones included so replies keep their context.
-  app.get('/api/tasks/:id/comments', { preHandler: requireBoardRole('viewer', taskBoard) }, async (req) => {
+  app.get('/api/tasks/:id/comments', { preHandler: requireBoardRole('viewer', taskBoard), config: { pat: 'read' } }, async (req) => {
     const { id } = req.params as { id: string };
     const rows = await db
       .select({ c: schema.taskComments, email: schema.users.email })
@@ -150,7 +151,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Post a comment. Viewer+ (D6).
-  app.post('/api/tasks/:id/comments', { preHandler: requireBoardRole('viewer', taskBoard) }, async (req, reply) => {
+  app.post('/api/tasks/:id/comments', { preHandler: requireBoardRole('viewer', taskBoard), config: { pat: 'comments' } }, async (req, reply) => {
     const { id: taskId } = req.params as { id: string };
     const b = createBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid comment' });
@@ -197,7 +198,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
       recordAudit({
         actorId: userId, action: 'comment_create', targetType: 'task_comment', targetId: row.id,
         scopeId: tabId, method: 'POST', status: 200,
-        payload: { taskId, parentCommentId: row.parentCommentId, mentions },
+        payload: { taskId, parentCommentId: row.parentCommentId, mentions, ...tokenStamp(req) },
       });
       publishComment(tabId, 'create', dto, userId);
       await notifyForComment({ taskId, tabId, actorId: userId, body: row.body, mentions });
@@ -206,7 +207,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Edit a comment. Author only — an admin may remove someone's comment but never rewrite it.
-  app.patch('/api/comments/:id', { preHandler: requireBoardRole('viewer', commentBoard) }, async (req, reply) => {
+  app.patch('/api/comments/:id', { preHandler: requireBoardRole('viewer', commentBoard), config: { pat: 'comments' } }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const b = patchBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid comment' });
@@ -229,7 +230,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
       scopeId: before.tabId, method: 'PATCH', status: 200,
       // The previous text is the point of the row: an edited comment's history is the only way
       // to see what a reader was replying to.
-      payload: { taskId: before.taskId, from: before.body, to: b.data.body },
+      payload: { taskId: before.taskId, from: before.body, to: b.data.body, ...tokenStamp(req) },
     });
     publishComment(before.tabId, 'update', dto, req.user!.id);
     // Deliberately no notification on an edit (§4) — only a new comment is news.
@@ -237,7 +238,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Soft-delete a comment. Author only.
-  app.delete('/api/comments/:id', { preHandler: requireBoardRole('viewer', commentBoard) }, async (req, reply) => {
+  app.delete('/api/comments/:id', { preHandler: requireBoardRole('viewer', commentBoard), config: { pat: 'comments' } }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const before = (await db.select().from(schema.taskComments).where(eq(schema.taskComments.id, id)).limit(1))[0];
     if (!before) return reply.code(404).send({ error: 'not found' });
@@ -258,7 +259,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
     recordAudit({
       actorId: userId, action: 'comment_delete', targetType: 'task_comment', targetId: id,
       scopeId: before.tabId, method: 'DELETE', status: 200,
-      payload: { taskId: before.taskId, byAuthor: true, body: before.body },
+      payload: { taskId: before.taskId, byAuthor: true, body: before.body, ...tokenStamp(req) },
     });
     publishComment(before.tabId, 'delete', dto, userId);
     return reply.send({ ok: true });

@@ -10,7 +10,7 @@
 import 'dotenv/config';
 import { nanoid } from 'nanoid';
 import { connect } from './_db.ts';
-import { AGENT_SCOPES, newToken } from '../auth/agent.ts';
+import { AGENT_PREFIX, AGENT_SCOPES, newToken } from '../auth/agent.ts';
 
 const args = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -60,7 +60,7 @@ try {
       `INSERT INTO board_members (tab_id, user_id, role) VALUES ($1, $2, 'viewer') ON CONFLICT (tab_id, user_id) DO UPDATE SET role = 'viewer'`,
       [boardId, user.id],
     );
-    const { token, hash } = newToken();
+    const { token, hash } = newToken(AGENT_PREFIX);
     await client.query(
       `INSERT INTO agent_tokens (id, user_id, tab_id, token_hash, scopes, label, expires_at)
        VALUES ($1, $2, $3, $4, $5::jsonb, $6, now() + ($7 || ' days')::interval)`,

@@ -10,6 +10,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
+import { patReaches } from './pat.ts';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -97,6 +98,12 @@ export function requireBoardRole(min: BoardRole, getTabId: TabIdResolver) {
     const tabId = await getTabId(req);
     if (!tabId) {
       reply.code(400).send({ error: 'missing board reference' });
+      return;
+    }
+    // A token reaches only the boards it was given. 404 like a non-member, and BEFORE boardScope is
+    // set so the refused request is not audited against a board the token cannot see.
+    if (!patReaches(req, tabId)) {
+      reply.code(404).send({ error: 'not found' });
       return;
     }
     req.boardScope = tabId; // for the audit hook / board-activity; resolved here anyway

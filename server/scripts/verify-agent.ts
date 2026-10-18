@@ -15,7 +15,7 @@ process.env.SESSION_SECRET ??= 'verify-agent-secret-not-used-in-production';
 const { db, pool, schema } = await import('../db/client.ts');
 const { agentRoutes, neutralizeAgentText } = await import('../routes/agent.ts');
 const { taskRoutes } = await import('../routes/tasks.ts');
-const { newToken } = await import('../auth/agent.ts');
+const { AGENT_PREFIX, newToken } = await import('../auth/agent.ts');
 const { createSession, SESSION_COOKIE } = await import('../auth/session.ts');
 
 let failures = 0;
@@ -28,8 +28,8 @@ function check(label: string, ok: boolean, detail?: unknown): void {
 }
 
 const [boardA, boardB, human, agentUser, otherAgent, taskA, taskB] = Array.from({ length: 7 }, () => nanoid());
-const tokA = newToken();
-const tokB = newToken();
+const tokA = newToken(AGENT_PREFIX);
+const tokB = newToken(AGENT_PREFIX);
 
 async function seed(): Promise<void> {
   await db.insert(schema.users).values([

@@ -34,6 +34,7 @@
     "verify:extraction": "tsx server/scripts/verify-extraction.ts",
     "verify:items": "tsx server/scripts/verify-items.ts",
     "verify:agent": "tsx server/scripts/verify-agent.ts",
+    "verify:pat": "tsx server/scripts/verify-pat.ts",
     "verify:secrets": "tsx server/scripts/verify-secrets.ts",
     "rotate-vault-key": "tsx server/scripts/rotate-vault-key.ts",
     "migrate:notes-split": "tsx server/scripts/migrate-notes-split.ts",

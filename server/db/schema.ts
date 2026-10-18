@@ -98,6 +98,28 @@ export const agentTokens = pgTable(
   ],
 );
 
+// Personal access tokens (PAT_PLAN.md). Unlike an agent token, a PAT acts AS ITS OWNER on the normal
+// /api/* routes, limited to `scopes` and to the boards it reaches (`all_boards`, or `tab_ids`).
+// The owner's board role is still checked live on every request, so a PAT can never reach more
+// than its owner can. `tab_ids` is a plain array: tokens are never edited, and an id for a deleted
+// board is harmless. Only the SHA-256 of the secret is stored; it is shown once at creation.
+export const personalAccessTokens = pgTable('personal_access_tokens', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  label: text('label').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  scopes: jsonb('scopes').notNull().default([]),
+  allBoards: boolean('all_boards').notNull().default(false),
+  tabIds: text('tab_ids').array().notNull().default(sql`'{}'::text[]`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  lastUsedIp: text('last_used_ip'),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+});
+
 // Signup invites. A code may allow multiple uses and/or expire. Later this can
 // carry team_id/role to become a team invite.
 export const invites = pgTable('invites', {

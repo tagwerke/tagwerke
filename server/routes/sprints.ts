@@ -26,7 +26,7 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     '/api/tabs/:id/sprints',
-    { preHandler: requireBoardRole('viewer', paramTabId) },
+    { preHandler: requireBoardRole('viewer', paramTabId), config: { pat: 'read' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const rows = await db
@@ -40,7 +40,7 @@ export async function sprintRoutes(app: FastifyInstance): Promise<void> {
 
   app.patch(
     '/api/sprints/:id',
-    { preHandler: requireBoardRole('editor', sprintTabId) },
+    { preHandler: requireBoardRole('editor', sprintTabId), config: { pat: 'boards' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const b = patchBody.safeParse(req.body);

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
+import { patAddBoard, patReaches } from '../auth/pat.ts';
 import { boardRole, requireBoardRole, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
 import { storageKeysForBoard, purgeObjects } from '../lib/documentGc.ts';
@@ -64,7 +65,7 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
   // 'doc' broadcast carries the version only, so the client pulls the fresh blob from here.
   app.get(
     '/api/tabs/:id/doc',
-    { preHandler: requireBoardRole('viewer', paramTabId) },
+    { preHandler: requireBoardRole('viewer', paramTabId), config: { pat: 'read' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const row = (
@@ -79,7 +80,7 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post('/api/tabs', { config: { rateLimit: CREATE_BOARD_RL } }, async (req, reply) => {
+  app.post('/api/tabs', { config: { rateLimit: CREATE_BOARD_RL, pat: 'boards' } }, async (req, reply) => {
     const b = createBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid tab' });
     const userId = req.user!.id;
@@ -107,6 +108,8 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
       // tasks have somewhere to land without waiting for the next daily rollout tick.
       await ensureCurrentSprint(tx, b.data.id, new Date());
     });
+    // A board a token creates joins that token's list, so it can keep working on what it made.
+    await patAddBoard(req, b.data.id);
     dlog('tabs', `POST /api/tabs board=${sid(b.data.id)} COMMITTED (membership now exists → ydoc-join will pass)`);
     // The creator's client made this board optimistically and knows nothing the server added:
     // the seeded sprint, the member list. The same nudge a share sends makes it re-pull them.
@@ -114,11 +117,15 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send({ ok: true });
   });
 
-  app.patch('/api/tabs/:id', async (req, reply) => {
+  app.patch('/api/tabs/:id', { config: { pat: 'boards' } }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const b = patchBody.safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'invalid patch' });
     const userId = req.user!.id;
+    // This route checks access itself rather than through requireBoardRole, so the token's board
+    // list is enforced here. Board guardrails are never a token's to change.
+    if (!patReaches(req, id)) return reply.code(404).send({ error: 'not found' });
+    if (req.pat && b.data.settings !== undefined) return reply.code(403).send({ error: 'not available to tokens' });
 
     // Split three ways: shared content (name/dateKey/location), admin guardrails (settings), and
     // this caller's personal view state (category/starred). The document is NOT handled here.

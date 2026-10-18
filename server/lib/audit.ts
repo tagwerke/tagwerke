@@ -14,6 +14,7 @@ import type { FastifyInstance } from 'fastify';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
 import { touchEdited } from './boardActivity.ts';
+import { tokenStamp } from '../auth/pat.ts';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -87,7 +88,7 @@ export function diffChanges(
  * the row (tasks/tabs/time-blocks). See AUDIT_IMPLEMENTATION_PLAN §B2.
  */
 export function auditEdit(
-  req: { user?: { id: string } | null; auditHandled?: boolean; method?: string },
+  req: { user?: { id: string } | null; auditHandled?: boolean; method?: string; pat?: { id: string; label: string } },
   entry: { action: string; targetType: string; targetId: string; scopeId?: string | null; changes: FieldChange[]; status?: number },
 ): void {
   req.auditHandled = true;
@@ -99,7 +100,7 @@ export function auditEdit(
     targetId: entry.targetId,
     scopeId: entry.scopeId ?? null,
     method: req.method ?? null,
-    payload: { changes: entry.changes },
+    payload: { changes: entry.changes, ...tokenStamp(req) },
     status: entry.status ?? 200,
   });
 }
@@ -164,7 +165,8 @@ export function registerAuditHook(app: FastifyInstance): void {
       // row legible ("task X on tab Y") without a second lookup.
       scopeId: req.boardScope ?? null,
       method: req.method,
-      payload: coarse ? null : redact(req.body),
+      // A write through a personal access token says so, even on the coarse (no-body) rows.
+      payload: req.pat ? { ...(coarse ? {} : (redact(req.body) as object | null)), ...tokenStamp(req) } : coarse ? null : redact(req.body),
       status: reply.statusCode,
     });
 

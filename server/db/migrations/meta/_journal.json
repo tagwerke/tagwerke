@@ -246,6 +246,13 @@
       "when": 1792032587204,
       "tag": "0034_board_secrets",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792281750470,
+      "tag": "0035_personal_access_tokens",
+      "breakpoints": true
     }
   ]
 }
