@@ -78,6 +78,8 @@ export interface SessionUser {
   email: string;
   role: 'admin' | 'member';
   totpEnabled: boolean;
+  /** False for an SSO-only account (no password to confirm with). Absent right after login/signup. */
+  hasPassword?: boolean;
 }
 
 export interface SecretInput {

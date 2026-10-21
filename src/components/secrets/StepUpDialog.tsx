@@ -10,6 +10,8 @@ import { useEscape } from './useEscape';
 
 export function StepUpDialog({ onDone, reason = 'Secrets need a fresh sign-in. This lasts ten minutes.' }: { onDone: (ok: boolean) => void; reason?: string }) {
   const totpEnabled = useSession((s) => s.user?.totpEnabled);
+  // An SSO-only account has no password; asking for one is a dead end, so offer what it can use.
+  const hasPassword = useSession((s) => s.user?.hasPassword) !== false;
   const [password, setPassword] = useState('');
   const [totp, setTotp] = useState('');
   const [busy, setBusy] = useState(false);
@@ -49,10 +51,18 @@ export function StepUpDialog({ onDone, reason = 'Secrets need a fresh sign-in. T
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={(e) => void submit(e)}>
         <h2>Confirm it’s you</h2>
         <p className="secret-modal-lede">{reason}</p>
-        <label className="field">
-          <span>Password</span>
-          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
-        </label>
+        {hasPassword ? (
+          <label className="field">
+            <span>Password</span>
+            <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
+          </label>
+        ) : (
+          <p className="secret-modal-lede">
+            You sign in through your identity provider, so there is no password to confirm. Use a passkey
+            {totpEnabled ? ' or your two-factor code' : ''}.{' '}
+            {!totpEnabled && 'No passkey yet? Close this, add one under Security, then try again (two-factor works too).'}
+          </p>
+        )}
         {totpEnabled && (
           <label className="field">
             <span>Two-factor code</span>
@@ -66,7 +76,7 @@ export function StepUpDialog({ onDone, reason = 'Secrets need a fresh sign-in. T
           )}
           <span className="secret-spacer" />
           <button type="button" className="btn ghost" onClick={() => onDone(false)}>Cancel</button>
-          <button type="submit" className="btn primary" disabled={busy}>{busy ? '…' : 'Continue'}</button>
+          {(hasPassword || totpEnabled) && <button type="submit" className="btn primary" disabled={busy}>{busy ? '…' : 'Continue'}</button>}
         </div>
       </form>
     </div>

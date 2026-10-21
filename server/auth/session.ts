@@ -64,6 +64,8 @@ export interface SessionUser {
   email: string;
   role: 'admin' | 'member';
   totpEnabled: boolean;
+  /** False for an SSO-only account: step-up must then use a passkey or a 2FA code, not a password. */
+  hasPassword?: boolean;
 }
 
 /** Resolve the logged-in user from the request cookie, refreshing expiry. Returns null if unauthenticated. */
@@ -82,6 +84,7 @@ export async function resolveUser(req: FastifyRequest): Promise<SessionUser | nu
       email: schema.users.email,
       role: schema.users.role,
       totpEnabled: schema.users.totpEnabled,
+      passwordHash: schema.users.passwordHash,
       deactivatedAt: schema.users.deactivatedAt,
       kind: schema.users.kind,
     })
@@ -115,7 +118,7 @@ export async function resolveUser(req: FastifyRequest): Promise<SessionUser | nu
     .set({ expiresAt: expiry() })
     .where(eq(schema.sessions.id, sessionId));
 
-  return { id: row.userId, email: row.email, role: row.role === 'admin' ? 'admin' : 'member', totpEnabled: row.totpEnabled };
+  return { id: row.userId, email: row.email, role: row.role === 'admin' ? 'admin' : 'member', totpEnabled: row.totpEnabled, hasPassword: !!row.passwordHash };
 }
 
 /**
