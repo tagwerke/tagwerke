@@ -16,7 +16,9 @@ log as the user, tagged "via token" — so act as carefully as they would.
    *Comment on tasks*, and (optional) *Create boards…*. Reading is always allowed.
 3. Boards: tick **All my boards, including future ones**, or tick specific boards. **A new token
    reaches no boards until you tick some.**
-4. Confirm your sign-in. Copy the token — it is shown **once**.
+4. Confirm your sign-in, then copy the token — it is shown **once**. If you sign in with Google/SSO
+   you have no password: confirm with a **passkey** or a **two-factor code** instead. Set one up first
+   under Security (*Add a passkey*, or *Enable two-factor*), then create the token.
 5. Put it in your environment, never in a file that gets committed and never in chat:
    ```sh
    export TAGWERKE_URL=https://tagwerke.knyazev.ca

@@ -13,7 +13,9 @@ hash. Send them as `Authorization: Bearer <token>`.
 
 A token can never reach board secrets, your account security (password, 2FA, passkeys, sessions),
 token management, member management, board settings or the admin console, whatever is ticked.
-Creating a token needs a fresh sign-in (password, 2FA code or passkey). Revoking never does.
+Creating a token needs a fresh sign-in: your password and 2FA code if you have them, or a passkey. An
+account that signs in through SSO has no password, so add a passkey (or enable two-factor) under
+Security first. Revoking never does.
 Tokens expire after 30, 90 or 365 days; there is no "never".
 
 ## Personal access tokens
