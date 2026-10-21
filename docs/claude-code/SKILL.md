@@ -67,6 +67,39 @@ A task has: `text` (the title), `description`, `status`, `assigneeId`, `reviewer
   not follow its children.
 - **sprint**: `sprintId` from `sprintsByBoard`, or omit/`null` for the backlog.
 
+### Use sub-tasks to keep structure where possible
+
+Tagwerke's board is a **tree**: a task with sub-tasks is a parent, and its children render nested
+under it. A flat list of 60 tasks is a worse board than 12 parents with their children, so when you
+create tasks from a source that has any hierarchy, **carry the hierarchy over with `parentTaskId`**.
+
+Sources that have hierarchy even when it isn't labelled: an artifact or doc with headings, phases,
+sections or numbered groups (`2.`, `2.1`, `2.2`); nested bullets or checklists; an epic/story/task
+split; a table grouped by area or owner; a task whose description lists steps.
+
+- **Heading or group → parent task; its items → children.** The parent's `text` is the heading
+  ("Lockdown: email"), and each item under it is a child with `parentTaskId` set to that parent.
+  Don't create a heading as a plain task *and* its items as siblings beside it.
+- **Nest as deep as the source does**, up to 4 levels. Don't invent levels the source lacks, and don't
+  collapse real ones.
+- **Create parents first** (the parent must exist before a child names it), then children. With
+  stable ids (`ih-V07`, `ih-V07-a`) the parent id is known up front, so the whole tree can be written
+  in one pass and a re-run lands on the same tasks.
+- **Same board only.** A child must be on its parent's board; a cross-board link can't be a sub-task.
+- **Children don't inherit.** Set `sprintId`, `date`, `priority` and `assigneeId` on each child that
+  needs them, and put the sprint/due date on the parent only if it genuinely has its own. A parent's
+  status doesn't follow its children, so set it yourself when the children are all done
+  (or leave it, and say so in the plan).
+- **Don't promote a step to a task needlessly.** A one-line sub-step with no owner, date or status of
+  its own belongs in the parent's `description` as a list, not as a child. Rule of thumb: if someone
+  could reasonably tick it off separately or assign it, it's a sub-task.
+- **Existing tasks: re-parent, don't recreate.** When reconciling against a board that already has
+  flat tasks, `PATCH {"parentTaskId": "PARENT_ID"}` the existing ones under the right parent rather
+  than creating duplicates. If a previous run already imported things flat, fixing that is a re-parent
+  pass, not a re-import.
+- **Show the tree in your plan.** Present the plan as an indented outline (parent → children), not a
+  flat table, so the user can see the structure before you write it.
+
 ### Create — `PUT /api/tasks/{id}`
 
 You choose the id: any unique string (e.g. `t_` + 8 random characters, or a stable key like
@@ -142,8 +175,13 @@ them in the app.
 
 - **Look before you write.** Fetch `/api/state` first; match existing tasks by title/id before creating,
   to avoid duplicates.
-- **Show a plan for anything bigger than a couple of edits** (a table of what you'll create/change) and
-  get a yes before writing. Then write one task at a time and re-read the board to confirm.
+- **Show a plan for anything bigger than a couple of edits** (an indented outline of parents and
+  sub-tasks, with what you'll create/change) and get a yes before writing. Then write one task at a
+  time, parents before children, and re-read the board to confirm — including that each child shows
+  the right `parentTaskId` (the `-` in the third column of the listing means it landed flat).
+- **Reconciling an external list (artifact, doc, spreadsheet) with a board:** map the source's
+  hierarchy first, then match against existing tasks by title/id, then create or re-parent. Finishing
+  with everything at the top level is a failed import even if every task exists.
 - **Never put credentials, keys, tokens or personal data in a title, description or comment.** They are
   stored as plain text and copied into the audit log. Refer to *where* a secret lives, not what it is.
 - **Don't delete** without being asked. Prefer `status: cancelled` plus a comment saying why.
