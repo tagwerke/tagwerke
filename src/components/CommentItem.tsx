@@ -64,7 +64,7 @@ export function CommentItem({ comment, replies = [], tabId, taskId, meId, replya
   }
 
   return (
-    <li className={`comment ${comment.deleted ? 'deleted' : ''}`}>
+    <li id={`comment-${comment.id}`} className={`comment ${comment.deleted ? 'deleted' : ''}`}>
       <div className="comment-head">
         <span className="comment-avatar" aria-hidden>{author.charAt(0).toUpperCase()}</span>
         <span className="comment-author" title={comment.authorEmail ?? undefined}>{author}</span>

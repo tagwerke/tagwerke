@@ -253,6 +253,13 @@
       "when": 1792281750470,
       "tag": "0035_personal_access_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792601033457,
+      "tag": "0036_notification_links",
+      "breakpoints": true
     }
   ]
 }

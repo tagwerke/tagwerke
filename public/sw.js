@@ -66,9 +66,9 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ── Web push (NOTIFICATIONS.md, Phase 4) ────────────────────────────────────
-// The server (server/lib/webpush.ts) sends a JSON payload { title, body, tabId, notifId };
+// The server (server/lib/webpush.ts) sends a JSON payload { title, body, tabId, url, notifId };
 // show it as a system notification. Clicking it focuses an existing app tab (navigating it to
-// the related board) or opens a new one. Payload parsing is defensive — a malformed push must
+// `url` — the board, the task page, or a comment on it) or opens a new one. Payload parsing is defensive — a malformed push must
 // never throw and kill the handler.
 self.addEventListener('push', (event) => {
   let data = {};
@@ -83,15 +83,16 @@ self.addEventListener('push', (event) => {
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag: data.notifId || undefined, // collapse duplicate deliveries of the same notification
-    data: { tabId: data.tabId || null },
+    data: { tabId: data.tabId || null, url: data.url || null },
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const tabId = event.notification.data && event.notification.data.tabId;
-  const target = tabId ? `/b/${tabId}` : '/';
+  const d = event.notification.data || {};
+  // `url` is built server-side (shared/links.ts). An older push without it falls back to the board.
+  const target = d.url || (d.tabId ? `/b/${encodeURIComponent(d.tabId)}` : '/');
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {

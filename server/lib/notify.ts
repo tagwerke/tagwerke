@@ -16,6 +16,7 @@ import { db, schema } from '../db/client.ts';
 import { publish, userChannel, subscriberCount } from './bus.ts';
 import { pushToUser } from './webpush.ts';
 import { dlog, sid } from './dlog.ts';
+import { notificationPath } from '../../shared/links.ts';
 
 const PROTOCOL_VERSION = 1;
 
@@ -35,6 +36,8 @@ export interface NotifyInput {
   title: string;
   body?: string | null;
   tabId?: string | null; // board to open on click
+  taskId?: string | null; // the task it is about (opens its page)
+  commentId?: string | null; // the comment it is about (scrolled to on the task page)
   actorId?: string | null; // who caused it
 }
 
@@ -47,6 +50,8 @@ export function notify(userId: string, input: NotifyInput): void {
     title: input.title,
     body: input.body ?? null,
     tabId: input.tabId ?? null,
+    taskId: input.taskId ?? null,
+    commentId: input.commentId ?? null,
     actorId: input.actorId ?? null,
     readAt: null as Date | null,
     createdAt: new Date(),
@@ -69,7 +74,7 @@ export function notify(userId: string, input: NotifyInput): void {
     // logged for visibility only — it no longer suppresses anything.
     const live = subscriberCount(userChannel(userId));
     dlog('push', `notify user=${sid(userId)} type=${row.type} liveSockets=${live} → PUSH (gate off)`);
-    await pushToUser(userId, { title: row.title, body: row.body, tabId: row.tabId, notifId: row.id }).catch((err) => {
+    await pushToUser(userId, { title: row.title, body: row.body, tabId: row.tabId, url: notificationPath(row), notifId: row.id }).catch((err) => {
       dlog('push', `notify user=${sid(userId)} pushToUser threw`, err);
     });
   })();

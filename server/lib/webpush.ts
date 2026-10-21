@@ -38,6 +38,8 @@ export interface PushPayload {
   title: string;
   body?: string | null;
   tabId?: string | null;
+  /** Where a click should land (board, task page, or a comment on it). */
+  url?: string;
   notifId?: string;
 }
 

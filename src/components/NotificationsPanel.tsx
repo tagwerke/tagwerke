@@ -7,8 +7,10 @@ import { useNotifications } from '../notifications/useNotifications';
 import { askConfirm } from '../confirm/useConfirm';
 import { PushOptIn } from './PushOptIn';
 import { timeAgo } from '../util/dates';
-import type { NotificationType } from '../types';
+import type { Notification, NotificationType } from '../types';
 import { EmptyState } from './common/EmptyState';
+import { navigate } from '../util/router';
+import { notificationPath } from '../../shared/links';
 
 /** A small glyph per notification kind — keeps the list scannable at a glance. */
 function NotifIcon({ type }: { type: NotificationType }) {
@@ -43,11 +45,15 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
   const setActiveTab = useStore((s) => s.setActiveTab);
   const setPlannerOpen = useStore((s) => s.setPlannerOpen);
 
-  const open = (id: string, tabId: string | null | undefined) => {
-    markRead(id);
-    if (tabId) {
+  const open = (n: Notification) => {
+    markRead(n.id);
+    if (n.taskId && n.tabId) {
+      // Straight to the task page (and the comment on it). The URL drives the rest, as for a pasted link.
       setPlannerOpen(false);
-      setActiveTab(tabId);
+      navigate(notificationPath(n));
+    } else if (n.tabId) {
+      setPlannerOpen(false);
+      setActiveTab(n.tabId);
     }
     onClose();
   };
@@ -89,7 +95,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
               <button
                 key={n.id}
                 className={`notif-row ${n.readAt ? '' : 'is-unread'}`}
-                onClick={() => open(n.id, n.tabId)}
+                onClick={() => open(n)}
               >
                 <span className="notif-icon" aria-hidden><NotifIcon type={n.type} /></span>
                 <span className="notif-text">

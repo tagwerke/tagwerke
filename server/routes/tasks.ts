@@ -31,10 +31,11 @@ export function notifyAssigneeChange(
   prevAssignee: string | null | undefined,
   actorId: string,
   tabId: string,
+  taskId: string,
   text: string | null | undefined,
 ): void {
   if (!nextAssignee || nextAssignee === prevAssignee || nextAssignee === actorId) return;
-  notify(nextAssignee, { type: 'task_assigned', title: 'Assigned to you', body: taskLabel(text), tabId, actorId });
+  notify(nextAssignee, { type: 'task_assigned', title: 'Assigned to you', body: taskLabel(text), tabId, taskId, actorId });
 }
 
 // Fields whose changes are worth an accountability trail. `rank` is excluded (reorder
@@ -379,7 +380,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       }
       // Notify a newly-assigned user — covers "create a task already assigned to someone" (which
       // lands here, not on PATCH) and a full-replace that changes the assignee.
-      notifyAssigneeChange(values.assigneeId, before?.assigneeId, userId, values.homeTabId, values.text);
+      notifyAssigneeChange(values.assigneeId, before?.assigneeId, userId, values.homeTabId, id, values.text);
       return reply.send({ ok: true });
     },
   );
@@ -426,11 +427,11 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const actor = req.user!.id;
       const text = typeof b.data.text === 'string' ? b.data.text : before.text;
       // Assigned to you — assignment changed to a real, different user.
-      notifyAssigneeChange(b.data.assigneeId, before.assigneeId, actor, homeTabId, text);
+      notifyAssigneeChange(b.data.assigneeId, before.assigneeId, actor, homeTabId, id, text);
       // Review requested — the task just transitioned INTO in_review and has a reviewer.
       const reviewerId = b.data.reviewerId ?? before.reviewerId;
       if (b.data.status === 'in_review' && before.status !== 'in_review' && reviewerId && reviewerId !== actor) {
-        notify(reviewerId, { type: 'review_requested', title: 'Review requested', body: taskLabel(text), tabId: homeTabId, actorId: actor });
+        notify(reviewerId, { type: 'review_requested', title: 'Review requested', body: taskLabel(text), tabId: homeTabId, taskId: id, actorId: actor });
       }
       return reply.send({ ok: true });
     },
@@ -806,7 +807,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       });
 
       // A revert can hand a task to someone — same notification as any other assignment (§2).
-      notifyAssigneeChange(after.assigneeId, before.assigneeId, req.user!.id, homeTabId, after.text);
+      notifyAssigneeChange(after.assigneeId, before.assigneeId, req.user!.id, homeTabId, id, after.text);
       publish(boardChannel(homeTabId), {
         v: 1, type: 'entity', entity: 'task', id, action: 'PUT', patch: taskDTO(after), actorId: req.user!.id,
       });

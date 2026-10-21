@@ -113,6 +113,9 @@ export interface Notification {
   body?: string | null;
   /** Board to open when clicked; null for account-level events. */
   tabId?: ID | null;
+  /** The task (and comment) it is about: a click opens that task page, scrolled to the comment. */
+  taskId?: ID | null;
+  commentId?: ID | null;
   actorId?: ID | null;
   readAt?: string | null; // ISO; null = unread
   createdAt: string; // ISO

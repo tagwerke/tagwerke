@@ -19,6 +19,7 @@ const { agentRoutes, neutralizeAgentText } = await import('../routes/agent.ts');
 const { taskRoutes } = await import('../routes/tasks.ts');
 const { tokenRoutes } = await import('../routes/tokens.ts');
 const { subscribe, unsubscribe, boardChannel } = await import('../lib/bus.ts');
+const { notificationPath } = await import('../../shared/links.ts');
 const { AGENT_PREFIX, newToken } = await import('../auth/agent.ts');
 const { createSession, SESSION_COOKIE } = await import('../auth/session.ts');
 
@@ -71,6 +72,7 @@ const made: { userId: string }[] = [];
 
 async function cleanup(): Promise<void> {
   await db.delete(schema.auditLog).where(inArray(schema.auditLog.actorId, [human, agentUser, otherAgent, ...made.map((m) => m.userId)]));
+  await db.delete(schema.notifications).where(inArray(schema.notifications.userId, [human, agentUser, otherAgent, ...made.map((m) => m.userId)]));
   await db.delete(schema.tabs).where(inArray(schema.tabs.id, [boardA, boardB])); // cascades tasks, comments, tokens, members
   await db.delete(schema.users).where(inArray(schema.users.id, [human, agentUser, otherAgent, outsider, ...made.map((m) => m.userId)]));
 }
@@ -126,6 +128,16 @@ try {
   await new Promise((res) => setTimeout(res, 200)); // audit write is fire-and-forget
   const audit = await db.select().from(schema.auditLog).where(eq(schema.auditLog.actorId, agentUser));
   check('audited as the agent with via=agent', audit.some((a) => a.action === 'comment_create' && (a.payload as any)?.via === 'agent'));
+
+  console.log('notifications link to the thing itself');
+  const mention = await comment(tokA.token, taskA, { body: `Heads up @[human](${human}) please look` });
+  const mentionId = (mention.json() as any).comment?.id as string;
+  await new Promise((res) => setTimeout(res, 300)); // notify() is fire-and-forget
+  const notes = await db.select().from(schema.notifications).where(eq(schema.notifications.userId, human));
+  const note = notes.find((n) => n.type === 'comment_mention');
+  check('a mention carries board, task and comment ids', note?.tabId === boardA && note.taskId === taskA && note.commentId === mentionId, note);
+  check('...and resolves to the task page scrolled to the comment', notificationPath({ tabId: boardA, taskId: taskA, commentId: mentionId }) === `/b/${boardA}/task/${taskA}?comment=${mentionId}`);
+  check('a board-only notification still opens the board', notificationPath({ tabId: boardA }) === `/b/${boardA}` && notificationPath({}) === '/');
 
   console.log('scopes + revocation');
   await setToken(tokA.hash, { scopes: ['board:read'] });

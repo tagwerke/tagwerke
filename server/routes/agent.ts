@@ -308,7 +308,7 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
           payload: { taskId, parentCommentId: row.parentCommentId, mentions, via: 'agent', tokenId: agent.tokenId },
         });
         publishComment(agent.tabId, 'create', dto, agent.userId);
-        await notifyForComment({ taskId, tabId: agent.tabId, actorId: agent.userId, body: row.body, mentions });
+        await notifyForComment({ taskId, commentId: row.id, tabId: agent.tabId, actorId: agent.userId, body: row.body, mentions });
       }
       return reply.send({ ok: true, comment: { id: row.id, createdAt: row.createdAt.toISOString() } });
     },
@@ -367,7 +367,7 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
         payload: { created: { text: title, status }, via: 'agent', tokenId: agent.tokenId },
       });
       publish(boardChannel(tabId), { v: 1, type: 'entity', entity: 'task', id, action: 'PUT', patch: taskDTO(row), actorId: agent.userId });
-      notifyAssigneeChange(row.assigneeId, null, agent.userId, tabId, row.text);
+      notifyAssigneeChange(row.assigneeId, null, agent.userId, tabId, id, row.text);
       return reply.code(201).send({ ok: true, created: true, task: { id } });
     },
   );
@@ -435,9 +435,9 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
       }
       publish(boardChannel(tabId), { v: 1, type: 'entity', entity: 'task', id, action: 'PUT', patch: taskDTO(after), actorId: agent.userId });
 
-      notifyAssigneeChange(b.data.assigneeId, before.assigneeId, agent.userId, tabId, after.text);
+      notifyAssigneeChange(b.data.assigneeId, before.assigneeId, agent.userId, tabId, id, after.text);
       if (b.data.status === 'in_review' && before.status !== 'in_review' && after.reviewerId && after.reviewerId !== agent.userId) {
-        notify(after.reviewerId, { type: 'review_requested', title: 'Review requested', body: taskLabel(after.text), tabId, actorId: agent.userId });
+        notify(after.reviewerId, { type: 'review_requested', title: 'Review requested', body: taskLabel(after.text), tabId, taskId: id, actorId: agent.userId });
       }
       return reply.send({ ok: true });
     },

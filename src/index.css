@@ -2494,3 +2494,7 @@ button.pill:hover { border-color: var(--line-strong); }
   .pill-project-wrap .pill-delete, .dd.is-chip .dd-caret { opacity: 0; }
   .task-row:hover .status-caret, .status-caret:focus-visible { opacity: 0.55; }
 }
+
+/* A comment reached from a notification: a brief highlight so the eye finds it in the thread. */
+@keyframes comment-flash { from { background: color-mix(in srgb, var(--pop) 22%, transparent); } to { background: transparent; } }
+.comment.comment-flash { animation: comment-flash 2.2s ease-out; border-radius: var(--r-sm); }

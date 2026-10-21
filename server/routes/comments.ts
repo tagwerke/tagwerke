@@ -201,7 +201,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
         payload: { taskId, parentCommentId: row.parentCommentId, mentions, ...tokenStamp(req) },
       });
       publishComment(tabId, 'create', dto, userId);
-      await notifyForComment({ taskId, tabId, actorId: userId, body: row.body, mentions });
+      await notifyForComment({ taskId, commentId: row.id, tabId, actorId: userId, body: row.body, mentions });
     }
     return reply.send({ ok: true, comment: dto });
   });
@@ -280,6 +280,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
  */
 export async function notifyForComment(input: {
   taskId: string;
+  commentId: string;
   tabId: string;
   actorId: string;
   body: string;
@@ -306,6 +307,8 @@ export async function notifyForComment(input: {
       title: `Mentioned you on “${label.length > 60 ? `${label.slice(0, 59)}…` : label}”`,
       body: preview,
       tabId: input.tabId,
+      taskId: input.taskId,
+      commentId: input.commentId,
       actorId: input.actorId,
     });
   }
@@ -320,6 +323,8 @@ export async function notifyForComment(input: {
       title: `New comment on “${label.length > 60 ? `${label.slice(0, 59)}…` : label}”`,
       body: preview,
       tabId: input.tabId,
+      taskId: input.taskId,
+      commentId: input.commentId,
       actorId: input.actorId,
     });
   }

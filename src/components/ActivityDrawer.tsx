@@ -139,6 +139,29 @@ export function ActivityDrawer({
     if (kind === 'task') void loadComments(id);
   }, [kind, id, loadComments]);
 
+  // A notification link carries `?comment=<id>`. Once the thread is on screen, scroll to that comment
+  // and flash it, then drop the query so a refresh doesn't repeat it. `search` follows navigation so a
+  // second link to this same task (another comment) works without remounting.
+  const [search, setSearch] = useState(() => window.location.search);
+  useEffect(() => {
+    const onNav = () => setSearch(window.location.search);
+    window.addEventListener('popstate', onNav);
+    return () => window.removeEventListener('popstate', onNav);
+  }, []);
+  useEffect(() => {
+    if (kind !== 'task' || !comments) return;
+    const want = new URLSearchParams(search).get('comment');
+    if (!want) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearch('');
+    const el = document.getElementById(`comment-${want}`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('comment-flash');
+    window.setTimeout(() => el.classList.remove('comment-flash'), 2200);
+  }, [kind, comments, search]);
+
   useEffect(() => {
     if (embedded) return; // the task page owns its own Escape behavior
     const onKey = (e: KeyboardEvent) => {

@@ -582,6 +582,10 @@ export const notifications = pgTable(
     // The board to open when the notification is clicked (null for account-level events later).
     // Not an FK: a pruned/left board should leave the historical notification intact.
     tabId: text('tab_id'),
+    // The task / comment it is about, so a click lands on the thing itself, not just the board.
+    // Also not FKs: a deleted task leaves the historical notification (the link just opens the board).
+    taskId: text('task_id'),
+    commentId: text('comment_id'),
     actorId: text('actor_id'), // who caused it (for an avatar/initials); no FK — see note above
     readAt: timestamp('read_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
