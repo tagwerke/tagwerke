@@ -75,6 +75,7 @@ export function commentDTO(row: CommentRow, authorEmail: string | null): Record<
     authorEmail,
     authorName: authorEmail ? authorEmail.split('@')[0] : null,
     parentCommentId: row.parentCommentId,
+    via: row.viaLabel ?? null,
     body: deleted ? '' : row.body,
     mentions: deleted ? [] : ((row.mentions as string[] | null) ?? []),
     deleted,
@@ -181,6 +182,7 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
       body: b.data.body,
       mentions,
       lastBody: b.data.body,
+      viaLabel: req.pat?.label ?? null,
     };
     // Idempotent replay (D8): the same client id arriving twice is the outbox retrying, not a
     // second comment. DO NOTHING rather than update — a replay must not overwrite a later edit.

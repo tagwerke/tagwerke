@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 import { api, ApiError, type HistoryEntry, type PreviewRecord } from '../api/client';
 import { formatTimestamp, timeAgo } from '../util/dates';
 import { Notice } from './common/Notice';
+import { ViaBadge } from './ViaBadge';
+import { patNameOf } from '../util/via';
 import { EmptyState, Loading } from './common/EmptyState';
 
 export interface PreviewTarget {
@@ -95,6 +97,7 @@ export function RecordDrawer({ target, onClose }: { target: PreviewTarget; onClo
                 <span className="record-history-actor" title={h.actorEmail ?? undefined}>
                   {h.actorEmail?.split('@')[0] ?? h.actorId ?? 'system'}
                 </span>
+                <ViaBadge label={patNameOf(h.payload)} />
                 <span className="record-history-action">{h.action}</span>
                 <span className="record-history-time" title={h.createdAt}>{timeAgo(h.createdAt)}</span>
               </li>

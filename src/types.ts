@@ -138,6 +138,8 @@ export interface Comment {
   /** Email local-part, for display until a real display name exists. Null for an erased user. */
   authorName: string | null;
   parentCommentId: ID | null;
+  /** The personal access token's name when it was posted through one, else null. */
+  via?: string | null;
   body: string;
   mentions: ID[];
   deleted: boolean;

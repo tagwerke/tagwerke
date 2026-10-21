@@ -207,6 +207,9 @@ try {
   check('tasks scope: cannot rename a board -> 403', (await code(call('PATCH', `/api/tabs/${boardA}`, tokTasks, { name: 'x' }))) === 403);
   const cid = nanoid();
   check('comments scope: comment -> 200', (await code(call('POST', `/api/tasks/${taskA}/comments`, tokComments, { id: cid, body: 'from a token' }))) === 200);
+  const viaRow = (await db.select().from(schema.taskComments).where(eq(schema.taskComments.id, cid)))[0];
+  check('a comment through a token records the token name', viaRow?.viaLabel === 'verify');
+  check('...and the comment payload carries it as `via`', ((await call('GET', `/api/tasks/${taskA}/comments`, tokComments)).json() as any).comments.some((c: any) => c.id === cid && c.via === 'verify'));
   check('comments scope: edit own comment -> 200', (await code(call('PATCH', `/api/comments/${cid}`, tokComments, { body: 'edited' }))) === 200);
   check('comments scope: read the thread -> 200', (await code(call('GET', `/api/tasks/${taskA}/comments`, tokComments))) === 200);
   check('comments scope: cannot edit a task -> 403', (await code(call('PATCH', `/api/tasks/${taskA}`, tokComments, { text: 'x' }))) === 403);

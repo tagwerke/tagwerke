@@ -19,6 +19,8 @@ import { api, ApiError, type HistoryEntry } from '../api/client';
 import { useStore } from '../store';
 import { useSession } from '../session/useSession';
 import { useComments } from '../comments/useComments';
+import { ViaBadge } from './ViaBadge';
+import { patNameOf } from '../util/via';
 import { CommentComposer } from './CommentComposer';
 import { CommentItem } from './CommentItem';
 import { describeRevert, revertTaskTo } from '../tasks/revertTask';
@@ -319,6 +321,7 @@ export function ActivityDrawer({
                   <span className="history-actor" title={item.entry.actorEmail ?? undefined}>
                     {item.entry.actorEmail?.split('@')[0] ?? item.entry.actorId ?? 'system'}
                   </span>
+                  <ViaBadge label={patNameOf(item.entry.payload)} />
                   <span className="history-verb">
                     {actionVerb(item.entry.action, item.entry.payload)}
                     {/* A board's history is mostly its tasks, so each row has to say WHICH. */}

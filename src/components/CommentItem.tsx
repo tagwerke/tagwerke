@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { useComments } from '../comments/useComments';
 import { confirmDeleteComment } from '../confirm/prompts';
+import { ViaBadge } from './ViaBadge';
 import { CommentComposer } from './CommentComposer';
 import { parseMentions } from '../../shared/mentions';
 import { timeAgo } from '../util/dates';
@@ -68,6 +69,7 @@ export function CommentItem({ comment, replies = [], tabId, taskId, meId, replya
       <div className="comment-head">
         <span className="comment-avatar" aria-hidden>{author.charAt(0).toUpperCase()}</span>
         <span className="comment-author" title={comment.authorEmail ?? undefined}>{author}</span>
+        <ViaBadge label={comment.via} />
         <span className="comment-time" title={comment.createdAt}>{timeAgo(comment.createdAt)}</span>
         {comment.editedAt && !comment.deleted && <span className="comment-edited">edited</span>}
       </div>

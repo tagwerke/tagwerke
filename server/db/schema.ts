@@ -353,6 +353,8 @@ export const taskComments = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     deletedBy: text('deleted_by'),
     lastBody: text('last_body'),
+    // The personal access token's name when it was posted through one (a snapshot; tokens aren't renamed).
+    viaLabel: text('via_label'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

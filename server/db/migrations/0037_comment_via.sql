@@ -1,0 +1,1 @@
+ALTER TABLE "task_comments" ADD COLUMN "via_label" text;

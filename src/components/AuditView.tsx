@@ -9,6 +9,8 @@ import { formatTimestamp, timeAgo } from '../util/dates';
 import { fieldLabel } from '../util/audit';
 import { RecordDrawer, type PreviewTarget } from './RecordDrawer';
 import { Notice } from './common/Notice';
+import { ViaBadge } from './ViaBadge';
+import { patNameOf } from '../util/via';
 import { EmptyState } from './common/EmptyState';
 
 // A condition carries an optional client-only display label (e.g. an actor's email for an id);
@@ -272,6 +274,7 @@ export function AuditView() {
                 field="actor" value={e.actorId} label={e.actorEmail ?? e.actorId ?? 'system'} onAdd={addCondition}
                 onPreview={e.actorId ? () => setPreview({ type: 'user', id: e.actorId!, fallbackLabel: e.actorEmail ?? undefined }) : undefined}
               />
+              <ViaBadge label={patNameOf(e.payload)} />
             </span>
             <span>
               <AuditValue field="action" value={e.action} label={e.action} onAdd={addCondition} className="audit-action" />
