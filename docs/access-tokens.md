@@ -39,6 +39,12 @@ curl -H "Authorization: Bearer $TAGWERKE_TOKEN" https://your-tagwerke/api/state
 `/api/state` is the way to find board, sprint and member ids. Board creation needs one of your
 category ids from its `projects` map.
 
+## Using a token from Claude Code
+
+[`docs/claude-code/SKILL.md`](claude-code/SKILL.md) is a ready-made Claude Code skill: drop it in
+`~/.claude/skills/tagwerke/SKILL.md`, set `TAGWERKE_URL` and `TAGWERKE_TOKEN`, and Claude can read and
+write your boards directly (tasks, sub-tasks, comments, sprints) with the right guard rails.
+
 ## Board API tokens
 
 For a project's agent. Pick **comment** and/or **create and edit tasks** when you create it. The agent
