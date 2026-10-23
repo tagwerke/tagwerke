@@ -13,6 +13,7 @@ import { and, desc, eq, gte, lte, sql, type SQL, type Column } from 'drizzle-orm
 import { db, schema } from '../db/client.ts';
 import { requireAdmin, requireSudo } from '../auth/guard.ts';
 import { plainBody } from '../../shared/mentions.ts';
+import { encodeCursor, nextCursor, olderThan, pageLimit } from '../lib/cursor.ts';
 
 // The filterable fields → their columns. `actor` = actor_id, `scope` = scope_id (a board/tab).
 const FIELD_COLS: Record<string, Column> = {
@@ -121,13 +122,9 @@ function rowsQuery() {
     .leftJoin(schema.tabs, eq(schema.tabs.id, schema.auditLog.scopeId));
 }
 
-// Keyset cursor over (createdAt desc, id desc).
+// Keyset cursor over (createdAt desc, id desc) — the shared shape in lib/cursor.ts.
 function decodeCursor(cursor: string): SQL {
-  const [ts, id] = Buffer.from(cursor, 'base64').toString('utf8').split('|');
-  return sql`(${schema.auditLog.createdAt}, ${schema.auditLog.id}) < (${new Date(ts)}, ${id})`;
-}
-function encodeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(`${createdAt.toISOString()}|${id}`).toString('base64');
+  return olderThan(cursor, schema.auditLog.createdAt, schema.auditLog.id);
 }
 
 type Row = Awaited<ReturnType<ReturnType<typeof rowsQuery>['limit']>>[number];
@@ -307,7 +304,7 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
   // Paginated browse. Newest first; `nextCursor` is null when exhausted.
   app.get('/api/admin/audit', async (req) => {
     const q = req.query as Record<string, string | undefined>;
-    const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 200);
+    const limit = pageLimit(q.limit, 50, 200);
     const conds = conditions(readFilters(q));
     if (q.cursor) conds.push(decodeCursor(q.cursor));
 
@@ -317,9 +314,7 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
       .limit(limit);
 
     const entries = rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
-    const last = rows[rows.length - 1];
-    const nextCursor = rows.length === limit && last ? encodeCursor(last.createdAt, last.id) : null;
-    return { entries, nextCursor };
+    return { entries, nextCursor: nextCursor(rows, limit, (r) => ({ at: r.createdAt, id: r.id })) };
   });
 
   // Filtered export, streamed in keyset batches to bound memory. CSV or NDJSON.

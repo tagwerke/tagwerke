@@ -10,6 +10,7 @@ import { fieldLabel } from '../util/audit';
 import { RecordDrawer, type PreviewTarget } from './RecordDrawer';
 import { Notice } from './common/Notice';
 import { ViaBadge } from './ViaBadge';
+import { LoadMore } from './common/LoadMore';
 import { patNameOf } from '../util/via';
 import { EmptyState } from './common/EmptyState';
 
@@ -308,11 +309,7 @@ export function AuditView() {
       </div>
 
       <div className="audit-foot">
-        {cursor ? (
-          <button className="btn ghost" disabled={busy} onClick={() => void load(false)}>{busy ? 'Loading…' : 'Load more'}</button>
-        ) : (
-          <span className="audit-end">{busy ? 'Loading…' : 'End of log'}</span>
-        )}
+        <LoadMore hasMore={!!cursor} busy={busy} onLoad={() => void load(false)} endLabel={busy ? 'Loading…' : 'End of log'} />
       </div>
 
       {preview && (

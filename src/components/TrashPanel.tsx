@@ -8,12 +8,15 @@ import { useStore } from '../store';
 import { timeAgo } from '../util/dates';
 import { Notice } from './common/Notice';
 import { EmptyState, Loading } from './common/EmptyState';
+import { LoadMore } from './common/LoadMore';
 
 export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName: string; onClose: () => void }) {
   const members = useStore((s) => s.membersByBoard[tabId]);
   const [tasks, setTasks] = useState<TrashedTask[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Best label for a trashed task: live text → retained last title → untitled placeholder.
   const label = (t: TrashedTask) => (t.text.trim() ? t.text : t.lastTitle?.trim() ? t.lastTitle : '(untitled)');
@@ -21,10 +24,25 @@ export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName
 
   async function refresh() {
     try {
-      const { tasks } = await api.trash.list(tabId);
-      setTasks(tasks);
+      const page = await api.trash.list(tabId);
+      setTasks(page.tasks);
+      setCursor(page.nextCursor);
     } catch (e) {
       setError(e instanceof ApiError ? e.message.replace(/^.*-> \d+\s*/, '') : 'failed to load trash');
+    }
+  }
+
+  async function loadMore() {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await api.trash.list(tabId, cursor);
+      setTasks((prev) => [...(prev ?? []), ...page.tasks]);
+      setCursor(page.nextCursor);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message.replace(/^.*-> \d+\s*/, '') : 'failed to load trash');
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -48,7 +66,7 @@ export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-scroll" role="dialog" aria-modal="true" aria-label="Trash" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-list" role="dialog" aria-modal="true" aria-label="Trash" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
           <h2>Trash — {tabName}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
@@ -56,7 +74,7 @@ export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName
 
         {error && <Notice>{error}</Notice>}
 
-        <ul className="trash-list">
+        <ul className="trash-list modal-list-body">
           {tasks?.map((t) => (
             <li key={t.id} className="trash-item">
               <div className="trash-main">
@@ -72,6 +90,9 @@ export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName
           ))}
           {tasks && tasks.length === 0 && <EmptyState as="li">Trash is empty.</EmptyState>}
           {!tasks && !error && <Loading as="li" />}
+          {tasks && tasks.length > 0 && (
+            <li><LoadMore hasMore={!!cursor} busy={loadingMore} onLoad={() => void loadMore()} /></li>
+          )}
         </ul>
       </div>
     </div>

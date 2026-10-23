@@ -9,6 +9,7 @@ import { PushOptIn } from './PushOptIn';
 import { timeAgo } from '../util/dates';
 import type { Notification, NotificationType } from '../types';
 import { EmptyState } from './common/EmptyState';
+import { LoadMore } from './common/LoadMore';
 import { navigate } from '../util/router';
 import { notificationPath } from '../../shared/links';
 
@@ -42,6 +43,9 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
   const markRead = useNotifications((s) => s.markRead);
   const markAllRead = useNotifications((s) => s.markAllRead);
   const clearAll = useNotifications((s) => s.clearAll);
+  const nextCursor = useNotifications((s) => s.nextCursor);
+  const loadingMore = useNotifications((s) => s.loadingMore);
+  const loadMore = useNotifications((s) => s.loadMore);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const setPlannerOpen = useStore((s) => s.setPlannerOpen);
 
@@ -63,8 +67,10 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
       title: 'Clear all notifications?',
       body: (
         <p>
-          {items.length === 1 ? 'The one notification' : `All ${items.length} notifications`} in your
-          feed {items.length === 1 ? 'is' : 'are'} deleted. The work they point at is untouched.
+          {/* Only the loaded pages are counted here, and Clear deletes the whole feed — so once there
+              are older pages, say "every" rather than a number that undercounts. */}
+          {nextCursor ? 'Every notification' : items.length === 1 ? 'The one notification' : `All ${items.length} notifications`} in your
+          feed {items.length === 1 && !nextCursor ? 'is' : 'are'} deleted. The work they point at is untouched.
         </p>
       ),
       confirmLabel: 'Clear feed',
@@ -74,7 +80,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-scroll" role="dialog" aria-modal="true" aria-label="Notifications" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-list" role="dialog" aria-modal="true" aria-label="Notifications" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
           <h2>Notifications</h2>
           <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
@@ -87,7 +93,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        <div className="notif-list">
+        <div className="notif-list modal-list-body">
           {items.length === 0 ? (
             <EmptyState size="block" as="p">You’re all caught up.</EmptyState>
           ) : (
@@ -107,6 +113,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
               </button>
             ))
           )}
+          {items.length > 0 && <LoadMore hasMore={!!nextCursor} busy={loadingMore} onLoad={() => void loadMore()} />}
         </div>
 
         <footer className="notif-foot">

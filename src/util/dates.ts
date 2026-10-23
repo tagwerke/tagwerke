@@ -77,6 +77,26 @@ export function formatTimestamp(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+/** A timeline's day heading for a timestamp: "Today", "Yesterday", "Mon, Oct 20" (+ year if not this one). */
+export function dayHeading(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const day = toISO(d);
+  if (day === toISO(now)) return 'Today';
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (day === toISO(yesterday)) return 'Yesterday';
+  const label = d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return d.getFullYear() === now.getFullYear() ? label : `${label}, ${d.getFullYear()}`;
+}
+
+/** Local clock time, "14:32" — for rows that already sit under a day heading. */
+export function clockTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function isDueSoon(iso: string, now = new Date()): boolean {
   const today = new Date(toISO(now) + 'T00:00:00');
   const target = new Date(iso + 'T00:00:00');

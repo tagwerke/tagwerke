@@ -6,10 +6,11 @@
 // admin audit surface (routes/audit.ts) stays admin+sudo. Two surfaces, one store.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { and, desc, eq, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { requireBoardRole, paramTabId } from '../auth/boards.ts';
+import { nextCursor, olderThan, pageLimit } from '../lib/cursor.ts';
 
 /** Resolve the board that owns the task named in the route param. */
 async function taskBoard(req: FastifyRequest): Promise<string | undefined> {
@@ -18,8 +19,23 @@ async function taskBoard(req: FastifyRequest): Promise<string | undefined> {
   return rows[0]?.homeTabId;
 }
 
-/** Newest-first audit rows matching `where`, joined to the actor's email. Bounded. */
-async function historyWhere(where: SQL | undefined) {
+/** `?cursor=&limit=` on a history read. A busy board fills a page in minutes once agents write to it. */
+interface Page {
+  cursor?: string;
+  limit?: string;
+}
+
+/**
+ * One newest-first page of audit rows matching `where`, joined to the actor's email.
+ *
+ * Failed requests are left out: a 401 on a token mint is not something that happened to the board,
+ * and it rendered as a raw route string. They stay in the admin audit log, which is where forensics
+ * belong. A null status is a row written by a handler directly, never a failure.
+ */
+async function historyWhere(where: SQL | undefined, page: Page) {
+  const limit = pageLimit(page.limit, 50, 200);
+  const conds = [where, or(isNull(schema.auditLog.status), lt(schema.auditLog.status, 400))];
+  if (page.cursor) conds.push(olderThan(page.cursor, schema.auditLog.createdAt, schema.auditLog.id));
   const rows = await db
     .select({
       id: schema.auditLog.id,
@@ -40,15 +56,18 @@ async function historyWhere(where: SQL | undefined) {
       schema.tasks,
       and(eq(schema.auditLog.targetType, 'task'), eq(schema.tasks.id, schema.auditLog.targetId)),
     )
-    .where(where)
+    .where(and(...conds))
     .orderBy(desc(schema.auditLog.createdAt), desc(schema.auditLog.id))
-    .limit(100);
-  return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
+    .limit(limit);
+  return {
+    entries: rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })),
+    nextCursor: nextCursor(rows, limit, (r) => ({ at: r.createdAt, id: r.id })),
+  };
 }
 
 /** One target's own timeline. */
-function historyFor(targetType: string, targetId: string) {
-  return historyWhere(and(eq(schema.auditLog.targetType, targetType), eq(schema.auditLog.targetId, targetId)));
+function historyFor(targetType: string, targetId: string, page: Page) {
+  return historyWhere(and(eq(schema.auditLog.targetType, targetType), eq(schema.auditLog.targetId, targetId)), page);
 }
 
 /**
@@ -58,7 +77,7 @@ function historyFor(targetType: string, targetId: string) {
  * it left, so the board it arrived on matches on the payload. Only task rows join in: comment rows
  * share the scope but an edited comment carries its previous text, and that stays in the admin log.
  */
-function boardHistory(tabId: string) {
+function boardHistory(tabId: string, page: Page) {
   return historyWhere(or(
     and(eq(schema.auditLog.targetType, 'tab'), eq(schema.auditLog.targetId, tabId)),
     and(
@@ -68,7 +87,7 @@ function boardHistory(tabId: string) {
         and(eq(schema.auditLog.action, 'task_move'), sql`${schema.auditLog.payload}->>'toTabId' = ${tabId}`),
       ),
     ),
-  ));
+  ), page);
 }
 
 export async function historyRoutes(app: FastifyInstance): Promise<void> {
@@ -77,12 +96,12 @@ export async function historyRoutes(app: FastifyInstance): Promise<void> {
   // A task's change timeline. Gated on editor+ of the task's home board.
   app.get('/api/tasks/:id/history', { preHandler: requireBoardRole('editor', taskBoard), config: { pat: 'read' } }, async (req) => {
     const { id } = req.params as { id: string };
-    return { entries: await historyFor('task', id) };
+    return historyFor('task', id, req.query as Page);
   });
 
   // A board's change timeline. Gated on editor+ of the board itself.
   app.get('/api/tabs/:id/history', { preHandler: requireBoardRole('editor', paramTabId), config: { pat: 'read' } }, async (req) => {
     const { id } = req.params as { id: string };
-    return { entries: await boardHistory(id) };
+    return boardHistory(id, req.query as Page);
   });
 }

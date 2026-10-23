@@ -11,8 +11,7 @@ import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { vapidPublicKey, pushToUser } from '../lib/webpush.ts';
 import { dlog, sid } from '../lib/dlog.ts';
-
-const FEED_LIMIT = 50;
+import { nextCursor, olderThan, pageLimit } from '../lib/cursor.ts';
 
 const subscribeBody = z.object({
   endpoint: z.string().min(1),
@@ -26,15 +25,21 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     req.auditHandled = true;
   });
 
-  // The latest slice of this user's feed + the current unread count (for the bell badge).
+  // One page of this user's feed, newest first (`?cursor=` for older ones) + the current unread
+  // count (for the bell badge).
   app.get('/api/notifications', async (req) => {
     const userId = req.user!.id;
+    const q = req.query as { cursor?: string; limit?: string };
+    const limit = pageLimit(q.limit, 50, 200);
     const rows = await db
       .select()
       .from(schema.notifications)
-      .where(eq(schema.notifications.userId, userId))
-      .orderBy(desc(schema.notifications.createdAt))
-      .limit(FEED_LIMIT);
+      .where(and(
+        eq(schema.notifications.userId, userId),
+        q.cursor ? olderThan(q.cursor, schema.notifications.createdAt, schema.notifications.id) : undefined,
+      ))
+      .orderBy(desc(schema.notifications.createdAt), desc(schema.notifications.id))
+      .limit(limit);
     const unread = (
       await db
         .select({ n: sql<number>`count(*)::int` })
@@ -48,6 +53,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
         readAt: r.readAt?.toISOString() ?? null,
       })),
       unread,
+      nextCursor: nextCursor(rows, limit, (r) => ({ at: r.createdAt, id: r.id })),
     };
   });
 

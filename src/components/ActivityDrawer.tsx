@@ -25,11 +25,12 @@ import { CommentComposer } from './CommentComposer';
 import { CommentItem } from './CommentItem';
 import { describeRevert, revertTaskTo } from '../tasks/revertTask';
 import { confirmRevertTask } from '../confirm/prompts';
-import { formatTimestamp, timeAgo } from '../util/dates';
+import { clockTime, dayHeading, formatTimestamp, timeAgo } from '../util/dates';
 import { fieldLabel, USER_FIELDS } from '../util/audit';
 import type { Comment } from '../types';
 import { Notice } from './common/Notice';
 import { EmptyState, Loading } from './common/EmptyState';
+import { LoadMore } from './common/LoadMore';
 
 type Kind = 'task' | 'tab';
 
@@ -45,7 +46,11 @@ function actionVerb(action: string, payload: unknown): string {
   if (action === 'task_move') return 'moved';
   if (action === 'sprint_rollover') return 'carried over to the new week';
   if (action === 'board_settings_change') return 'changed board settings';
-  return action;
+  if (action === 'agent_token_created') return 'created a board token';
+  if (action === 'bulk_task_import') return 'imported tasks';
+  // Any other route-shaped token ("POST /api/tabs/:id/…") is plumbing, not a sentence.
+  if (/^[A-Z]+ \//.test(action)) return 'made a change';
+  return action.replace(/_/g, ' ');
 }
 
 /**
@@ -64,6 +69,18 @@ function hasChanges(payload: unknown): boolean {
 type Item =
   | { kind: 'history'; at: string; entry: HistoryEntry; laterCount: number }
   | { kind: 'comment'; at: string; comment: Comment; replies: Comment[] };
+
+/** "parent → Accounts", or "status todo → done" — the before side is dropped when there wasn't one. */
+function Change({ label, from, to }: { label: string; from: string; to: string }) {
+  return (
+    <>
+      <span className="history-field">{label}</span>{' '}
+      {from !== '—' && <>{from} <span className="history-arrow">→</span> </>}
+      {from === '—' && <span className="history-arrow">→ </span>}
+      <span className="history-to">{to === '—' ? 'none' : to}</span>
+    </>
+  );
+}
 
 export function ActivityDrawer({
   kind,
@@ -96,6 +113,9 @@ export function ActivityDrawer({
   const post = useComments((s) => s.post);
 
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
+  // Where the next (older) page of the change log starts; null once it is all in.
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // A viewer is simply not allowed the change log. Distinct from `error`: nothing went wrong.
   const [historyDenied, setHistoryDenied] = useState(false);
@@ -114,10 +134,16 @@ export function ActivityDrawer({
     return (uid: string) => map.get(uid) ?? uid;
   }, [members]);
 
+  const fetchPage = useCallback(
+    (after?: string | null) => (kind === 'task' ? api.history.task(id, after) : api.history.tab(id, after)),
+    [kind, id],
+  );
+
   const load = useCallback(async () => {
     try {
-      const res = kind === 'task' ? await api.history.task(id) : await api.history.tab(id);
+      const res = await fetchPage();
       setEntries(res.entries);
+      setCursor(res.nextCursor);
       setHistoryDenied(false);
     } catch (e) {
       // 403 = editor+ only. On a task that still leaves a usable drawer (the conversation), so it
@@ -129,7 +155,23 @@ export function ActivityDrawer({
       }
       setError(e instanceof ApiError ? e.message.replace(/^.*-> \d+\s*/, '') : 'failed to load history');
     }
-  }, [kind, id]);
+  }, [kind, fetchPage]);
+
+  /** Append the next older page. Older rows go on the END of `entries`, which is what keeps each
+   *  row's `laterCount` (its index) true across pages. */
+  async function loadMore() {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetchPage(cursor);
+      setEntries((prev) => [...(prev ?? []), ...res.entries]);
+      setCursor(res.nextCursor);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message.replace(/^.*-> \d+\s*/, '') : 'failed to load history');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   useEffect(() => {
     // The fetch resolves long after the effect; the rule can't see through the await.
@@ -194,8 +236,10 @@ export function ActivityDrawer({
   }
 
   /**
-   * The merged timeline, OLDEST FIRST — the reading order of a conversation, with the composer
-   * under it where the next thing you write goes.
+   * The merged timeline. On a task, OLDEST FIRST — the reading order of a conversation, with the
+   * composer under it where the next thing you write goes. On a board, NEWEST FIRST: there is no
+   * conversation, and what you open a board's history for is what just happened. (It was oldest-first
+   * here too once, which put the latest change at the bottom of a scroll nobody reached.)
    *
    * `laterCount` is captured from the server's newest-first ordering before the sort, so the
    * restore reach stays correct no matter how the rows are eventually arranged: it is "how many
@@ -224,11 +268,13 @@ export function ActivityDrawer({
         out.push({ kind: 'comment', at: c.createdAt, comment: c, replies: repliesOf.get(c.id) ?? [] });
       }
     }
-    return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
-  }, [entries, comments, showHistory]);
+    const dir = kind === 'task' ? 1 : -1;
+    return out.sort((a, b) => (a.at < b.at ? -dir : a.at > b.at ? dir : 0));
+  }, [kind, entries, comments, showHistory]);
 
-  /** Change rows available to fold in — the count the toggle advertises. */
+  /** Change rows available to fold in — the count the toggle advertises ("50+" while more pages wait). */
   const historyCount = (entries ?? []).filter((e) => !COMMENT_ACTIONS.has(e.action)).length;
+  const historyCountLabel = `${historyCount}${cursor ? '+' : ''} ${historyCount === 1 && !cursor ? 'change' : 'changes'}`;
 
   function value(field: string, v: unknown): string {
     if (v == null || v === '') return '—';
@@ -255,8 +301,8 @@ export function ActivityDrawer({
             c.field === 'docJSON' ? (
               <li key={i}>edited the document</li>
             ) : (
-              <li key={i}>
-                <span className="history-field">{fieldLabel(c.field)}</span> {value(c.field, c.from)} <span className="history-arrow">→</span> {value(c.field, c.to)}
+              <li key={i} title={`${fieldLabel(c.field)}: ${value(c.field, c.from)} → ${value(c.field, c.to)}`}>
+                <Change label={fieldLabel(c.field)} from={value(c.field, c.from)} to={value(c.field, c.to)} />
               </li>
             ),
           )}
@@ -290,11 +336,91 @@ export function ActivityDrawer({
   const isTask = kind === 'task';
   const loading = entries === null || (isTask && commentsLoading && !comments);
 
+  /** The row's sentence as plain text — the tooltip for when the line is cut short. */
+  function sentence(e: HistoryEntry): string {
+    const subject = !isTask && e.targetType === 'task' ? ` “${e.subject || 'untitled task'}”` : '';
+    const move = e.action === 'task_move' ? moveNote(e.payload) : null;
+    return `${actionVerb(e.action, e.payload)}${subject}${move ? ` ${move}` : ''}`;
+  }
+
+  /** A change row. On a board it is one line under a day heading, so its time is a clock time. */
+  function historyRow(item: Extract<Item, { kind: 'history' }>) {
+    const e = item.entry;
+    const move = e.action === 'task_move' ? moveNote(e.payload) : null;
+    return (
+      <li key={e.id} className="history-entry">
+        <div className="history-line">
+          <span className="history-who">
+            <span className="history-actor" title={e.actorEmail ?? undefined}>
+              {e.actorEmail?.split('@')[0] ?? e.actorId ?? 'system'}
+            </span>
+            <ViaBadge label={patNameOf(e.payload)} />
+          </span>
+          <span className="history-verb" title={sentence(e)}>
+            {actionVerb(e.action, e.payload)}
+            {/* A board's history is mostly its tasks, so each row has to say WHICH. */}
+            {!isTask && e.targetType === 'task' && (
+              <> <span className="history-subject">“{e.subject || 'untitled task'}”</span></>
+            )}
+            {move && <> {move}</>}
+          </span>
+          <time className="history-time" dateTime={e.createdAt} title={formatTimestamp(e.createdAt)}>
+            {isTask ? timeAgo(e.createdAt) : clockTime(e.createdAt)}
+          </time>
+          {/* Every entry is a point this task can be put back to — except the newest,
+              which is where it already is. */}
+          {isTask && item.laterCount > 0 && (
+            <button
+              className="btn ghost tiny history-restore"
+              disabled={busy !== null}
+              onClick={() => void restoreTo(e, item.laterCount)}
+              title={`Restore the task to how it was at ${formatTimestamp(e.createdAt)}`}
+            >
+              {busy === e.id ? '…' : 'Restore'}
+            </button>
+          )}
+        </div>
+        {/* The snapshot/created lines only repeat the title the row now names. */}
+        {isTask || e.targetType !== 'task' || hasChanges(e.payload) ? details(e.payload) : null}
+      </li>
+    );
+  }
+
+  /** The list body: on a board, rows grouped under day headings; on a task, the plain timeline. */
+  const rows: React.ReactNode[] = [];
+  let day = '';
+  for (const item of items) {
+    if (!isTask) {
+      const heading = dayHeading(item.at);
+      if (heading !== day) {
+        day = heading;
+        rows.push(<li key={`day-${item.at}`} className="history-day">{heading}</li>);
+      }
+    }
+    rows.push(
+      item.kind === 'comment' ? (
+        <CommentItem
+          key={item.comment.id}
+          comment={item.comment}
+          replies={item.replies}
+          tabId={boardId}
+          taskId={id}
+          meId={meId}
+        />
+      ) : (
+        historyRow(item)
+      ),
+    );
+  }
+
   const panel = (
-      <div className={`modal history-panel ${embedded ? 'is-embedded' : ''}`} onClick={embedded ? undefined : (e) => e.stopPropagation()}>
+      <div
+        className={`modal history-panel ${isTask ? '' : 'is-board'} ${embedded ? 'is-embedded' : ''}`}
+        onClick={embedded ? undefined : (e) => e.stopPropagation()}
+      >
         {!embedded && (
           <header className="modal-head">
-            <h2>{isTask ? 'Activity' : 'History'} — {title}</h2>
+            <h2>{isTask ? 'Activity' : 'History'} <span className="modal-head-sub">{title}</span></h2>
             <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
           </header>
         )}
@@ -304,57 +430,21 @@ export function ActivityDrawer({
         {note && <div className="history-note">{note}</div>}
         {historyDenied && <div className="history-note">Change history is available to editors of this board.</div>}
 
+        {/* The one scroller in the drawer: head, notices, toggle and composer stay put around it. */}
         <ul className="history-list">
-          {items.map((item) =>
-            item.kind === 'comment' ? (
-              <CommentItem
-                key={item.comment.id}
-                comment={item.comment}
-                replies={item.replies}
-                tabId={boardId}
-                taskId={id}
-                meId={meId}
-              />
-            ) : (
-              <li key={item.entry.id} className="history-entry">
-                <div className="history-line">
-                  <span className="history-actor" title={item.entry.actorEmail ?? undefined}>
-                    {item.entry.actorEmail?.split('@')[0] ?? item.entry.actorId ?? 'system'}
-                  </span>
-                  <ViaBadge label={patNameOf(item.entry.payload)} />
-                  <span className="history-verb">
-                    {actionVerb(item.entry.action, item.entry.payload)}
-                    {/* A board's history is mostly its tasks, so each row has to say WHICH. */}
-                    {!isTask && item.entry.targetType === 'task' && (
-                      <> <span className="history-subject">“{item.entry.subject || 'untitled task'}”</span></>
-                    )}
-                    {item.entry.action === 'task_move' && moveNote(item.entry.payload) && <> {moveNote(item.entry.payload)}</>}
-                  </span>
-                  <span className="history-time" title={item.entry.createdAt}>{timeAgo(item.entry.createdAt)}</span>
-                  {/* Every entry is a point this task can be put back to — except the newest,
-                      which is where it already is. */}
-                  {isTask && item.laterCount > 0 && (
-                    <button
-                      className="btn ghost tiny history-restore"
-                      disabled={busy !== null}
-                      onClick={() => void restoreTo(item.entry, item.laterCount)}
-                      title={`Restore the task to how it was at ${formatTimestamp(item.entry.createdAt)}`}
-                    >
-                      {busy === item.entry.id ? '…' : 'Restore'}
-                    </button>
-                  )}
-                </div>
-                {/* The snapshot/created lines only repeat the title the row now names. */}
-                {isTask || item.entry.targetType !== 'task' || hasChanges(item.entry.payload)
-                  ? details(item.entry.payload)
-                  : null}
-              </li>
-            ),
+          {/* A task reads oldest-first, so its older changes are fetched from the top — on request
+              only, since this sits in view the moment the list opens. */}
+          {isTask && showHistory && cursor && (
+            <li><LoadMore hasMore busy={loadingMore} onLoad={() => void loadMore()} label="Show earlier changes" auto={false} /></li>
           )}
+          {rows}
           {!loading && items.length === 0 && (
             <EmptyState as="li">{isTask ? 'Nothing yet — say something below.' : 'No history yet.'}</EmptyState>
           )}
           {loading && !error && <Loading as="li" />}
+          {!isTask && !loading && items.length > 0 && (
+            <li><LoadMore hasMore={!!cursor} busy={loadingMore} onLoad={() => void loadMore()} endLabel="That’s the whole history." /></li>
+          )}
         </ul>
 
         {/* The fold. Placed under the timeline, not above it, so it reads as "there is more
@@ -363,7 +453,7 @@ export function ActivityDrawer({
           <button type="button" className="btn ghost tiny history-toggle" onClick={() => setShowHistory((v) => !v)}>
             {showHistory
               ? 'Hide change history'
-              : `Show change history (${historyCount === 1 ? '1 change' : `${historyCount} changes`})`}
+              : `Show change history (${historyCountLabel})`}
           </button>
         )}
 

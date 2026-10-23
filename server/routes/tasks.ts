@@ -6,6 +6,7 @@ import { requireAuth } from '../auth/guard.ts';
 import { patReaches, tokenStamp } from '../auth/pat.ts';
 import { requireBoardRole, boardRole, hasBoardRole, restrictsDeleteToAdmin, paramTabId } from '../auth/boards.ts';
 import { auditEdit, diffChanges, recordAudit } from '../lib/audit.ts';
+import { nextCursor, olderThan, pageLimit } from '../lib/cursor.ts';
 import { lastKnownTitle, stateAsOf } from '../lib/taskHistory.ts';
 import { notify } from '../lib/notify.ts';
 import { boardChannel, publish } from '../lib/bus.ts';
@@ -816,12 +817,15 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Trash: a board's soft-deleted tasks (editor+). Powers the Trash view / restore surface.
+  // Trash: a board's soft-deleted tasks (editor+), most recently deleted first, a page at a time.
+  // Powers the Trash view / restore surface.
   app.get(
     '/api/tabs/:id/trash',
     { preHandler: requireBoardRole('editor', paramTabId), config: { pat: 'read' } },
     async (req) => {
       const { id } = req.params as { id: string };
+      const q = req.query as { cursor?: string; limit?: string };
+      const limit = pageLimit(q.limit, 50, 200);
       const rows = await db
         .select({
           id: schema.tasks.id,
@@ -835,10 +839,17 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         })
         .from(schema.tasks)
         .leftJoin(schema.users, eq(schema.users.id, schema.tasks.deletedBy))
-        .where(and(eq(schema.tasks.homeTabId, id), isNotNull(schema.tasks.deletedAt)))
-        .orderBy(desc(schema.tasks.deletedAt))
-        .limit(200);
-      return { tasks: rows.map((r) => ({ ...r, deletedAt: r.deletedAt?.toISOString() ?? null })) };
+        .where(and(
+          eq(schema.tasks.homeTabId, id),
+          isNotNull(schema.tasks.deletedAt),
+          q.cursor ? olderThan(q.cursor, schema.tasks.deletedAt, schema.tasks.id) : undefined,
+        ))
+        .orderBy(desc(schema.tasks.deletedAt), desc(schema.tasks.id))
+        .limit(limit);
+      return {
+        tasks: rows.map((r) => ({ ...r, deletedAt: r.deletedAt?.toISOString() ?? null })),
+        nextCursor: nextCursor(rows, limit, (r) => ({ at: r.deletedAt, id: r.id })),
+      };
     },
   );
 }

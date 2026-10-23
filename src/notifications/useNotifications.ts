@@ -14,8 +14,13 @@ interface NotificationsState {
   items: Notification[];
   unread: number;
   loaded: boolean;
-  /** Pull the latest feed slice + unread count from the server. */
+  /** Where the next (older) page starts; null once the whole feed is loaded. */
+  nextCursor: string | null;
+  loadingMore: boolean;
+  /** Pull the newest page + unread count from the server. */
   load(): Promise<void>;
+  /** Append the next older page. */
+  loadMore(): Promise<void>;
   /** Apply a live notification pushed over the socket (prepend, bump unread, dedupe by id). */
   receive(n: Notification): void;
   /** Mark one notification read (optimistic + server). */
@@ -28,26 +33,44 @@ interface NotificationsState {
   reset(): void;
 }
 
-const MAX_ITEMS = 50; // keep the in-memory feed bounded, matching the server's FEED_LIMIT
-
 export const useNotifications = create<NotificationsState>((set, get) => ({
   items: [],
   unread: 0,
   loaded: false,
+  nextCursor: null,
+  loadingMore: false,
 
   async load() {
     try {
-      const { notifications, unread } = await api.notifications.list();
-      set({ items: notifications, unread, loaded: true });
+      const { notifications, unread, nextCursor } = await api.notifications.list();
+      set({ items: notifications, unread, nextCursor, loaded: true });
     } catch {
       /* offline / transient — the socket will still deliver live ones; retry on next boot */
+    }
+  },
+
+  async loadMore() {
+    const { nextCursor, loadingMore } = get();
+    if (!nextCursor || loadingMore) return;
+    set({ loadingMore: true });
+    try {
+      const page = await api.notifications.list(nextCursor);
+      set((s) => {
+        // A live one can land between pages and shift the boundary; dedupe rather than repeat it.
+        const have = new Set(s.items.map((i) => i.id));
+        return { items: [...s.items, ...page.notifications.filter((n) => !have.has(n.id))], nextCursor: page.nextCursor };
+      });
+    } catch {
+      /* transient — the control stays, so a second scroll or click retries */
+    } finally {
+      set({ loadingMore: false });
     }
   },
 
   receive(n) {
     set((s) => {
       if (s.items.some((i) => i.id === n.id)) return s; // dedupe (e.g. load + live race)
-      const items = [n, ...s.items].slice(0, MAX_ITEMS);
+      const items = [n, ...s.items];
       return { items, unread: s.unread + (n.readAt ? 0 : 1) };
     });
   },
@@ -77,11 +100,11 @@ export const useNotifications = create<NotificationsState>((set, get) => ({
 
   clearAll() {
     if (get().items.length === 0) return;
-    set({ items: [], unread: 0 });
+    set({ items: [], unread: 0, nextCursor: null });
     void api.notifications.clearAll().catch(() => {});
   },
 
   reset() {
-    set({ items: [], unread: 0, loaded: false });
+    set({ items: [], unread: 0, loaded: false, nextCursor: null, loadingMore: false });
   },
 }));

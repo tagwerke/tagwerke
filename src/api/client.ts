@@ -285,9 +285,10 @@ export const api = {
     seen: (tabId: ID) => req(`/api/tabs/${tabId}/seen`, { method: 'POST' }).catch(() => undefined),
   },
   history: {
-    // Per-object change timeline (Layer A). Editor+ on the item's board (read → live).
-    task: (id: ID) => req<{ entries: HistoryEntry[] }>(`/api/tasks/${id}/history`),
-    tab: (id: ID) => req<{ entries: HistoryEntry[] }>(`/api/tabs/${id}/history`),
+    // Per-object change timeline (Layer A). Editor+ on the item's board (read → live). Newest
+    // first, a page at a time — pass the previous page's `nextCursor` for the one after it.
+    task: (id: ID, cursor?: string | null) => req<Page<{ entries: HistoryEntry[] }>>(`/api/tasks/${id}/history${pageQuery(cursor)}`),
+    tab: (id: ID, cursor?: string | null) => req<Page<{ entries: HistoryEntry[] }>>(`/api/tabs/${id}/history${pageQuery(cursor)}`),
   },
   // ── Comments on tasks (COMMENTS_PLAN.md) ───────────────────────────────────
   // The thread read is a direct fetch (it's opened on demand and there is nothing to show
@@ -373,7 +374,7 @@ export const api = {
   },
   trash: {
     // A board's soft-deleted tasks + restore (recoverability, §G). Editor+ (read/act → live).
-    list: (tabId: ID) => req<{ tasks: TrashedTask[] }>(`/api/tabs/${tabId}/trash`),
+    list: (tabId: ID, cursor?: string | null) => req<Page<{ tasks: TrashedTask[] }>>(`/api/tabs/${tabId}/trash${pageQuery(cursor)}`),
     restore: (id: ID) => req(`/api/tasks/${id}/restore`, { method: 'POST' }),
   },
   // A CSV import is a batch, blocking operation with a real result to show — direct fetch,
@@ -474,7 +475,7 @@ export const api = {
   },
   // ── Notifications (per-user feed + web push) — reads/own-state, direct fetch ──
   notifications: {
-    list: () => req<{ notifications: NotificationDTO[]; unread: number }>('/api/notifications'),
+    list: (cursor?: string | null) => req<Page<{ notifications: NotificationDTO[]; unread: number }>>(`/api/notifications${pageQuery(cursor)}`),
     markRead: (id: ID) => req(`/api/notifications/${id}/read`, { method: 'POST' }),
     markAllRead: () => req('/api/notifications/read-all', { method: 'POST' }),
     clearAll: () => req('/api/notifications', { method: 'DELETE' }),
@@ -532,6 +533,13 @@ export interface PreviewRecord {
   title: string;
   deleted: boolean;
   fields: RecordField[];
+}
+
+/** A newest-first list read a page at a time. `nextCursor` is null on the last page. */
+export type Page<T> = T & { nextCursor: string | null };
+
+function pageQuery(cursor?: string | null): string {
+  return cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
 }
 
 /** One row of a per-object history timeline (Layer A). Actor-scoped projection of the audit log. */

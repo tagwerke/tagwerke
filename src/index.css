@@ -717,6 +717,25 @@ button.pill:hover { border-color: var(--line-strong); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .modal-head h2 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal-scroll { overflow-y: auto; }
+/* A modal whose body is a long list (notifications, Trash): the list is the ONE scroller, and the
+   head and footer stay put around it. Scrolling the modal and the list both gave two scrollbars. */
+.modal.modal-list { display: flex; flex-direction: column; overflow: hidden; max-height: min(78vh, 720px); }
+.modal-list > * { flex: none; }
+.modal-list > .modal-list-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+@media (max-width: 720px) { .modal.modal-list { max-height: 88vh; } }
+/* Every list scroller in a modal: a hairline thumb, no arrow buttons. */
+.modal-list-body, .history-list { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+
+/* The end of a paged list (common/LoadMore.tsx). */
+.load-more { display: flex; justify-content: center; padding: 12px 0 6px; list-style: none; }
+.load-more-btn {
+  background: none; border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 14px; font-size: var(--fs-sm); color: var(--ink-soft);
+  transition: border-color .12s ease, color .12s ease;
+}
+.load-more-btn:hover:not(:disabled) { border-color: var(--line-strong); color: var(--ink); }
+.load-more-btn:disabled { opacity: 0.6; cursor: default; }
+.load-more.is-end { font-size: var(--fs-xs); color: var(--ink-mute); }
 @media (min-width: 721px) { .modal-scroll { max-height: min(78vh, 720px); } }
 /* Inline banner (components/common/Notice.tsx): the one error / success / info look. */
 .notice {
@@ -1345,7 +1364,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .audit-target { color: var(--ink-mute); min-width: 0; word-break: break-word; }
 .audit-payload { grid-column: 1 / -1; margin: 6px 0 0; padding: 8px; background: var(--bg); border-radius: var(--r-sm); font-size: var(--fs-xs); overflow: auto; max-height: 240px; }
 .audit-foot { padding-top: 10px; text-align: center; }
-.audit-end { font-size: var(--fs-xs); color: var(--ink-mute); }
 
 /* Condition chips (the is / is-not filter set) */
 .audit-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
@@ -1430,16 +1448,64 @@ button.pill:hover { border-color: var(--line-strong); }
 .history-panel > .history-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
 .history-entry { padding: 8px 2px; border-bottom: 1px solid var(--line); }
 .history-entry:last-child { border-bottom: none; }
-.history-line { display: flex; align-items: baseline; gap: 6px; }
-.history-actor { font-weight: 600; font-size: var(--fs-md); color: var(--ink); }
-.history-verb { font-size: var(--fs-md); color: var(--ink-soft); }
+/* One line per row, always: the name and the time keep their size, the sentence between them gives
+   way and ends in "…" (the full sentence is the row's tooltip). Wrapping is what made a narrow drawer
+   three lines a row. */
+.history-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.history-who { flex: none; display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 45%; }
+.history-actor { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: var(--fs-md); color: var(--ink); }
+.history-verb { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-md); color: var(--ink-soft); }
 .history-subject { color: var(--ink); }
-.history-time { margin-left: auto; font-size: var(--fs-xs); color: var(--ink-mute); white-space: nowrap; }
-.history-changes { list-style: none; margin: 4px 0 0; padding: 0 0 0 2px; display: flex; flex-direction: column; gap: 2px; }
-.history-changes li { font-size: var(--fs-sm); color: var(--ink-soft); font-family: var(--mono); }
+.history-time { flex: none; margin-left: auto; font-size: var(--fs-xs); color: var(--ink-mute); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.history-changes { list-style: none; margin: 3px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.history-changes li { font-size: var(--fs-sm); color: var(--ink-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-field { color: var(--ink-mute); }
-.history-arrow { color: var(--ink-mute); }
-.history-detail { font-size: var(--fs-sm); color: var(--ink-mute); margin-top: 4px; }
+.history-arrow { color: var(--ink-mute); opacity: 0.7; }
+.history-to { color: var(--ink-soft); }
+.history-detail { font-size: var(--fs-sm); color: var(--ink-mute); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Board history: a wide, quiet feed. Day headings carry the date (rows show a clock time), rows lose
+   their rules and take a hover tint instead, and the heading sticks while its day scrolls under it. */
+.history-panel.is-board { width: min(720px, calc(100vw - 32px)); max-width: none; }
+.history-panel.is-board .history-list { margin-top: 0; }
+.history-panel.is-board .history-entry { border-bottom: 0; padding: 7px 10px; margin: 0 -10px; border-radius: var(--r-sm); }
+.history-panel.is-board .history-entry:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+/* Who did it is a fixed column, so every sentence starts at the same x whether or not a token chip
+   rides along; a long name or token name gives way inside it. The changes sit under the sentence,
+   not under the name — they belong to it. Too narrow for a column on a phone. */
+.history-panel.is-board .history-who { width: 190px; max-width: 190px; }
+.history-panel.is-board .history-changes,
+.history-panel.is-board .history-detail { padding-left: 198px; }
+@media (max-width: 560px) {
+  .history-panel.is-board .history-who { width: auto; max-width: 45%; }
+  .history-panel.is-board .history-changes,
+  .history-panel.is-board .history-detail { padding-left: 0; }
+}
+.history-day {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--bg-paper);
+  padding: 14px 0 6px; margin-bottom: 2px;
+  font-size: var(--fs-2xs); font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--ink-mute);
+  border-bottom: 1px solid var(--line);
+}
+.history-day:first-child { padding-top: 4px; }
+/* The board's name beside the drawer's title, in the quieter face — the title says what this is. */
+.modal-head-sub { font-family: var(--sans); font-style: normal; font-size: var(--fs-base); font-weight: 500; color: var(--ink-mute); margin-left: 6px; }
+
+/* "Done with a personal access token": a key and the token's name, one pill. */
+.via-chip {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  max-width: 150px; margin-left: 6px; padding: 1px 7px 1px 5px;
+  border-radius: 999px; vertical-align: middle; align-self: center;
+  background: color-mix(in srgb, var(--status-review) 13%, transparent);
+  color: var(--status-review);
+  font-size: var(--fs-2xs); font-weight: 600; line-height: 1.6;
+}
+.via-chip svg { flex: none; }
+.history-who .via-chip { flex: 0 1 auto; min-width: 0; align-self: center; }
+.via-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-line .via-chip { margin-left: 0; }
 /* Outcome of a point-in-time restore: neutral, not an error — it usually reports a success that
    was partial, which is the case the user most needs to read. */
 .history-note {
@@ -1932,7 +1998,7 @@ button.pill:hover { border-color: var(--line-strong); }
 .notif-bar { display: flex; align-items: center; justify-content: space-between; margin: -6px 0 6px; }
 .notif-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 
-.notif-list { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; margin: 4px -6px 0; }
+.notif-list { display: flex; flex-direction: column; gap: 2px; margin: 4px -6px 0; }
 
 .notif-row {
   display: flex; align-items: flex-start; gap: 10px;
