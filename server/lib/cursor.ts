@@ -23,6 +23,17 @@ export function olderThan(cursor: string, at: Column, id: Column): SQL {
   return sql`(${at}, ${id}) < (${when}, ${rowId})`;
 }
 
+/**
+ * The mirror of `olderThan`: "newer than the cursor's row", for a client catching up oldest-first
+ * (an agent asking what arrived since it last looked). Same rule for a cursor that doesn't decode.
+ */
+export function newerThan(cursor: string, at: Column, id: Column): SQL {
+  const [ts, rowId] = Buffer.from(cursor, 'base64').toString('utf8').split('|');
+  const when = new Date(ts ?? '');
+  if (!rowId || Number.isNaN(when.getTime())) return sql`false`;
+  return sql`(${at}, ${id}) > (${when}, ${rowId})`;
+}
+
 /** A page size from a query param, clamped to [1, max]. */
 export function pageLimit(raw: string | undefined, fallback: number, max: number): number {
   return Math.min(Math.max(Number(raw ?? fallback) || fallback, 1), max);

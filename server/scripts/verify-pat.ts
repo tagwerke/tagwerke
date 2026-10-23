@@ -25,6 +25,8 @@ const { sprintRoutes } = await import('../routes/sprints.ts');
 const { commentRoutes } = await import('../routes/comments.ts');
 const { memberRoutes } = await import('../routes/members.ts');
 const { historyRoutes } = await import('../routes/history.ts');
+const { notificationRoutes } = await import('../routes/notifications.ts');
+const { encodeCursor } = await import('../lib/cursor.ts');
 const { tokenRoutes } = await import('../routes/tokens.ts');
 const { secretRoutes } = await import('../routes/secrets.ts');
 const { accountSudoRoutes } = await import('../routes/sudo.ts');
@@ -95,7 +97,7 @@ async function cleanup(): Promise<void> {
 const app = Fastify();
 await app.register(cookie, { secret: process.env.SESSION_SECRET! });
 registerAuditHook(app);
-for (const r of [authRoutes, stateRoutes, tabRoutes, taskRoutes, sprintRoutes, commentRoutes, memberRoutes, historyRoutes, tokenRoutes, secretRoutes, accountSudoRoutes, adminRoutes]) {
+for (const r of [authRoutes, stateRoutes, tabRoutes, taskRoutes, sprintRoutes, commentRoutes, memberRoutes, historyRoutes, notificationRoutes, tokenRoutes, secretRoutes, accountSudoRoutes, adminRoutes]) {
   await app.register(r);
 }
 
@@ -263,6 +265,64 @@ try {
     return code(call('DELETE', `/api/tokens/${mj.id}`, undefined, undefined, ownerCookie));
   })()) === 200);
   check('a revoked token -> 401', (await code(call('GET', '/api/state', mj.token))) === 401);
+
+  console.log('notifications feed (read only, AGENT_COMMENTS_PLAN.md)');
+  const NOTE = '/api/notifications';
+  await db.delete(schema.notifications).where(eq(schema.notifications.userId, owner));
+  const T0 = new Date('2026-01-01T00:00:00.000Z');
+  const T1 = new Date('2026-01-01T00:00:01.000Z');
+  const note1 = (id: string, tabId: string | null, createdAt: Date, type = 'comment_added') => ({ id, userId: owner, type, title: id, body: null, tabId, createdAt });
+  await db.insert(schema.notifications).values([
+    note1('n-a1', boardA, T0), note1('n-b1', boardB, T0), note1('n-x1', boardX, T0), note1('n-acct', null, T0, 'token_created'),
+    // three rows in the same millisecond: the id is the only thing that orders them
+    note1('n-s1', boardA, T1), note1('n-s2', boardA, T1), note1('n-s3', boardA, T1),
+  ]);
+  const ids = (r: any) => (r.notifications as any[]).map((x) => x.id);
+  const feed = async (url: string, token?: string, cookies?: Record<string, string>) => (await call('GET', url, token, undefined, cookies)).json() as any;
+
+  const asA = await feed(NOTE, tokA);
+  check('a token reads the feed -> 200', (await code(call('GET', NOTE, tokA))) === 200 && (await code(call('GET', NOTE, tokRead))) === 200);
+  check('...only rows on boards it reaches', JSON.stringify(ids(asA).sort()) === JSON.stringify(['n-a1', 'n-s1', 'n-s2', 'n-s3']), ids(asA));
+  check('a token with no boards ticked sees nothing', ids(await feed(NOTE, await mint(owner, { tabIds: [] }))).length === 0);
+  check('allBoards adds the owner’s other boards, still not one they are not on', JSON.stringify(ids(await feed(NOTE, tokAll)).sort()) === JSON.stringify(['n-a1', 'n-b1', 'n-s1', 'n-s2', 'n-s3']));
+  check('an account-level row (null tabId) is never shown to a token', !ids(await feed(NOTE, tokAll)).includes('n-acct'));
+  const asCookie = await feed(NOTE, undefined, ownerCookie);
+  check('the cookie session still sees every row, account rows included', ids(asCookie).length === 7 && ids(asCookie).includes('n-acct') && ids(asCookie).includes('n-x1'));
+  check('unread counts only reachable rows for a token', asA.unread === 4 && asCookie.unread === 7, [asA.unread, asCookie.unread]);
+  check('the cookie response keeps its shape and gains `latest`', JSON.stringify(Object.keys(asCookie).sort()) === JSON.stringify(['latest', 'nextCursor', 'notifications', 'unread']) && asCookie.latest === encodeCursor(T1, 'n-s3') && asCookie.nextCursor === null && ids(asCookie)[0] === 'n-s3');
+
+  const notOffered = async (method: string, url: string) => {
+    const r = await call(method, url, tokAll, method === 'POST' ? { endpoint: 'x', keys: { p256dh: 'x', auth: 'x' } } : undefined);
+    return r.statusCode === 403 && (r.json() as any).error === 'not available to tokens';
+  };
+  check('mark one read -> 403', await notOffered('POST', `${NOTE}/n-a1/read`));
+  check('read-all -> 403', await notOffered('POST', `${NOTE}/read-all`));
+  check('clear the feed -> 403', await notOffered('DELETE', NOTE));
+  check('subscribe -> 403', await notOffered('POST', `${NOTE}/subscribe`));
+  check('push test -> 403', await notOffered('POST', `${NOTE}/test`));
+  check('vapid key -> 403', await notOffered('GET', `${NOTE}/vapid-key`));
+  const stillUnread = await db.select().from(schema.notifications).where(eq(schema.notifications.userId, owner));
+  check('reading through a token marked nothing read, and deleted nothing', stillUnread.length === 7 && stillUnread.every((r) => !r.readAt));
+
+  const afterA0 = encodeCursor(T0, 'n-a1');
+  const p1 = await feed(`${NOTE}?after=${afterA0}&limit=2`, tokA);
+  check('after: only newer rows, oldest first, a page boundary inside one millisecond', JSON.stringify(ids(p1)) === JSON.stringify(['n-s1', 'n-s2']) && p1.more === true && p1.latest === encodeCursor(T1, 'n-s2'), p1);
+  const p2 = await feed(`${NOTE}?after=${p1.latest}&limit=2`, tokA);
+  check('...the next page has the third row exactly once, more is false', JSON.stringify(ids(p2)) === JSON.stringify(['n-s3']) && p2.more === false && p2.latest === encodeCursor(T1, 'n-s3'), p2);
+  const p3 = await feed(`${NOTE}?after=${p2.latest}&limit=2`, tokA);
+  check('...and nothing is new after that: empty, cursor unchanged', ids(p3).length === 0 && p3.more === false && p3.latest === p2.latest);
+  const bad = await feed(`${NOTE}?after=not-a-cursor`, tokA);
+  check('a garbage cursor is an empty page, not a restart from the top', ids(bad).length === 0 && bad.more === false);
+  const fresh = await feed(`${NOTE}?after=${encodeCursor(new Date(0), 'a')}`, tokA);
+  check('an old cursor returns everything reachable, oldest first', JSON.stringify(ids(fresh)) === JSON.stringify(['n-a1', 'n-s1', 'n-s2', 'n-s3']));
+  check('after also works for a cookie session', ids(await feed(`${NOTE}?after=${afterA0}&limit=100`, undefined, ownerCookie)).includes('n-acct'));
+
+  const viaBoards = await feed(NOTE, tokBoards);
+  check('a ticked board the owner is on is visible', ids(viaBoards).includes('n-b1'));
+  await db.delete(schema.boardMembers).where(and(eq(schema.boardMembers.tabId, boardB), eq(schema.boardMembers.userId, owner)));
+  const afterLeave = await feed(NOTE, tokBoards);
+  check('...and is gone once the owner leaves that board, though it is still ticked', !ids(afterLeave).includes('n-b1') && ids(afterLeave).includes('n-a1'));
+  check('...while the owner’s own session keeps its history',ids(await feed(NOTE, undefined, ownerCookie)).includes('n-b1'));
 } finally {
   await cleanup().catch((e) => console.error('cleanup failed', e));
   await app.close();

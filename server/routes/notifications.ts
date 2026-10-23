@@ -6,12 +6,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { vapidPublicKey, pushToUser } from '../lib/webpush.ts';
 import { dlog, sid } from '../lib/dlog.ts';
-import { nextCursor, olderThan, pageLimit } from '../lib/cursor.ts';
+import { encodeCursor, newerThan, nextCursor, olderThan, pageLimit } from '../lib/cursor.ts';
 
 const subscribeBody = z.object({
   endpoint: z.string().min(1),
@@ -27,35 +27,67 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
 
   // One page of this user's feed, newest first (`?cursor=` for older ones) + the current unread
   // count (for the bell badge).
-  app.get('/api/notifications', async (req) => {
-    const userId = req.user!.id;
-    const q = req.query as { cursor?: string; limit?: string };
-    const limit = pageLimit(q.limit, 50, 200);
-    const rows = await db
-      .select()
-      .from(schema.notifications)
-      .where(and(
-        eq(schema.notifications.userId, userId),
-        q.cursor ? olderThan(q.cursor, schema.notifications.createdAt, schema.notifications.id) : undefined,
-      ))
-      .orderBy(desc(schema.notifications.createdAt), desc(schema.notifications.id))
-      .limit(limit);
-    const unread = (
-      await db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(schema.notifications)
-        .where(and(eq(schema.notifications.userId, userId), isNull(schema.notifications.readAt)))
-    )[0]?.n ?? 0;
-    return {
-      notifications: rows.map((r) => ({
-        ...r,
-        createdAt: r.createdAt.toISOString(),
-        readAt: r.readAt?.toISOString() ?? null,
-      })),
-      unread,
-      nextCursor: nextCursor(rows, limit, (r) => ({ at: r.createdAt, id: r.id })),
-    };
-  });
+  //
+  // `?after=<cursor>` flips it for a client catching up (AGENT_COMMENTS_PLAN.md): rows NEWER than the
+  // cursor, oldest first, `more` saying whether to call again with `after=latest`. `latest` is the
+  // cursor to save: the newest row returned, or the one passed in when nothing is new.
+  //
+  // This is the one notifications route a personal access token may call (read only: marking read
+  // stays the human's). A token sees only rows for boards it reaches that the owner is still on.
+  app.get(
+    '/api/notifications',
+    { config: { pat: 'read', rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async (req) => {
+      const userId = req.user!.id;
+      const q = req.query as { cursor?: string; after?: string; limit?: string };
+      const catchUp = q.after !== undefined;
+      const limit = catchUp ? pageLimit(q.limit, 100, 100) : pageLimit(q.limit, 50, 200);
+      const n = schema.notifications;
+
+      const mine = and(
+        eq(n.userId, userId),
+        req.pat && isNotNull(n.tabId),
+        req.pat && !req.pat.allBoards ? (req.pat.tabIds.size ? inArray(n.tabId, [...req.pat.tabIds]) : sql`false`) : undefined,
+        req.pat
+          ? inArray(n.tabId, db.select({ id: schema.boardMembers.tabId }).from(schema.boardMembers).where(eq(schema.boardMembers.userId, userId)))
+          : undefined,
+      );
+
+      const rows = await db
+        .select()
+        .from(n)
+        .where(and(
+          mine,
+          catchUp
+            ? newerThan(q.after!, n.createdAt, n.id)
+            : q.cursor ? olderThan(q.cursor, n.createdAt, n.id) : undefined,
+        ))
+        .orderBy(...(catchUp ? [asc(n.createdAt), asc(n.id)] : [desc(n.createdAt), desc(n.id)]))
+        .limit(limit);
+      const unread = (
+        await db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(n)
+          .where(and(mine, isNull(n.readAt)))
+      )[0]?.n ?? 0;
+
+      const newest = catchUp ? rows[rows.length - 1] : rows[0];
+      return {
+        notifications: rows.map((r) => ({
+          ...r,
+          createdAt: r.createdAt.toISOString(),
+          readAt: r.readAt?.toISOString() ?? null,
+        })),
+        unread,
+        ...(catchUp
+          ? { latest: newest ? encodeCursor(newest.createdAt, newest.id) : q.after!, more: rows.length === limit }
+          : {
+              latest: newest ? encodeCursor(newest.createdAt, newest.id) : null,
+              nextCursor: nextCursor(rows, limit, (r) => ({ at: r.createdAt, id: r.id })),
+            }),
+      };
+    },
+  );
 
   // Mark one notification read (idempotent; scoped to the owner so you can't touch others').
   app.post('/api/notifications/:id/read', async (req, reply) => {

@@ -33,6 +33,10 @@ token creates is added to its list automatically. Your own role on each board is
 request, so a token never does more than you could (a token on a board you only view can't edit it). Every write is recorded in the audit log with the token's name (`via: pat`), and you
 get a notification when a token is created.
 
+Reading includes your notification feed (`GET /api/notifications`) for the boards the token reaches,
+so an agent can ask what's new since it last looked. A token never marks anything read: your bell
+stays yours.
+
 ```sh
 export TAGWERKE_TOKEN=tgw_pat_...
 curl -H "Authorization: Bearer $TAGWERKE_TOKEN" https://your-tagwerke/api/state
