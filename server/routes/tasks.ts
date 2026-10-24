@@ -13,7 +13,8 @@ import { boardChannel, publish } from '../lib/bus.ts';
 import { taskDTO } from '../lib/assembleState.ts';
 import { isValidRank, rankAfter } from '../../shared/rank.ts';
 import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
-import { TASK_STATUS_KEYS, isDoneStatus } from '../../shared/status.ts';
+import { startKey } from '../../shared/status.ts';
+import { resolveStatus, statesOf, unknownStatusBody, withStatusLabels } from '../lib/boardStates.ts';
 
 /** Sibling order key. Validated on the way in — a malformed rank would corrupt every view's order
  *  silently, and it costs nothing to reject it at the edge. See shared/rank.ts. */
@@ -41,7 +42,7 @@ export function notifyAssigneeChange(
 }
 
 // Fields whose changes are worth an accountability trail. `rank` is excluded (reorder
-// noise); `done`/`owner` are derived/legacy. `parentTaskId` IS audited — re-parenting moves a task
+// noise); `owner` is legacy. `parentTaskId` IS audited — re-parenting moves a task
 // between deliverables, which is a structural change, not reorder noise (SUBTASKS_PLAN P1.3).
 // `sprintId` IS audited for the same reason (SPRINTS_PLAN): which sprint a task is scoped to is a
 // planning decision worth a trail, unlike rank. See AUDIT_IMPLEMENTATION_PLAN §B2.
@@ -68,7 +69,8 @@ async function taskBoard(req: FastifyRequest): Promise<string | undefined> {
 }
 
 export const priority = z.union([z.literal(1), z.literal(2), z.literal(3)]);
-export const statusEnum = z.enum(TASK_STATUS_KEYS);
+/** A state key. Which keys a board has is checked by resolveStatus, not here. */
+export const statusEnum = z.string().min(1).max(64);
 
 const upsertBody = z.object({
   homeTabId: z.string().min(1),
@@ -82,7 +84,6 @@ const upsertBody = z.object({
   parentTaskId: z.string().nullable().optional(),
   sprintId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
-  done: z.boolean().optional(),
 });
 
 const patchBody = z.object({
@@ -96,14 +97,13 @@ const patchBody = z.object({
   parentTaskId: z.string().nullable().optional(),
   sprintId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
-  done: z.boolean().optional(),
 });
 
 /** Shape-check for a value coming back out of the audit trail (JSON, so nothing is guaranteed). */
 const revertShape: Record<RevertableField, z.ZodTypeAny> = {
   text: z.string(),
   description: z.string().nullable(),
-  status: statusEnum,
+  status: z.string(),
   assigneeId: z.string().min(1).nullable(),
   date: z.string().min(1).nullable(),
   priority: priority.nullable(),
@@ -116,7 +116,6 @@ const orphanBody = z.object({
   keepIds: z.array(z.string().min(1)),
 });
 
-// `done` is a derived back-compat mirror of the status's category being `done` (see schema + SPEC §3).
 // `owner` is the legacy free-text display fallback; `assigneeId` is the real assignment and,
 // when set, is constrained to a member of the task's home board (SPEC §5).
 
@@ -294,10 +293,16 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const putRefusal = await parentRefusal(b.data.homeTabId, id, b.data.parentTaskId);
       if (putRefusal) return reply.code(400).send({ error: PARENT_REFUSAL_MESSAGE[putRefusal] });
       const userId = req.user!.id;
-      // status is authoritative; `done` is the derived back-compat mirror.
-      const status = b.data.status ?? (b.data.done ? 'done' : 'todo');
       // Prior row (if any): distinguishes create vs replace for the audit trail.
       const before = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0];
+      const resolved = await resolveStatus(
+        b.data.homeTabId,
+        b.data.status ?? before?.status ?? startKey(await statesOf(b.data.homeTabId)),
+      );
+      if (!resolved) return reply.code(400).send(await unknownStatusBody(b.data.homeTabId));
+      const status = resolved.key;
+      // The generic broadcast hook (ws.ts) fans out req.body, so peers must see the stored key.
+      if (resolved.remapped) (req.body as { status?: string }).status = status;
       // Cross-board hijack guard: this is an upsert on a client-supplied id, and the conflict path
       // rewrites homeTabId. The preHandler only proved editor on the TARGET board — so without this,
       // anyone with editor on any board could overwrite/steal any task by id (task ids are not
@@ -336,7 +341,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           ? b.data.sprintId
           : before && before.homeTabId === b.data.homeTabId ? before.sprintId : null,
         owner: b.data.owner ?? null,
-        done: isDoneStatus(status),
         // Retain a recognizable Trash label; null only when genuinely never titled (§G).
         lastTitle: hasTitle ? b.data.text : null,
       };
@@ -352,7 +356,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         parentTaskId: values.parentTaskId,
         sprintId: values.sprintId,
         owner: values.owner,
-        done: values.done,
         // Resurrect: re-adding a task (e.g. editor undo / re-typing a line) clears any
         // soft-delete, so Ctrl+Z restores it in place. See AUDIT_IMPLEMENTATION_PLAN §H.
         deletedAt: null,
@@ -363,7 +366,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       await db.insert(schema.tasks).values(values).onConflictDoUpdate({ target: schema.tasks.id, set: onConflictSet });
       // Attribution: diff a replace; record a create when the task is new.
       if (before) {
-        const changes = diffChanges(before as Record<string, unknown>, values, [...AUDITED_FIELDS, 'homeTabId']);
+        const changes = await withStatusLabels(values.homeTabId, diffChanges(before as Record<string, unknown>, values, [...AUDITED_FIELDS, 'homeTabId']));
         auditEdit(req, { action: 'PUT /api/tasks/:id', targetType: 'task', targetId: id, scopeId: values.homeTabId, changes });
       } else {
         req.auditHandled = true;
@@ -376,7 +379,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // Notify a newly-assigned user — covers "create a task already assigned to someone" (which
       // lands here, not on PATCH) and a full-replace that changes the assignee.
       notifyAssigneeChange(values.assigneeId, before?.assigneeId, userId, values.homeTabId, id, values.text);
-      return reply.send({ ok: true });
+      return reply.send({ ok: true, ...(resolved.remapped ? { status } : {}) });
     },
   );
 
@@ -400,9 +403,16 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         const refusal = await parentRefusal(homeTabId, id, b.data.parentTaskId);
         if (refusal) return reply.code(400).send({ error: PARENT_REFUSAL_MESSAGE[refusal] });
       }
-      // Keep the derived `done` mirror in sync whenever status is patched.
+      let remapped = false;
+      if (b.data.status !== undefined) {
+        const resolved = await resolveStatus(homeTabId, b.data.status);
+        if (!resolved) return reply.code(400).send(await unknownStatusBody(homeTabId));
+        remapped = resolved.remapped;
+        b.data.status = resolved.key;
+        // The generic broadcast hook (ws.ts) fans out req.body, so peers must see the stored key.
+        if (remapped) (req.body as { status?: string }).status = resolved.key;
+      }
       const set = { ...b.data } as Record<string, unknown>;
-      if (b.data.status !== undefined) set.done = isDoneStatus(b.data.status);
       // Retain the last non-empty title for Trash; emptying the text never clears it (§G).
       if (typeof b.data.text === 'string' && b.data.text.trim().length > 0) set.lastTitle = b.data.text;
       // Re-parented without a new rank: the old key was ordered against a DIFFERENT set of
@@ -413,7 +423,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
 
       // Enriched audit: field diffs.
-      const changes = diffChanges(before as Record<string, unknown>, b.data as Record<string, unknown>, AUDITED_FIELDS);
+      const changes = await withStatusLabels(homeTabId, diffChanges(before as Record<string, unknown>, b.data as Record<string, unknown>, AUDITED_FIELDS));
       auditEdit(req, { action: 'PATCH /api/tasks/:id', targetType: 'task', targetId: id, scopeId: homeTabId, changes });
 
       // Notifications (NOTIFICATIONS.md §2). All key off before/after we already have in hand.
@@ -421,7 +431,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const text = typeof b.data.text === 'string' ? b.data.text : before.text;
       // Assigned to you — assignment changed to a real, different user.
       notifyAssigneeChange(b.data.assigneeId, before.assigneeId, actor, homeTabId, id, text);
-      return reply.send({ ok: true });
+      return reply.send({ ok: true, ...(remapped ? { status: b.data.status } : {}) });
     },
   );
 
@@ -760,6 +770,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           continue;
         }
         const value = parsed.data as unknown;
+        // States are per board and can be deleted since. A restore puts back what was there or
+        // nothing — it does not remap to a neighbour the way a stale live write does (D8).
+        if (field === 'status' && !(await statesOf(homeTabId)).some((s) => s.key === value && !s.deletedAt)) {
+          skipped.push({ field, reason: 'that state no longer exists on this board' });
+          continue;
+        }
         // assignee is constrained to the board's roster (SPEC §5), and rosters change.
         if (field === 'assigneeId' && value != null && !(await assigneeAllowed(homeTabId, String(value)))) {
           skipped.push({ field, reason: 'that person is no longer a member of this board' });
@@ -768,7 +784,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         set[field] = value;
       }
 
-      const changes = diffChanges(before as Record<string, unknown>, set, REVERTABLE_FIELDS);
+      const changes = await withStatusLabels(homeTabId, diffChanges(before as Record<string, unknown>, set, REVERTABLE_FIELDS));
       if (!changes.length) {
         // Already in that state (or everything that differed was skipped). Not an error, and not
         // worth an audit row — say so and let the UI report it.
@@ -776,7 +792,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         return reply.send({ ok: true, at: point.at, restored: [], skipped, task: taskDTO(before) });
       }
 
-      if (set.status !== undefined) set.done = isDoneStatus(set.status as string);
       if (typeof set.text === 'string' && set.text.trim()) set.lastTitle = set.text;
       await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
       const after = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0] ?? before;

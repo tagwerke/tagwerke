@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ancestorsOf } from '../../store';
 import type { DraftFields } from '../../tasks/createTask';
-import type { ID, Task, TaskStatus } from '../../types';
+import type { ID, Task } from '../../types';
 
 /** Stand-ins for "no sprint" / "no assignee" inside a filter list. */
 export const BACKLOG = 'backlog';
@@ -43,7 +43,7 @@ function fold(s: string): string {
 export function matchesFilters(t: Task, f: WorkFilters): boolean {
   if (f.sprints.length && !f.sprints.includes(t.sprintId ?? BACKLOG)) return false;
   if (f.assignees.length && !f.assignees.includes(t.assigneeId ?? UNASSIGNED)) return false;
-  if (f.statuses.length && !f.statuses.includes(t.status ?? 'todo')) return false;
+  if (f.statuses.length && !f.statuses.includes(t.status)) return false;
   if (f.priorities.length && !f.priorities.includes(t.priority ? String(t.priority) : NO_PRIORITY)) return false;
   const q = fold(f.query.trim());
   if (q && !fold(t.text).includes(q)) return false;
@@ -92,7 +92,7 @@ export function presetFromFilters(f: WorkFilters): DraftFields | null {
   if (f.priorities.length > 1) return null;
   if (f.statuses.length > 1) return null;
   const fields: DraftFields = {};
-  if (f.statuses.length === 1) fields.status = f.statuses[0] as TaskStatus;
+  if (f.statuses.length === 1) fields.status = f.statuses[0];
   if (f.sprints.length === 1) fields.sprintId = f.sprints[0] === BACKLOG ? null : f.sprints[0];
   if (f.priorities.length === 1) fields.priority = f.priorities[0] === NO_PRIORITY ? null : (Number(f.priorities[0]) as 1 | 2 | 3);
   if (f.assignees.length === 1) fields.assigneeId = f.assignees[0] === UNASSIGNED ? null : f.assignees[0];

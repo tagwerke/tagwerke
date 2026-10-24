@@ -32,6 +32,7 @@ const { secretRoutes } = await import('../routes/secrets.ts');
 const { accountSudoRoutes } = await import('../routes/sudo.ts');
 const { adminRoutes } = await import('../routes/admin.ts');
 const { authRoutes } = await import('../auth/routes.ts');
+const { seedBoardStates } = await import('../lib/boardStates.ts');
 
 let failures = 0;
 function check(label: string, ok: boolean, detail?: unknown): void {
@@ -69,6 +70,7 @@ async function seed(): Promise<void> {
     { id: boardC, name: 'verify-pat C (viewer)', type: 'normal', createdBy: other },
     { id: boardX, name: 'verify-pat X (not mine)', type: 'normal', createdBy: other },
   ]);
+  for (const b of [boardA, boardB, boardC, boardX]) await seedBoardStates(db, b);
   await db.insert(schema.boardMembers).values([
     { tabId: boardA, userId: owner, role: 'admin', categoryId: project, position: 0 },
     { tabId: boardA, userId: other, role: 'editor' },

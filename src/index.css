@@ -14,13 +14,21 @@
   --danger: #b3321f;
   --warn: #a8581f;
   --success: #2f7d4f;
-  /* One meaning per color: blue = moving, purple = in review, red = stuck, green = finished.
-     Colors belong to a status; what a status MEANS to the app is its category (shared/status.ts). */
-  --status-progress: #2563eb;
-  --status-review: #7c3aed;
-  --status-blocked: var(--danger);
-  --status-done: var(--success);
-  --status-cancelled: var(--ink-mute);
+  /* The task-state palette (BOARD_STATES_PLAN D6): a board picks each state's color from these
+     twelve, by name (shared/status.ts STATE_COLORS). A state's element gets `--state-color` set to
+     one of them (src/tasks/states.ts stateStyle); what a state MEANS is its category. */
+  --state-grey: #8a8478;
+  --state-slate: #64748b;
+  --state-blue: #2563eb;
+  --state-sky: #0284c7;
+  --state-teal: #0d9488;
+  --state-green: #2f7d4f;
+  --state-lime: #65a30d;
+  --state-yellow: #ca8a04;
+  --state-orange: #ea580c;
+  --state-red: #b3321f;
+  --state-pink: #db2777;
+  --state-purple: #7c3aed;
   --shadow-card: 0 1px 0 rgba(27,24,20,0.04), 0 6px 18px -10px rgba(27,24,20,0.18);
   --shadow-pop:  0 1px 0 rgba(27,24,20,0.06), 0 18px 40px -16px rgba(27,24,20,0.30);
   --r-xs: 4px;
@@ -66,8 +74,18 @@
     --danger: #ff8a73;
     --warn: #e6a06a;
     --success: #7bd49a;
-    --status-progress: #6ea0ff;
-    --status-review: #b497ff;
+    --state-grey: #8f8678;
+    --state-slate: #94a3b8;
+    --state-blue: #6ea0ff;
+    --state-sky: #38bdf8;
+    --state-teal: #2dd4bf;
+    --state-green: #7bd49a;
+    --state-lime: #a3e635;
+    --state-yellow: #facc15;
+    --state-orange: #fb923c;
+    --state-red: #ff8a73;
+    --state-pink: #f472b6;
+    --state-purple: #b497ff;
     --shadow-card: 0 1px 0 rgba(0,0,0,0.2), 0 8px 20px -10px rgba(0,0,0,0.6);
     --shadow-pop: 0 1px 0 rgba(0,0,0,0.3), 0 18px 40px -16px rgba(0,0,0,0.8);
   }
@@ -470,16 +488,19 @@ input, select, textarea { font: inherit; color: inherit; }
 .status-caret[aria-expanded="true"] { opacity: 0.55; }
 .status-caret:hover { opacity: 1; }
 
-/* in-progress / in-review get an always-visible accent dot on the ring. */
-.task-indicator.status-in_progress { border-color: var(--status-progress); }
-.task-indicator.status-in_progress .dot { background: var(--status-progress); opacity: 1; }
-.task-indicator.status-in_review { border-color: var(--status-review); }
-.task-indicator.status-in_review .dot { background: var(--status-review); opacity: 1; }
-.task-indicator.status-blocked { border-color: var(--status-blocked); }
-.task-indicator.status-blocked .dot { background: var(--status-blocked); opacity: 1; }
-/* The terminal pair: .is-done fills the ring with the accent; each takes its own color instead. */
-.task-row.is-done .task-indicator.status-done { background: var(--status-done); border-color: var(--status-done); }
-.task-row.is-done .task-indicator.status-cancelled { background: var(--status-cancelled); border-color: var(--status-cancelled); }
+/* The indicator's SHAPE is the state's category, its COLOR the state's own (--state-color):
+   open is a hollow ring, active/waiting a ring with a solid dot, done/closed filled with a check. */
+.task-indicator.cat-open { border-color: var(--state-color); }
+.task-indicator.cat-open .dot { background: var(--state-color); }
+.task-indicator.cat-active, .task-indicator.cat-waiting { border-color: var(--state-color); }
+.task-indicator.cat-active .dot, .task-indicator.cat-waiting .dot { background: var(--state-color); opacity: 1; }
+.task-row.is-done .task-indicator,
+.task-indicator.cat-done, .task-indicator.cat-closed { background: var(--state-color); border-color: var(--state-color); }
+.task-indicator.cat-done .check, .task-indicator.cat-closed .check { opacity: 1; }
+.task-indicator.cat-done .dot, .task-indicator.cat-closed .dot { opacity: 0; }
+
+/* Every other status mark — the table dot, the sub-task bar, the menus' swatches — is the color. */
+.list-dot, .subtask-seg, .status-swatch, .task-menu-swatch { background: var(--state-color, var(--state-grey)); }
 
 .status-menu {
   position: absolute; top: 22px; left: 0; z-index: 50;
@@ -487,13 +508,7 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .status-option { white-space: nowrap; }
 .status-option.is-selected { font-weight: 600; }
-.status-swatch { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); flex: none; }
-.status-option.status-todo .status-swatch { background: transparent; border: 1.5px solid var(--line-strong); }
-.status-option.status-in_progress .status-swatch { background: var(--status-progress); }
-.status-option.status-in_review .status-swatch { background: var(--status-review); }
-.status-option.status-blocked .status-swatch { background: var(--status-blocked); }
-.status-option.status-done .status-swatch { background: var(--status-done); }
-.status-option.status-cancelled .status-swatch { background: var(--status-cancelled); }
+.status-swatch { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 
 /* Chips */
 /* Pill: the one chip / badge / tag shape. Small by default (.md = larger); toggle state is
@@ -1508,8 +1523,8 @@ button.pill:hover { border-color: var(--line-strong); }
   display: inline-flex; align-items: center; gap: 4px; flex: none;
   max-width: 150px; margin-left: 6px; padding: 1px 7px 1px 5px;
   border-radius: 999px; vertical-align: middle; align-self: center;
-  background: color-mix(in srgb, var(--status-review) 13%, transparent);
-  color: var(--status-review);
+  background: color-mix(in srgb, var(--state-purple) 13%, transparent);
+  color: var(--state-purple);
   font-size: var(--fs-2xs); font-weight: 600; line-height: 1.6;
 }
 .via-chip svg { flex: none; }
@@ -1835,14 +1850,6 @@ button.pill:hover { border-color: var(--line-strong); }
 /* ── List view (tasks grouped by status) ─────────────────────────────────── */
 .board-list { padding: 12px clamp(16px, 3vw, 40px) 48px; max-width: 900px; }
 .list-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-/* One status palette, shared with the doc indicator and the action menu's swatches (§D). These
-   are the indicator's values, because those are the ones the app has trained everyone on. */
-.list-dot.status-todo { background: var(--ink-mute); }
-.list-dot.status-in_progress { background: var(--status-progress); }
-.list-dot.status-in_review { background: var(--status-review); }
-.list-dot.status-blocked { background: var(--status-blocked); }
-.list-dot.status-done { background: var(--status-done); }
-.list-dot.status-cancelled { background: var(--line-strong); }
 /* ── Sprints page (SPRINTS_PLAN.md) ──────────────────────────────────────── */
 /* The sprint list lives in the board panel's 320px rail, not on a page of its own — so no page
    padding, and every row is sized to fit what is left of that rail after the panel's own. */
@@ -2070,12 +2077,6 @@ button.pill:hover { border-color: var(--line-strong); }
   background: var(--rule, color-mix(in srgb, var(--ink) 8%, transparent));
 }
 .subtask-seg { display: block; min-width: 2px; }
-.subtask-seg.status-todo { background: color-mix(in srgb, var(--ink) 16%, transparent); }
-.subtask-seg.status-in_progress { background: var(--status-progress); }
-.subtask-seg.status-in_review { background: var(--status-review); }
-.subtask-seg.status-blocked { background: var(--status-blocked); }
-.subtask-seg.status-done { background: var(--status-done); }
-.subtask-seg.status-cancelled { background: color-mix(in srgb, var(--ink) 10%, transparent); }
 .subtask-count { font-size: 0.78em; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
 
 .list-mode {
@@ -2209,17 +2210,7 @@ button.pill:hover { border-color: var(--line-strong); }
 }
 .task-menu-more, .task-menu-tick { color: var(--ink-mute); flex-shrink: 0; }
 .task-menu-item.is-selected .task-menu-label { font-weight: 600; }
-.task-menu-swatch {
-  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
-  border: 1.5px solid var(--line-strong);
-}
-/* One status palette (§D): these are the doc indicator's values, which the list dot now shares. */
-.task-menu-swatch.status-todo { background: transparent; }
-.task-menu-swatch.status-in_progress { background: var(--status-progress); border-color: var(--status-progress); }
-.task-menu-swatch.status-in_review { background: var(--status-review); border-color: var(--status-review); }
-.task-menu-swatch.status-blocked { background: var(--status-blocked); border-color: var(--status-blocked); }
-.task-menu-swatch.status-done { background: var(--status-done); border-color: var(--status-done); }
-.task-menu-swatch.status-cancelled { background: var(--ink-mute); border-color: var(--ink-mute); }
+.task-menu-swatch { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
 /* ── The work view: one component, two layouts (NOTES_SPLIT_PLAN §N2) ────── */
 .board-work { display: flex; flex-direction: column; min-width: 0; padding-bottom: 40px; }

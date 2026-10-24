@@ -75,7 +75,7 @@ function emitRenames(
 }
 
 // Field-granular diff (SPEC §8): only changed fields are sent, so a text edit can't
-// clobber a concurrently-set status/assignee. `done`/`owner` are no longer client-edited.
+// clobber a concurrently-set status/assignee. `owner` is no longer client-edited.
 type TaskPatch = {
   text?: string;
   description?: string | null;
@@ -94,7 +94,7 @@ function changedFields(p: Task, t: Task): TaskPatch | null {
   // The task page's body. An explicit null is what CLEARS it server-side — an omitted description
   // means "preserve" there (routes/tasks.ts), so a cleared box has to send the null.
   if ((p.description ?? null) !== (t.description ?? null)) patch.description = t.description ?? null;
-  if ((p.status ?? 'todo') !== (t.status ?? 'todo')) patch.status = t.status ?? 'todo';
+  if (p.status !== t.status) patch.status = t.status;
   if ((p.assigneeId ?? null) !== (t.assigneeId ?? null)) patch.assigneeId = t.assigneeId ?? null;
   if ((p.date ?? null) !== (t.date ?? null)) patch.date = t.date ?? null;
   if ((p.priority ?? null) !== (t.priority ?? null)) patch.priority = t.priority ?? null;
@@ -114,7 +114,7 @@ function fullBody(t: Task) {
     // no description; sending an explicit null from a client that never loaded one would wipe it,
     // where omitting it preserves (routes/tasks.ts). Clearing goes through the PATCH diff above.
     ...(t.description != null ? { description: t.description } : {}),
-    status: t.status ?? 'todo',
+    status: t.status,
     assigneeId: t.assigneeId ?? null,
     date: t.date ?? null,
     priority: t.priority ?? null,
@@ -182,9 +182,9 @@ function diff(): void {
 
   for (const id of topoOrderCreates(creates, next.tasks)) {
     const body = fullBody(next.tasks[id]);
-    enqueue(() => api.tasks.upsert(id, body));
+    enqueue(() => api.tasks.upsert(id, body, { onOk: applyRemappedStatus(id) }));
   }
-  for (const [id, patch] of patches) enqueue(() => api.tasks.patch(id, patch));
+  for (const [id, patch] of patches) enqueue(() => api.tasks.patch(id, patch, { onOk: applyRemappedStatus(id) }));
 
   // Deletes cascade to the subtree server-side (SUBTASKS_PLAN D7), so send only the TOPMOST removed
   // task of each removed subtree. Emitting one per descendant would be redundant round trips and,
@@ -212,6 +212,14 @@ function diff(): void {
   // Keep the offline snapshot current so a reload (online or not) restores edits.
   saveSnapshot(useStore.getState());
 }
+
+/** The server stored a different state than we sent: ours was deleted meanwhile and it picked the
+ *  nearest one of the same category (BOARD_STATES_PLAN D8). Take its answer, without echoing it. */
+const applyRemappedStatus = (id: ID) => (body: unknown): void => {
+  const status = (body as { status?: unknown } | null)?.status;
+  if (typeof status !== 'string' || useStore.getState().tasks[id]?.status === status) return;
+  applyServerState(() => useStore.getState().setTaskMeta(id, { status }));
+};
 
 function schedule(): void {
   if (suspended) return;

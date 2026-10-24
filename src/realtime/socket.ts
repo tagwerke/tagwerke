@@ -18,8 +18,7 @@ import { pendingTaskIds } from '../offline/outbox';
 import { useNotifications } from '../notifications/useNotifications';
 import { useComments } from '../comments/useComments';
 import { dlog, sid } from '../util/dlog';
-import type { Comment, DocumentDTO, ID, Notification, Task } from '../types';
-import { isDoneStatus } from '../../shared/status';
+import type { BoardState, Comment, DocumentDTO, ID, Notification, Task } from '../types';
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
@@ -165,14 +164,13 @@ function applyEntity(msg: { entity?: string; id?: string; action?: string; patch
   if (!patch) return;
 
   if (tasks[id]) {
-    // Existing task → merge the changed fields; keep the derived `done` mirror in sync.
+    // Existing task → merge the changed fields.
     // `homeTabId` is merged like any other field: a cross-board move is broadcast to BOTH boards
     // as a full row, and pinning it to the local value (as this did) meant a peer who already held
     // the task never saw it leave — it stayed rendered on the board it had moved off.
     applyRemote(() =>
       useStore.setState((s) => {
         const merged: Task = { ...s.tasks[id], ...patch, id, homeTabId: patch.homeTabId ?? s.tasks[id].homeTabId };
-        if (patch.status !== undefined) merged.done = isDoneStatus(patch.status as string);
         return { tasks: { ...s.tasks, [id]: merged } };
       }),
     );
@@ -238,6 +236,12 @@ function handleMessage(raw: string): void {
       // sidebar reflects it without a manual refresh. Same mechanism as a reconnect resync.
       opts?.onResync();
       return;
+    case 'board-states': {
+      // An admin edited this board's states (server/routes/boardStates.ts): the whole new list.
+      const m = msg as { tabId?: ID; states?: BoardState[] };
+      if (m.tabId && Array.isArray(m.states)) useStore.getState().setBoardStates(m.tabId, m.states);
+      return;
+    }
     case 'comment': {
       // A comment posted/edited/deleted on the open board (server/routes/comments.ts). Its own
       // frame rather than a Yjs update, because comments are rows and not document content

@@ -8,33 +8,32 @@
 
 import { useMemo } from 'react';
 import { useStore, subtaskStats } from '../../store';
-import { STATUS_LABEL } from '../StatusControl';
-import type { ID, TaskStatus } from '../../types';
+import { stateIn, stateStyle, useBoardStates } from '../../tasks/states';
+import type { StatusCategory } from '../../../shared/status';
+import type { ID } from '../../types';
 
 // Left-to-right: finished work first, unstarted last, so the bar fills as the deliverable advances.
-const SEGMENTS: TaskStatus[] = ['done', 'in_review', 'in_progress', 'blocked', 'todo', 'cancelled'];
+// Within a category, the board's own order.
+const CATEGORY_ORDER: StatusCategory[] = ['done', 'waiting', 'active', 'open', 'closed'];
 
 export function SubtaskProgress({ taskId, className = '' }: { taskId: ID; className?: string }) {
   const tasks = useStore((s) => s.tasks);
-  const stats = useMemo(() => subtaskStats(tasks, taskId), [tasks, taskId]);
+  // Sub-tasks live on their parent's board (tasks_parent_same_board), so its states cover them all.
+  const states = useBoardStates(tasks[taskId]?.homeTabId);
+  const stats = useMemo(() => subtaskStats(tasks, taskId, states), [tasks, taskId, states]);
   if (!stats.total) return null;
 
-  const title = SEGMENTS.filter((s) => stats.byStatus[s] > 0)
-    .map((s) => `${stats.byStatus[s]} ${STATUS_LABEL[s].toLowerCase()}`)
-    .join(', ');
+  const segments = Object.keys(stats.byStatus)
+    .map((key) => stateIn(states, key))
+    .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) || a.position - b.position);
+  const title = segments.map((s) => `${stats.byStatus[s.key]} ${s.label.toLowerCase()}`).join(', ');
 
   return (
     <span className={`subtask-progress ${className}`} title={`${stats.total} sub-tasks — ${title}`}>
       <span className="subtask-bar" aria-hidden>
-        {SEGMENTS.map((s) =>
-          stats.byStatus[s] ? (
-            <span
-              key={s}
-              className={`subtask-seg status-${s}`}
-              style={{ flexGrow: stats.byStatus[s] }}
-            />
-          ) : null,
-        )}
+        {segments.map((s) => (
+          <span key={s.key} className="subtask-seg" style={{ ...stateStyle(s), flexGrow: stats.byStatus[s.key] }} />
+        ))}
       </span>
       <span className="subtask-count">
         {stats.done}/{stats.total}

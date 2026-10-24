@@ -1,7 +1,6 @@
 // Pure helpers for the CSV importer (ImportCsvSheet.tsx). Kept separate from the component,
 // matching the existing parse.ts/dates.ts split of logic from UI.
 
-import type { TaskStatus } from '../types';
 import { toISO } from './dates';
 
 export const TITLE_CANDIDATES = ['title', 'name', 'task', 'summary'];
@@ -65,7 +64,8 @@ export function distinctValues(rows: Record<string, string>[], column: string | 
 
 // Best-effort default mapping for the status-mapping step's pre-fill; the user can override
 // any of these. Unrecognized values default to 'todo' and are left for the user to fix.
-const STATUS_SYNONYMS: Record<string, TaskStatus> = {
+// Default keys: an import always makes a new board, and a new board is seeded with DEFAULT_STATES.
+const STATUS_SYNONYMS: Record<string, string> = {
   'to do': 'todo', todo: 'todo', open: 'todo', backlog: 'todo', new: 'todo',
   doing: 'in_progress', 'in progress': 'in_progress', wip: 'in_progress', started: 'in_progress',
   blocked: 'blocked', 'on hold': 'blocked', stuck: 'blocked', waiting: 'blocked', impeded: 'blocked',
@@ -74,6 +74,6 @@ const STATUS_SYNONYMS: Record<string, TaskStatus> = {
   cancelled: 'cancelled', canceled: 'cancelled', wontfix: 'cancelled', "won't fix": 'cancelled',
 };
 
-export function suggestStatus(raw: string): TaskStatus {
+export function suggestStatus(raw: string): string {
   return STATUS_SYNONYMS[raw.trim().toLowerCase()] ?? 'todo';
 }

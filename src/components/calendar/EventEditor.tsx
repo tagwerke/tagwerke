@@ -10,10 +10,11 @@ import { useSession } from '../../session/useSession';
 import { confirmDeleteEvent } from '../../confirm/prompts';
 import { rankTabs } from '../../util/header';
 import { Dropdown, type DropdownOption } from '../Dropdown';
-import { STATUS_ORDER, STATUS_LABEL } from '../StatusControl';
+import { useBoardStates } from '../../tasks/states';
+import { visible } from '../../../shared/status';
 import { AgendaList } from './AgendaList';
 import { dayOf } from './geometry';
-import type { BlockFilter, CalendarEvent, RsvpStatus, TaskStatus } from '../../types';
+import type { BlockFilter, CalendarEvent, RsvpStatus } from '../../types';
 
 const NO_BOARD = '__none__';
 
@@ -62,10 +63,12 @@ export function EventEditor({
   const [filter, setFilter] = useState<BlockFilter | null>(event?.filter ?? null);
 
   const hasBoard = tabId !== NO_BOARD;
+  // The status chips are the event's board's own states; a board-less event shows none.
+  const boardStates = useBoardStates(hasBoard ? tabId : null);
   const myRsvp: RsvpStatus =
     event?.occurrences?.find((o) => o.date === eventDay)?.attendance.find((a) => a.userId === me?.id)?.status ?? 'needs-action';
 
-  const toggleStatus = (s: TaskStatus) => {
+  const toggleStatus = (s: string) => {
     const cur = filter?.statuses ?? [];
     const next = cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s];
     setFilter({ ...filter, statuses: next.length ? next : undefined });
@@ -181,15 +184,15 @@ export function EventEditor({
             <div className="cal-agenda-head">
               <span>agenda · live tasks</span>
               <div className="cal-agenda-filter">
-                {STATUS_ORDER.map((s) => (
+                {visible(boardStates).map((s) => (
                   <button
-                    key={s}
+                    key={s.key}
                     className="pill md"
-                    aria-pressed={(filter?.statuses ?? []).includes(s)}
-                    onClick={() => toggleStatus(s)}
-                    title={`filter: ${STATUS_LABEL[s]}`}
+                    aria-pressed={(filter?.statuses ?? []).includes(s.key)}
+                    onClick={() => toggleStatus(s.key)}
+                    title={`filter: ${s.label}`}
                   >
-                    {STATUS_LABEL[s]}
+                    {s.label}
                   </button>
                 ))}
               </div>

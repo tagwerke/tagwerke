@@ -6,7 +6,6 @@
 // true inside a table.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { STATUS_LABEL } from '../StatusControl';
 import { QuickAdd } from '../common/QuickAdd';
 import { useTableCursor } from './useTableCursor';
 import { useStore } from '../../store';
@@ -17,7 +16,8 @@ import { COL, COLUMNS, columnAt, type ColumnDef } from './workColumns';
 import type { Group, Sort, SortKey } from './workView';
 import type { DraftFields } from '../../tasks/createTask';
 import type { ID, Member, Sprint, Task } from '../../types';
-import { isTerminalStatus } from '../../../shared/status';
+import { stateIn, stateStyle, useBoardStates } from '../../tasks/states';
+import { isTerminal } from '../../../shared/status';
 
 export function WorkTable({
   tabId, groups, sort, onSort, selection, onSelect, onSelectAll, onOpenMenu, onOpenTask, canReorder, onReorder,
@@ -157,19 +157,23 @@ export function WorkTable({
   const memberName = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
   const sprintName = useMemo(() => new Map(sprints.map((s) => [s.id, s.label])), [sprints]);
   const today = todayISO();
+  const states = useBoardStates(tabId);
 
   const cell = (t: Task, col: ColumnDef): React.ReactNode => {
     switch (col.key) {
-      case 'status': return (
-        <span className="wt-status">
-          <span className={`list-dot status-${t.status ?? 'todo'}`} />
-          <span className="wt-mono">{STATUS_LABEL[t.status ?? 'todo']}</span>
-        </span>
-      );
+      case 'status': {
+        const state = stateIn(states, t.status);
+        return (
+          <span className="wt-status" title={state.description ?? undefined}>
+            <span className="list-dot" style={stateStyle(state)} />
+            <span className="wt-mono">{state.label}</span>
+          </span>
+        );
+      }
       case 'assignee': return <span className="wt-mono">{t.assigneeId ? memberName.get(t.assigneeId) ?? '—' : '—'}</span>;
       case 'due': {
         if (!t.date) return <span className="wt-mono muted">—</span>;
-        const active = !isTerminalStatus(t.status);
+        const active = !isTerminal(states, t.status);
         return <span className={`wt-mono ${active && t.date < today ? 'is-overdue' : ''}`}>{formatDateChip(t.date)}</span>;
       }
       case 'priority': return <span className="wt-mono">{t.priority ? '!'.repeat(t.priority) : '—'}</span>;
@@ -226,7 +230,7 @@ export function WorkTable({
           <div key={g.key} className="wt-group">
             {g.tasks.map((t) => {
               const parent = t.parentTaskId ? tasksById[t.parentTaskId] : undefined;
-              const done = isTerminalStatus(t.status);
+              const done = isTerminal(states, t.status);
               const depth = nesting ? nesting.depthOf(t.id) : 0;
               const kids = nesting ? nesting.hasChildren(t.id) : false;
               return (

@@ -11,7 +11,6 @@ import { api } from '../api/client';
 import { repull } from '../session/useSession';
 import { Sheet } from './common/Sheet';
 import { Dropdown, type DropdownOption } from './Dropdown';
-import type { TaskStatus } from '../types';
 import {
   TITLE_CANDIDATES,
   STATUS_CANDIDATES,
@@ -27,7 +26,7 @@ import {
   distinctValues,
 } from '../util/csvImport';
 import { Notice } from './common/Notice';
-import { TASK_STATUSES } from '../../shared/status';
+import { DEFAULT_STATES } from '../../shared/status';
 
 type Step = 'upload' | 'map' | 'status' | 'preview' | 'result';
 
@@ -42,7 +41,8 @@ interface ColumnMap {
   parent: string | null;
 }
 
-const STATUS_OPTIONS: DropdownOption[] = TASK_STATUSES.map((s) => ({ value: s.key, label: s.label.toLowerCase() }));
+// The new board is seeded with the defaults, so these are exactly the states it will have.
+const STATUS_OPTIONS: DropdownOption[] = DEFAULT_STATES.map((s) => ({ value: s.key, label: s.label.toLowerCase() }));
 
 export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
   const tabs = useStore((s) => s.tabs);
@@ -65,7 +65,7 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
   const [projectId, setProjectId] = useState(activeSpace ?? projectOrder[0] ?? '');
   const [newProjectMode, setNewProjectMode] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
-  const [statusMap, setStatusMap] = useState<Record<string, TaskStatus>>({});
+  const [statusMap, setStatusMap] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<{ created: number; matchedAssignees: number; unmatchedAssignees: number } | null>(null);
@@ -116,7 +116,7 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
 
   const goToStatusStep = () => {
     const distinct = distinctValues(rawRows, columnMap.status);
-    const next: Record<string, TaskStatus> = {};
+    const next: Record<string, string> = {};
     for (const raw of distinct) next[raw] = statusMap[raw] ?? suggestStatus(raw);
     setStatusMap(next);
     setStep('status');
@@ -282,7 +282,7 @@ export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
           {Object.keys(statusMap).map((raw) => (
             <label className="field" key={raw}>
               <span>{raw}</span>
-              <Dropdown value={statusMap[raw]} onChange={(v) => setStatusMap((m) => ({ ...m, [raw]: v as TaskStatus }))} options={STATUS_OPTIONS} />
+              <Dropdown value={statusMap[raw]} onChange={(v) => setStatusMap((m) => ({ ...m, [raw]: v }))} options={STATUS_OPTIONS} />
             </label>
           ))}
           <div className="modal-actions">

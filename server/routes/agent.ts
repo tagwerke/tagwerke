@@ -23,7 +23,8 @@ import { requireAgent, requireScope, type AgentScope } from '../auth/agent.ts';
 import { diffChanges, recordAudit } from '../lib/audit.ts';
 import { boardChannel, publish } from '../lib/bus.ts';
 import { taskDTO } from '../lib/assembleState.ts';
-import { AGENT_STATUS_KEYS } from '../../shared/status.ts';
+import { categoryOf, startKey } from '../../shared/status.ts';
+import { liveStates, resolveStatus, statesOf, unknownStatusBody, withStatusLabels } from '../lib/boardStates.ts';
 import {
   AUDITED_FIELDS, PARENT_REFUSAL_MESSAGE, assigneeAllowed, nextSiblingRank, notifyAssigneeChange, parentRefusal, sprintAllowed,
 } from './tasks.ts';
@@ -98,8 +99,8 @@ const cannotFor = (scopes: AgentScope[]): string[] =>
 
 const MAX_TITLE = 500;
 const MAX_DESCRIPTION = 20_000;
-// An agent can move work around but never finish it: a `done`-category status is a human's call.
-const agentStatus = z.enum(AGENT_STATUS_KEYS);
+/** A state key; which keys exist is per board (agentStatusFor). */
+const agentStatus = z.string().min(1).max(64);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const priority = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 
@@ -115,6 +116,15 @@ const taskFields = {
 };
 const createTaskBody = z.object({ id: z.string().min(1).max(64).optional(), title: z.string().min(1).max(MAX_TITLE), ...taskFields });
 const patchTaskBody = z.object({ title: z.string().min(1).max(MAX_TITLE).optional(), ...taskFields });
+
+/** The key an agent's status write stores, or the 400 body. An agent can move work around but never
+ *  finish it: a `done`-category state is a human's call, whatever the board calls it. */
+async function agentStatusFor(tabId: string, key: string): Promise<{ key: string } | { body: unknown }> {
+  const resolved = await resolveStatus(tabId, key);
+  if (!resolved) return { body: await unknownStatusBody(tabId) };
+  if (categoryOf(await statesOf(tabId), resolved.key) === 'done') return { body: { error: 'an agent cannot finish work' } };
+  return { key: resolved.key };
+}
 
 type TaskFieldsInput = {
   assigneeId?: string | null;
@@ -235,6 +245,9 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
         notes: { text: docToText(board?.docJSON), author: null },
         // Label + id only: `sprint: 'current'` on a write picks the one flagged here.
         sprints: sprintRows,
+        // What each `status` key means on this board. Send only a key from here; decide what a
+        // state means by its category, not its label. Hidden states are valid but not offered.
+        states: (await liveStates(tabId)).map((s) => ({ key: s.key, label: s.label, description: s.description, category: s.category, hidden: s.hidden })),
         tasks: taskRows.map(({ t, sprint }) => ({
           id: t.id,
           parentTaskId: t.parentTaskId,
@@ -336,12 +349,14 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
       if (sprintId === false) return reply.code(400).send({ error: 'the board has no current sprint' });
 
       const parentTaskId = b.data.parentTaskId ?? null;
-      const status = b.data.status ?? 'todo';
+      const st = await agentStatusFor(tabId, b.data.status ?? startKey(await statesOf(tabId)));
+      if ('body' in st) return reply.code(400).send(st.body);
+      const status = st.key;
       const inserted = await db
         .insert(schema.tasks)
         .values({
           id, createdBy: agent.userId, homeTabId: tabId, text: title, lastTitle: title, description,
-          status, done: false,
+          status,
           assigneeId: b.data.assigneeId ?? null,
           date: b.data.dueDate ?? null, priority: b.data.priority ?? null,
           rank: await nextSiblingRank(tabId, parentTaskId), parentTaskId, sprintId: sprintId ?? null,
@@ -403,8 +418,9 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
       }
       if (b.data.description !== undefined) set.description = b.data.description === null ? null : neutralizeAgentText(b.data.description);
       if (b.data.status !== undefined) {
-        set.status = b.data.status;
-        set.done = false;
+        const st = await agentStatusFor(tabId, b.data.status);
+        if ('body' in st) return reply.code(400).send(st.body);
+        set.status = st.key;
       }
       if (b.data.assigneeId !== undefined) set.assigneeId = b.data.assigneeId;
       if (b.data.dueDate !== undefined) set.date = b.data.dueDate;
@@ -421,7 +437,7 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
       const after = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0] ?? before;
 
       req.auditHandled = true;
-      const changes = diffChanges(before as Record<string, unknown>, set, AUDITED_FIELDS);
+      const changes = await withStatusLabels(tabId, diffChanges(before as Record<string, unknown>, set, AUDITED_FIELDS));
       if (changes.length) {
         recordAudit({
           actorId: agent.userId, action: 'PATCH /api/agent/tasks/:id', targetType: 'task', targetId: id,

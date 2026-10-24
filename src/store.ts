@@ -1,14 +1,14 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
-import type { BlockFilter, BoardSettings, BoardView, CalendarEvent, DocumentDTO, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task, TaskStatus } from './types';
+import type { BlockFilter, BoardSettings, BoardState, BoardView, CalendarEvent, DocumentDTO, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { dlog, sid } from './util/dlog';
 import { api, ApiError, enqueue } from './api/client';
 import { compareRank, rankAfter, rankBetween } from '../shared/rank';
 import { MAX_TASK_DEPTH } from '../shared/tree';
-import { TASK_STATUSES, isDoneStatus, isTerminalStatus } from '../shared/status';
+import { DEFAULT_STATES, firstDoneKey, isDone, isTerminal, startKey } from '../shared/status';
 
 export function nextPosition(orders: number[]): number {
   return orders.length ? Math.max(...orders) + 1 : 0;
@@ -112,18 +112,19 @@ export function childrenOf(tasks: Record<ID, Task>, id: ID): Task[] {
  *  deliverable moving", and work two levels down still counts as work on it. */
 export interface SubtaskStats {
   total: number;
+  /** Descendants in a `done`-category state. */
   done: number;
-  byStatus: Record<TaskStatus, number>;
+  /** Count per state key; a key with no tasks is absent. */
+  byStatus: Record<string, number>;
 }
 
-export function subtaskStats(tasks: Record<ID, Task>, id: ID): SubtaskStats {
-  const byStatus = Object.fromEntries(TASK_STATUSES.map((s) => [s.key, 0])) as Record<TaskStatus, number>;
+export function subtaskStats(tasks: Record<ID, Task>, id: ID, states: readonly BoardState[]): SubtaskStats {
+  const byStatus: Record<string, number> = {};
   const kids = descendantsOf(tasks, id);
   let done = 0;
   for (const k of kids) {
-    const st = k.status ?? 'todo';
-    byStatus[st]++;
-    if (isDoneStatus(st)) done++;
+    byStatus[k.status] = (byStatus[k.status] ?? 0) + 1;
+    if (isDone(states, k.status)) done++;
   }
   return { total: kids.length, done, byStatus };
 }
@@ -160,6 +161,8 @@ interface Actions {
   setTabStarred(id: ID, starred: boolean): void;
   setTabDoc(id: ID, doc: unknown): void;
   deleteTab(id: ID): void;
+  /** Replace a board's state list (a `board-states` frame, or an admin's own edit). */
+  setBoardStates(tabId: ID, states: BoardState[]): void;
   setActiveTab(id: ID | null): void;
   setBoardView(view: BoardView): void;
   /** Which board-panel tab a URL asked for, or null. Cleared once the panel has opened it. */
@@ -178,7 +181,7 @@ interface Actions {
   setOpenTask(id: ID | null): void;
 
   upsertTask(t: Partial<Task> & { id: ID; homeTabId: ID; text: string }): Task;
-  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'rank' | 'sprintId' | 'description'>>): void;
+  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'status' | 'assigneeId' | 'rank' | 'sprintId' | 'description'>>): void;
   setTaskText(id: ID, text: string): void;
   /** Re-parent a task. Always assigns a rank in the new sibling group (append unless given). */
   setTaskParent(id: ID, parentTaskId: ID | undefined, rank?: string): void;
@@ -189,7 +192,7 @@ interface Actions {
    * own — `undefined` already means "don't touch this".
    */
   moveTask(id: ID, to: { parentTaskId?: ID | null; before?: ID; after?: ID }): void;
-  setTaskStatus(id: ID, status: TaskStatus): void;
+  setTaskStatus(id: ID, status: string): void;
   /** Accept the offer to mark a completed parent's open sub-tasks done too (SUBTASKS_PLAN D5). */
   /** One cascade offer covering a whole selection (NOTES_SPLIT_PLAN §N3.1). */
   offerCascadeFor(ids: ID[]): void;
@@ -312,6 +315,7 @@ function makeInitial(): RootState {
     events: {},
     membersByBoard: {},
     sprintsByBoard: {},
+    statesByBoard: {},
     commentCounts: {},
     projectOrder: [defaultProjectId, personalProjectId],
     tabOrder: [sampleTabId, personalTabId],
@@ -333,6 +337,12 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
   const patchTask = (id: ID, patch: Partial<Task>) =>
     set((s) => (s.tasks[id] ? { tasks: { ...s.tasks, [id]: { ...s.tasks[id], ...patch } } } : s));
 
+  // A board's states, or the defaults while they haven't arrived (an optimistically created board
+  // gets its seeded rows with the next re-pull; the seeds ARE the defaults, so this is exact).
+  // src/tasks/states.ts is the UI's version of this; the store can't import it without a cycle.
+  const statesFor = (tabId: ID): readonly BoardState[] => get().statesByBoard[tabId] ?? DEFAULT_STATES;
+  const terminal = (t: Task): boolean => isTerminal(statesFor(t.homeTabId), t.status);
+
   /**
    * Completing a parent that still has open sub-tasks: warn, never block (SUBTASKS_PLAN D5).
    *
@@ -341,9 +351,10 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
    * runs; all this does is offer to sweep the rest, which is the thing everyone wants and almost
    * nobody implements. Declining is a real answer, not a nag to be repeated.
    */
-  const offerCascade = (id: ID, next: TaskStatus): void => {
-    if (!isDoneStatus(next)) return;
-    const open = descendantsOf(get().tasks, id).filter((t) => !isTerminalStatus(t.status ?? 'todo'));
+  const offerCascade = (id: ID, next: string): void => {
+    const t = get().tasks[id];
+    if (!t || !isDone(statesFor(t.homeTabId), next)) return;
+    const open = descendantsOf(get().tasks, id).filter((d) => !terminal(d));
     if (open.length) set({ pendingCascade: { taskIds: [id], count: open.length } });
   };
 
@@ -482,10 +493,13 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
           }
           const sprintsByBoard = { ...s.sprintsByBoard };
           delete sprintsByBoard[id];
+          const statesByBoard = { ...s.statesByBoard };
+          delete statesByBoard[id];
           return {
             tabs,
             tasks,
             sprintsByBoard,
+            statesByBoard,
             openTaskId,
             tabOrder: s.tabOrder.filter((tid) => tid !== id),
             starredRowOrder: s.starredRowOrder.filter((tid) => tid !== id),
@@ -493,6 +507,9 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
           };
         });
         enqueue(() => api.tabs.remove(id));
+      },
+      setBoardStates(tabId, states) {
+        set((s) => ({ statesByBoard: { ...s.statesByBoard, [tabId]: states } }));
       },
       setActiveTab(id) {
         // Opening a board lands on the doc view; leaving resets too (harmless). Any board /
@@ -510,7 +527,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         let count = 0;
         for (const id of ids) {
           const open = descendantsOf(tasks, id).filter((t) => {
-            return !isTerminalStatus(t.status ?? 'todo') && !seen.has(t.id);
+            return !terminal(t) && !seen.has(t.id);
           });
           if (!open.length) continue;
           for (const t of open) seen.add(t.id);
@@ -527,10 +544,10 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         const swept = new Set<ID>();
         for (const parent of pending.taskIds) {
           for (const t of descendantsOf(get().tasks, parent)) {
-            if (isTerminalStatus(t.status ?? 'todo')) continue;
+            if (terminal(t)) continue;
             if (swept.has(t.id)) continue; // overlapping subtrees in a bulk sweep
             swept.add(t.id);
-            patchTask(t.id, { status: 'done', done: true });
+            patchTask(t.id, { status: firstDoneKey(statesFor(t.homeTabId)) });
           }
         }
         set({ pendingCascade: null });
@@ -595,9 +612,8 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       upsertTask({ id, homeTabId, text, ...meta }) {
         const existing = get().tasks[id];
         // Spread existing first so entity-only fields (status/assigneeId/rank/timestamps)
-        // are preserved — this is the intra-session clobber fix (SPEC §8). `done` is a derived
-        // mirror of status, never an independent field.
-        const status = meta.status ?? existing?.status ?? 'todo';
+        // are preserved — this is the intra-session clobber fix (SPEC §8).
+        const status = meta.status ?? existing?.status ?? startKey(statesFor(homeTabId));
         const merged: Task = {
           ...existing,
           id,
@@ -609,7 +625,6 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
           priority: meta.priority ?? existing?.priority,
           parentTaskId: meta.parentTaskId ?? existing?.parentTaskId,
           owner: meta.owner ?? existing?.owner,
-          done: isDoneStatus(status),
           // Every task gets a sibling rank at birth, so nothing ever renders in an undefined
           // order. An explicit rank wins; an existing one is preserved; otherwise append.
           rank:
@@ -621,9 +636,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         return merged;
       },
       setTaskMeta(id, meta) {
-        // Keep the derived `done` mirror in sync whenever status is set here.
-        const patch = meta.status !== undefined ? { ...meta, done: isDoneStatus(meta.status) } : meta;
-        patchTask(id, patch);
+        patchTask(id, meta);
       },
       setTaskText(id, text) {
         patchTask(id, { text });
@@ -659,7 +672,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         patchTask(id, { parentTaskId: parent, rank });
       },
       setTaskStatus(id, status) {
-        patchTask(id, { status, done: isDoneStatus(status) });
+        patchTask(id, { status });
         offerCascade(id, status);
       },
       setTaskAssignee(id, assigneeId) {
@@ -668,8 +681,10 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       toggleTaskDone(id) {
         const t = get().tasks[id];
         if (!t) return;
-        const target: TaskStatus = isDoneStatus(t.status) ? 'todo' : 'done';
-        patchTask(id, { status: target, done: isDoneStatus(target) });
+        // D5: un-ticking returns to the start state; ticking sets the board's first done state.
+        const states = statesFor(t.homeTabId);
+        const target = isDone(states, t.status) ? startKey(states) : firstDoneKey(states);
+        patchTask(id, { status: target });
         offerCascade(id, target);
       },
       deleteTask(id) {
@@ -958,6 +973,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
           tasks,
           events: state.events ?? {},
           commentCounts: state.commentCounts ?? {},
+          statesByBoard: state.statesByBoard ?? {},
           plannerOpen: false,
           plannerDate: state.plannerDate ?? todayISO(),
           plannerMode: state.plannerMode ?? 'day',

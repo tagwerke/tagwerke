@@ -12,6 +12,7 @@ import { dlog, sid } from '../lib/dlog.ts';
 import { applyBoardAccessChange } from '../realtime/connections.ts';
 import { destroyRoom } from '../realtime/ydoc.ts';
 import { ensureCurrentSprint } from '../lib/sprints.ts';
+import { seedBoardStates } from '../lib/boardStates.ts';
 
 // Opt-in per-board guardrails (AUDIT_IMPLEMENTATION_PLAN §F4). Admin-only to change.
 const settingsBody = z.object({
@@ -107,12 +108,14 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
       // SPRINTS_PLAN: a new board starts with its current-week sprint already seeded, so
       // tasks have somewhere to land without waiting for the next daily rollout tick.
       await ensureCurrentSprint(tx, b.data.id, new Date());
+      // BOARD_STATES_PLAN D4: every board has its own states from the start.
+      await seedBoardStates(tx, b.data.id);
     });
     // A board a token creates joins that token's list, so it can keep working on what it made.
     await patAddBoard(req, b.data.id);
     dlog('tabs', `POST /api/tabs board=${sid(b.data.id)} COMMITTED (membership now exists → ydoc-join will pass)`);
     // The creator's client made this board optimistically and knows nothing the server added:
-    // the seeded sprint, the member list. The same nudge a share sends makes it re-pull them.
+    // the seeded sprint and states, the member list. The same nudge a share sends makes it re-pull them.
     publish(userChannel(userId), { v: 1, type: 'board-list', action: 'added', tabId: b.data.id });
     return reply.code(201).send({ ok: true });
   });

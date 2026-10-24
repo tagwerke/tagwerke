@@ -28,7 +28,7 @@ export function matchesTaskFacets(
 export function matchesBlockFilter(task: Task, f?: BlockFilter | null): boolean {
   if (!f) return true;
   if (!matchesTaskFacets(task, { priorities: f.priorities, hasDate: f.hasDate, dueSoon: f.dueSoon })) return false;
-  if (f.statuses?.length && !f.statuses.includes(task.status ?? 'todo')) return false;
+  if (f.statuses?.length && !f.statuses.includes(task.status)) return false;
   const q = f.query?.trim().toLowerCase();
   if (q && !task.text.toLowerCase().includes(q)) return false;
   return true;

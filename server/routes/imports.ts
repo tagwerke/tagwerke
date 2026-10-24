@@ -16,7 +16,7 @@ import { recordAudit } from '../lib/audit.ts';
 import { priority, statusEnum } from './tasks.ts';
 import { rankAfter } from '../../shared/rank.ts';
 import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
-import { isDoneStatus } from '../../shared/status.ts';
+import { seedBoardStates } from '../lib/boardStates.ts';
 
 const importRow = z.object({
   id: z.string().min(1),
@@ -77,6 +77,9 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
         // Same insert shape POST /api/tabs uses (tabs.ts) — inlined rather than an HTTP call so
         // a crash mid-import can't strand an orphaned empty board.
         await tx.insert(schema.tabs).values({ id: boardId, createdBy: userId, name: boardName, type: 'normal' });
+        // The rows below use the default keys (the import sheet offers DEFAULT_STATES), which is
+        // exactly what a new board is seeded with.
+        await seedBoardStates(tx, boardId);
         await tx.insert(schema.boardMembers).values({
           tabId: boardId, userId, role: 'admin', categoryId: projectId, position, starred: false,
         });
@@ -141,7 +144,6 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
               parentTaskId: parentOf.get(r.id) ?? null,
               rank: rankOf.get(r.id) ?? null,
               owner: assigneeId ? null : r.assigneeRaw ?? null,
-              done: isDoneStatus(r.status),
               createdBy: userId,
               lastTitle: r.title,
             };

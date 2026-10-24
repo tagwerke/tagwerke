@@ -7,7 +7,7 @@ import { and, eq, isNull, notInArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
 import { currentWeekRange } from '../../shared/sprintWeek.ts';
-import { TERMINAL_STATUS_KEYS } from '../../shared/status.ts';
+import { statesOf } from './boardStates.ts';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -67,6 +67,9 @@ export async function ensureCurrentSprint(tx: Tx, tabId: string, now: Date): Pro
   if (current.endsAt >= startsAt) return null;
 
   await setCurrentSprint(tx, tabId, thisWeek.id);
+  // Finished either way stays behind. Tombstones count: a task can still sit on a deleted state
+  // until someone touches it, and what that state meant hasn't changed.
+  const terminal = (await statesOf(tabId)).filter((s) => s.category === 'done' || s.category === 'closed').map((s) => s.key);
   const moved = await tx
     .update(schema.tasks)
     .set({ sprintId: thisWeek.id, updatedAt: now })
@@ -74,7 +77,7 @@ export async function ensureCurrentSprint(tx: Tx, tabId: string, now: Date): Pro
       eq(schema.tasks.homeTabId, tabId),
       eq(schema.tasks.sprintId, current.id),
       isNull(schema.tasks.deletedAt),
-      notInArray(schema.tasks.status, TERMINAL_STATUS_KEYS),
+      terminal.length ? notInArray(schema.tasks.status, terminal) : undefined,
     ))
     .returning({ id: schema.tasks.id });
   return { fromSprintId: current.id, toSprintId: thisWeek.id, movedTaskIds: moved.map((r) => r.id) };

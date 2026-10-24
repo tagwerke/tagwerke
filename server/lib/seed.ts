@@ -4,6 +4,7 @@
 
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
+import { seedBoardStates } from './boardStates.ts';
 
 export async function seedUser(userId: string): Promise<void> {
   const workId = nanoid();
@@ -20,6 +21,8 @@ export async function seedUser(userId: string): Promise<void> {
     { id: inboxId, createdBy: userId, name: 'Inbox', type: 'normal', docJSON: null },
     { id: errandsId, createdBy: userId, name: 'Errands', type: 'normal', docJSON: null },
   ]);
+  await seedBoardStates(db, inboxId);
+  await seedBoardStates(db, errandsId);
 
   // v2: each seeded tab is a board the user owns (admin membership), which also holds
   // their personal view state. Without this the tabs are invisible (the read path

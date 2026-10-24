@@ -12,6 +12,7 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { commentCountsForTabs } from '../routes/comments.ts';
+import type { BoardState, StatusCategory } from '../../shared/status.ts';
 
 /**
  * One task row in the shape src/types.ts `Task` expects: absent rather than null for the optional
@@ -25,7 +26,6 @@ export function taskDTO(t: typeof schema.tasks.$inferSelect): Record<string, unk
     homeTabId: t.homeTabId,
     text: t.text,
     status: t.status,
-    done: t.done, // back-compat mirror during the transition
     ...(t.rank != null ? { rank: t.rank } : {}),
     createdAt: t.createdAt instanceof Date ? t.createdAt.getTime() : undefined,
     updatedAt: t.updatedAt instanceof Date ? t.updatedAt.getTime() : undefined,
@@ -155,6 +155,29 @@ export async function assembleState(userId: string, reaches: (tabId: string) => 
     }
   }
 
+  // Each board's task states (BOARD_STATES_PLAN), live ones only, in position order. Hidden states
+  // are included: they stay valid and keep rendering on the tasks that use them.
+  const statesByBoard: Record<string, BoardState[]> = {};
+  if (tabIds.length) {
+    const stateRows = await db
+      .select()
+      .from(schema.boardStates)
+      .where(and(inArray(schema.boardStates.tabId, tabIds), isNull(schema.boardStates.deletedAt)))
+      .orderBy(asc(schema.boardStates.position));
+    for (const s of stateRows) {
+      const list = statesByBoard[s.tabId] ?? (statesByBoard[s.tabId] = []);
+      list.push({
+        key: s.key,
+        label: s.label,
+        description: s.description,
+        category: s.category as StatusCategory,
+        color: s.color,
+        position: s.position,
+        hidden: s.hidden,
+      });
+    }
+  }
+
   return {
     projects,
     tabs,
@@ -162,6 +185,7 @@ export async function assembleState(userId: string, reaches: (tabId: string) => 
     membersByBoard,
     commentCounts,
     sprintsByBoard,
+    statesByBoard,
     projectOrder,
     tabOrder,
     starredRowOrder,

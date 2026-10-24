@@ -11,7 +11,8 @@ import { ActivityDrawer } from './ActivityDrawer';
 import { DocumentStrip } from './documents/DocumentStrip';
 import { flush as flushPersist } from '../api/persist';
 import { navigate, boardTaskPath, boardPath } from '../util/router';
-import type { ID, TaskStatus } from '../types';
+import type { ID } from '../types';
+import { stateIn, stateStyle, useBoardStates } from '../tasks/states';
 import { newestFirst } from '../util/sprints';
 import { EmptyState } from './common/EmptyState';
 import { Dropdown } from './Dropdown';
@@ -32,6 +33,7 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
   const tab = useStore((s) => s.tabs[boardId]);
   const members = useStore((s) => s.membersByBoard[boardId]);
   const sprints = useStore((s) => s.sprintsByBoard[boardId]);
+  const states = useBoardStates(boardId);
   const setTaskMeta = useStore((s) => s.setTaskMeta);
   const setTaskText = useStore((s) => s.setTaskText);
   const setTaskStatus = useStore((s) => s.setTaskStatus);
@@ -97,8 +99,6 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
     );
   }
 
-  const status: TaskStatus = task.status ?? 'todo';
-
   return (
     <main className="tab-view tab-open task-page">
       <header className="board-head">
@@ -115,7 +115,8 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
                 skipped the sub-task cascade offer — it held on a row but not on the task's own
                 page. */}
             <StatusControl
-              status={status}
+              tabId={task.homeTabId}
+              status={task.status}
               disabled={!editable}
               onToggle={() => toggleTaskDone(task.id)}
               onPick={(s) => setTaskStatus(task.id, s)}
@@ -154,7 +155,7 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
                 {children.map((c) => (
                   <li key={c.id}>
                     <button type="button" className="task-page-subtask-link" onClick={() => navigate(boardTaskPath(boardId, c.id))}>
-                      <span className={`list-dot status-${c.status ?? 'todo'}`} />
+                      <span className="list-dot" style={stateStyle(stateIn(states, c.status))} />
                       {c.text || <em className="muted">(empty)</em>}
                     </button>
                   </li>

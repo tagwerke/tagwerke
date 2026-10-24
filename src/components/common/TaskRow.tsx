@@ -15,8 +15,9 @@ import { StatusControl } from '../StatusControl';
 import { SubtaskProgress } from './SubtaskProgress';
 import { TaskParentPath } from './TaskParentPath';
 import { TaskActionMenu } from './TaskActionMenu';
-import type { ID, TaskStatus } from '../../types';
-import { isTerminalStatus } from '../../../shared/status';
+import type { ID } from '../../types';
+import { useBoardStates } from '../../tasks/states';
+import { isTerminal } from '../../../shared/status';
 
 export function TaskRow({ taskId, editable = true, indent = 0, showParent = false, onOpen }: {
   taskId: ID;
@@ -33,11 +34,11 @@ export function TaskRow({ taskId, editable = true, indent = 0, showParent = fals
   const task = useStore((s) => s.tasks[taskId]);
   const setTaskStatus = useStore((s) => s.setTaskStatus);
   const toggleTaskDone = useStore((s) => s.toggleTaskDone);
+  const states = useBoardStates(task?.homeTabId);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   if (!task) return null;
 
-  const status: TaskStatus = task.status ?? 'todo';
-  const done = isTerminalStatus(status);
+  const done = isTerminal(states, task.status);
 
   return (
     <div
@@ -46,7 +47,8 @@ export function TaskRow({ taskId, editable = true, indent = 0, showParent = fals
       onContextMenu={editable ? (e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); } : undefined}
     >
       <StatusControl
-        status={status}
+        tabId={task.homeTabId}
+        status={task.status}
         disabled={!editable}
         onToggle={() => toggleTaskDone(task.id)}
         onPick={(s) => setTaskStatus(task.id, s)}

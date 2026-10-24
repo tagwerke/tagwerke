@@ -18,8 +18,7 @@
 //   an assignee who is not a member, a sprint from another board — is filtered here and reported.
 
 import { childrenOf, descendantsOf, siblingsOf, useStore } from '../store';
-import { STATUS_LABEL, STATUS_ORDER } from '../components/StatusControl';
-import { isDoneStatus } from '../../shared/status';
+import { stateOf, stateStyle, visibleStatesOf } from './states';
 import { showToast } from '../toast/useToast';
 import { formatDateChip, todayISO } from '../util/dates';
 import { rankBetween } from '../../shared/rank';
@@ -27,7 +26,8 @@ import { MAX_TASK_DEPTH } from '../../shared/tree';
 import { navigate, boardTaskPath } from '../util/router';
 import { describeMove, moveTargets, moveTaskToBoard } from './moveToBoard';
 import { newestFirst } from '../util/sprints';
-import type { ID, Member, Task, TaskStatus } from '../types';
+import type { CSSProperties } from 'react';
+import type { ID, Member, Task } from '../types';
 
 /** Which field a cell click scopes the menu to. Matches the table's column keys. */
 export type FocusField = 'status' | 'assignee' | 'due' | 'priority' | 'sprint';
@@ -42,8 +42,8 @@ export interface ChoiceOption {
   label: string;
   /** Rendered dim after the label — a date's weekday, a member's email. */
   hint?: string;
-  /** A status dot / swatch class, when the choice has one. */
-  swatch?: string;
+  /** Paints the choice's status swatch, when it has one. */
+  swatchStyle?: CSSProperties;
   selected?: boolean;
   run(): void;
 }
@@ -95,10 +95,10 @@ function subject(ids: ID[]): string {
  * that goes out is one the server accepts. What it also does per task is `offerCascade`, so this
  * deliberately does not use it for the sweep: it sets the field directly and asks once at the end.
  */
-function applyStatus(ids: ID[], status: TaskStatus): void {
+function applyStatus(tabId: ID, ids: ID[], status: string): void {
   const store = useStore.getState();
   for (const id of ids) store.setTaskStatus(id, status);
-  if (isDoneStatus(status)) store.offerCascadeFor(ids);
+  if (stateOf(tabId, status).category === 'done') store.offerCascadeFor(ids);
 }
 
 const statusAction: TaskAction = {
@@ -108,13 +108,13 @@ const statusAction: TaskAction = {
   field: 'status',
   enabled: (ctx) => canEdit(ctx.tabId),
   options: (ctx) => {
-    const current = new Set(tasksOf(ctx.ids).map((t) => t.status ?? 'todo'));
-    return STATUS_ORDER.map((s) => ({
-      key: s,
-      label: STATUS_LABEL[s],
-      swatch: `status-${s}`,
-      selected: current.size === 1 && current.has(s),
-      run: () => applyStatus(ctx.ids, s),
+    const current = new Set(tasksOf(ctx.ids).map((t) => t.status));
+    return visibleStatesOf(ctx.tabId).map((s) => ({
+      key: s.key,
+      label: s.label,
+      swatchStyle: stateStyle(s),
+      selected: current.size === 1 && current.has(s.key),
+      run: () => applyStatus(ctx.tabId, ctx.ids, s.key),
     }));
   },
 };

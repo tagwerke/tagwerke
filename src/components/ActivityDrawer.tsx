@@ -26,7 +26,7 @@ import { CommentItem } from './CommentItem';
 import { describeRevert, revertTaskTo } from '../tasks/revertTask';
 import { confirmRevertTask } from '../confirm/prompts';
 import { clockTime, dayHeading, formatTimestamp, timeAgo } from '../util/dates';
-import { fieldLabel, USER_FIELDS } from '../util/audit';
+import { fieldLabel, statusLabelAt, USER_FIELDS } from '../util/audit';
 import type { Comment } from '../types';
 import { Notice } from './common/Notice';
 import { EmptyState, Loading } from './common/EmptyState';
@@ -48,6 +48,14 @@ function actionVerb(action: string, payload: unknown): string {
   if (action === 'board_settings_change') return 'changed board settings';
   if (action === 'agent_token_created') return 'created a board token';
   if (action === 'bulk_task_import') return 'imported tasks';
+  if (action === 'board_state_change') {
+    const p = (payload ?? {}) as { op?: string; state?: string };
+    const name = p.state ? ` “${p.state}”` : '';
+    if (p.op === 'create') return `added the task state${name}`;
+    if (p.op === 'delete') return `deleted the task state${name}`;
+    if (p.op === 'reorder') return 'reordered the task states';
+    return `changed a task state${name}`;
+  }
   // Any other route-shaped token ("POST /api/tabs/:id/…") is plumbing, not a sentence.
   if (/^[A-Z]+ \//.test(action)) return 'made a change';
   return action.replace(/_/g, ' ');
@@ -281,6 +289,7 @@ export function ActivityDrawer({
     if (USER_FIELDS.has(field)) return nameOf(String(v));
     if (field === 'sprintId') return sprints?.find((sp) => sp.id === v)?.label ?? 'a deleted sprint';
     if (field === 'parentTaskId') return allTasks[String(v)]?.text || 'another task';
+    if (Array.isArray(v)) return v.join(', ');
     if (typeof v === 'object') return JSON.stringify(v);
     return String(v);
   }
@@ -297,21 +306,27 @@ export function ActivityDrawer({
       return (
         <>
         <ul className="history-changes">
-          {(p.changes as { field: string; from: unknown; to: unknown }[]).map((c, i) =>
-            c.field === 'docJSON' ? (
-              <li key={i}>edited the document</li>
-            ) : (
-              <li key={i} title={`${fieldLabel(c.field)}: ${value(c.field, c.from)} → ${value(c.field, c.to)}`}>
-                <Change label={fieldLabel(c.field)} from={value(c.field, c.from)} to={value(c.field, c.to)} />
+          {(p.changes as { field: string; from: unknown; to: unknown; fromLabel?: string; toLabel?: string }[]).map((c, i) => {
+            if (c.field === 'docJSON') return <li key={i}>edited the document</li>;
+            // A status shows the name it had at the time, not today's (D10).
+            const from = c.field === 'status' ? statusLabelAt(c, 'from') ?? '—' : value(c.field, c.from);
+            const to = c.field === 'status' ? statusLabelAt(c, 'to') ?? '—' : value(c.field, c.to);
+            return (
+              <li key={i} title={`${fieldLabel(c.field)}: ${from} → ${to}`}>
+                <Change label={fieldLabel(c.field)} from={from} to={to} />
               </li>
-            ),
-          )}
+            );
+          })}
         </ul>
         {skipped?.map((s, i) => (
           <div key={i} className="history-detail">couldn’t restore {fieldLabel(s.field)} — {s.reason}</div>
         ))}
         </>
       );
+    }
+    // A deleted task state: where the tasks that used it went.
+    if (typeof p.movedTasks === 'number' && p.movedTasks > 0) {
+      return <div className="history-detail">moved {p.movedTasks} {p.movedTasks === 1 ? 'task' : 'tasks'} to “{String(p.moveToLabel ?? p.moveTo)}”</div>;
     }
     if (p.snapshot && typeof p.snapshot === 'object') {
       const s = p.snapshot as Record<string, unknown>;

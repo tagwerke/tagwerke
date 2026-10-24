@@ -221,6 +221,35 @@ export const sprints = pgTable(
   ],
 );
 
+// BOARD_STATES_PLAN.md: each board's task states. A task stores the state's KEY, which never
+// changes; the label, color, order and description are editable by the board's admins. Seeded
+// with the six defaults (shared/status.ts DEFAULT_STATES) by migration 0039 and at every board
+// creation — there is no fallback list on the server. A deleted state stays as a tombstone
+// (`deleted_at`) so history and stale writes still resolve; `hidden` keeps a state valid but
+// out of the pickers.
+export const boardStates = pgTable(
+  'board_states',
+  {
+    id: text('id').primaryKey(),
+    tabId: text('tab_id')
+      .notNull()
+      .references(() => tabs.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    label: text('label').notNull(),
+    description: text('description'),
+    // open | active | waiting | done | closed (shared/status.ts STATUS_CATEGORIES)
+    category: text('category').notNull(),
+    // A palette token (shared/status.ts STATE_COLORS), never a hex.
+    color: text('color').notNull(),
+    position: integer('position').notNull(),
+    hidden: boolean('hidden').notNull().default(false),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('board_states_tab_key_uniq').on(t.tabId, t.key)],
+);
+
 export const tasks = pgTable(
   'tasks',
   {
@@ -244,8 +273,7 @@ export const tasks = pgTable(
     // The task page's body (SPRINTS_PLAN follow-up: task detail page). Distinct from the comment
     // thread — this is the task's own write-up, not conversation.
     description: text('description'),
-    // P0: status is the authoritative state field (todo|in_progress|in_review|done|cancelled).
-    // `done` is retained for one release as a derived/back-compat mirror (= status==='done').
+    // The key of one of the home board's states (board_states). Validated by resolveStatus.
     status: text('status').notNull().default('todo'),
     // P0: real user id of the assignee, constrained in app logic to a member of the home board.
     assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
@@ -264,7 +292,6 @@ export const tasks = pgTable(
     rank: text('rank'),
     // owner: legacy free-text display fallback ([Name] token); superseded by assigneeId.
     owner: text('owner'),
-    done: boolean('done').notNull().default(false),
     createdBy: text('created_by'), // attribution; access derives from the home tab's board
     // Soft delete (AUDIT_IMPLEMENTATION_PLAN §G): a set deleted_at trashes the row instead of
     // destroying it — recoverable, and the metadata/history survive. Reads filter it out; the

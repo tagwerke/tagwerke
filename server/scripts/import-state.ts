@@ -14,6 +14,7 @@ import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema, pool } from '../db/client.ts';
 import { hashPassword } from '../auth/password.ts';
+import { seedBoardStates } from '../lib/boardStates.ts';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -109,6 +110,7 @@ async function main() {
           starredPosition: t.starred ? starredIdx(t.id) : null,
         })),
       );
+      for (const t of tabs) await seedBoardStates(tx, t.id);
     }
 
     const tasks = Object.values(state.tasks);
@@ -122,7 +124,8 @@ async function main() {
           date: t.date ?? null,
           priority: t.priority ?? null,
           owner: t.owner ?? null,
-          done: t.done ?? false,
+          // The legacy blob only knew done/not done; both are default states.
+          status: t.done ? 'done' : 'todo',
         })),
       );
     }

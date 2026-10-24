@@ -152,7 +152,7 @@ export function TaskActionMenu({ ids, tabId, focusField, x, y, onClose, onStep }
                 onMouseEnter={() => setHighlight(i)}
                 onMouseDown={(e) => { e.preventDefault(); choose(i); }}
               >
-                {choice?.swatch && <span className={`task-menu-swatch ${choice.swatch}`} />}
+                {choice?.swatchStyle && <span className="task-menu-swatch" style={choice.swatchStyle} />}
                 <span className="task-menu-label">{row.label}</span>
                 {choice?.hint && <span className="task-menu-hint">{choice.hint}</span>}
                 {action?.key && <span className="task-menu-key">{action.key}</span>}

@@ -39,9 +39,9 @@ export interface Tab {
   settings?: BoardSettings;
 }
 
-// The status list and what each one means live in shared/status.ts, with the server.
-import type { TaskStatus } from '../shared/status';
-export type { TaskStatus };
+// Each board's states, and what each category means, live in shared/status.ts with the server.
+import type { BoardState } from '../shared/status';
+export type { BoardState };
 
 export interface Task {
   id: ID;
@@ -53,9 +53,8 @@ export interface Task {
   text: string;
   // The task page's write-up (SPRINTS_PLAN follow-up). Distinct from the comment thread.
   description?: string;
-  // P0: status is authoritative. Optional during the transition; slice 2 makes it required
-  // and removes `done`. Treat a missing status as 'todo'.
-  status?: TaskStatus;
+  // The key of one of the home board's states (statesByBoard). The server always sends it.
+  status: string;
   // P0: real user id of the assignee (a member of the home board). Supersedes `owner`.
   assigneeId?: ID;
   date?: string;
@@ -67,7 +66,6 @@ export interface Task {
   // Sprints (SPRINTS_PLAN.md): the sprint this task is scoped to. Absent = backlog.
   sprintId?: ID;
   owner?: string; // legacy display fallback; superseded by assigneeId
-  done?: boolean; // deprecated mirror of status==='done'; kept for one release
   createdAt?: number; // DB-managed; read-only on the client
   updatedAt?: number; // DB-managed; read-only on the client
 }
@@ -87,7 +85,7 @@ export interface Member {
  */
 export interface BlockFilter {
   priorities?: (1 | 2 | 3)[];
-  statuses?: TaskStatus[];
+  statuses?: string[];
   hasDate?: boolean;
   dueSoon?: boolean;
   query?: string;
@@ -220,6 +218,10 @@ export interface RootState {
   /** Per-board sprint list (SPRINTS_PLAN.md), newest-first is NOT assumed — sort by startsAt
    *  where it matters. Loaded in bulk with /api/state, same reasoning as membersByBoard. */
   sprintsByBoard: Record<ID, Sprint[]>;
+  /** Per-board task states (BOARD_STATES_PLAN), live ones in position order, hidden included.
+   *  Loaded with /api/state; replaced whole by a `board-states` frame. Read through
+   *  src/tasks/states.ts, which falls back to the defaults for a board not loaded yet. */
+  statesByBoard: Record<ID, BoardState[]>;
   /**
    * Live comment count per task, for the badge on a task row (COMMENTS_PLAN.md D9). Server-owned:
    * it arrives with /api/state and is nudged locally as comments are posted/deleted. Tombstones

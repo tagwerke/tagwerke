@@ -10,12 +10,12 @@
 import { nanoid } from 'nanoid';
 import { siblingsOf, useStore } from '../store';
 import { rankAfter, rankBetween } from '../../shared/rank';
-import type { ID, TaskStatus } from '../types';
-import { isDoneStatus } from '../../shared/status';
+import type { ID } from '../types';
+import { startKeyOf } from './states';
 
 /** Fields a `/command`, `@mention` or `!` sigil set on the line before it became a task. */
 export interface DraftFields {
-  status?: TaskStatus;
+  status?: string;
   date?: string | null;
   priority?: 1 | 2 | 3 | null;
   assigneeId?: ID | null;
@@ -50,14 +50,14 @@ export function createTaskInBoard(tabId: ID, opts: CreateTaskOptions): ID {
   }
 
   const id = `t_${nanoid(8)}`;
-  const status = fields?.status;
+  const status = fields?.status ?? startKeyOf(tabId);
   store.upsertTask({
     id,
     homeTabId: tabId,
     text,
     parentTaskId,
     rank,
-    ...(status ? { status, done: isDoneStatus(status) } : {}),
+    status,
     ...(fields?.date !== undefined ? { date: fields.date ?? undefined } : {}),
     ...(fields?.priority !== undefined ? { priority: fields.priority ?? undefined } : {}),
     ...(fields?.assigneeId !== undefined ? { assigneeId: fields.assigneeId ?? undefined } : {}),

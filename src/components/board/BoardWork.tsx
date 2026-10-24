@@ -16,13 +16,13 @@ import { ViewSwitcher } from './ViewSwitcher';
 import { newestFirst } from '../../util/sprints';
 import { DocumentStrip } from '../documents/DocumentStrip';
 import { SecretsView } from '../secrets/SecretsView';
-import { STATUS_LABEL, STATUS_ORDER } from '../StatusControl';
 import { MultiSelect } from '../common/MultiSelect';
 import {
   applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, NO_PRIORITY, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
 } from './workFilters';
 import type { BoardView, ID, Member, Sprint } from '../../types';
-import { isDoneStatus } from '../../../shared/status';
+import { useBoardStates } from '../../tasks/states';
+import { isDone, visible as visibleStates } from '../../../shared/status';
 import { EmptyState } from '../common/EmptyState';
 
 /** Shared empties. `?? []` would mint a new array each render and churn every memo below. */
@@ -61,6 +61,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
   const tasksById = useStore((s) => s.tasks);
   const members = useStore((s) => s.membersByBoard[tabId]) ?? NO_MEMBERS;
   const sprints = useStore((s) => s.sprintsByBoard[tabId]) ?? NO_SPRINTS;
+  const states = useBoardStates(tabId);
   const role = useStore((s) => s.tabs[tabId]?.role);
   const editable = role === 'editor' || role === 'admin';
 
@@ -131,11 +132,11 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
   const groups = useMemo(() => {
     const memberName = new Map(members.map((m) => [m.id, m.name]));
     const sprintStart = new Map(sprints.map((s) => [s.id, s.startsAt]));
-    return groupTasks(visible, grouping, members, sprints, sort.dir).map((g) => ({
+    return groupTasks(visible, grouping, members, sprints, states, sort.dir).map((g) => ({
       ...g,
-      tasks: sortTasks(g.tasks, sort, memberName, sprintStart),
+      tasks: sortTasks(g.tasks, sort, memberName, sprintStart, states),
     }));
-  }, [visible, grouping, members, sprints, sort]);
+  }, [visible, grouping, members, sprints, states, sort]);
 
   // Selection is scoped to what is on screen: a filter or grouping change must not leave a hidden
   // task selected and then act on it from the bulk bar.
@@ -248,8 +249,8 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
     ...newestFirst(sprints).map((s) => ({ value: s.id, label: s.isCurrent ? `${s.label} · now` : s.label })),
   ], [sprints]);
   const statusOptions = useMemo(
-    () => STATUS_ORDER.map((st) => ({ value: st, label: STATUS_LABEL[st] })),
-    [],
+    () => visibleStates(states).map((st) => ({ value: st.key, label: st.label })),
+    [states],
   );
   const priorityOptions = useMemo(() => [
     { value: '1', label: '!' },
@@ -295,7 +296,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
 
   const shown = visible.filter((t) => !contextIds.has(t.id));
   const total = shown.length;
-  const doneCount = shown.filter((t) => isDoneStatus(t.status)).length;
+  const doneCount = shown.filter((t) => isDone(states, t.status)).length;
   const noMatch = total === 0 && filtersActive;
 
   return (

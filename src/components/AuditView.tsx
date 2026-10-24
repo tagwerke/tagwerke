@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, auditExportUrl, type AuditCondition, type AuditEntry, type AuditField, type AuditParams } from '../api/client';
 import { formatTimestamp, timeAgo } from '../util/dates';
-import { fieldLabel } from '../util/audit';
+import { fieldLabel, statusLabelAt } from '../util/audit';
 import { RecordDrawer, type PreviewTarget } from './RecordDrawer';
 import { Notice } from './common/Notice';
 import { ViaBadge } from './ViaBadge';
@@ -36,9 +36,12 @@ function renderPayload(payload: unknown): React.ReactNode {
   if (Array.isArray(p.changes)) {
     return (
       <div className="audit-changes">
-        {(p.changes as { field: string; from: unknown; to: unknown }[]).map((c, i) => (
+        {(p.changes as { field: string; from: unknown; to: unknown; fromLabel?: string; toLabel?: string }[]).map((c, i) => (
           <div key={i} className="audit-change">
-            <span className="audit-field">{fieldLabel(c.field)}</span>: <span className="audit-from">{fmt(c.from)}</span> → <span className="audit-to">{fmt(c.to)}</span>
+            <span className="audit-field">{fieldLabel(c.field)}</span>:{' '}
+            {/* A status shows the name it had at the time (D10). */}
+            <span className="audit-from">{c.field === 'status' ? statusLabelAt(c, 'from') ?? fmt(null) : fmt(c.from)}</span> →{' '}
+            <span className="audit-to">{c.field === 'status' ? statusLabelAt(c, 'to') ?? fmt(null) : fmt(c.to)}</span>
           </div>
         ))}
       </div>

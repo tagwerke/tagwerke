@@ -2,24 +2,31 @@
 // menu. Extracted from the editor's TaskItemView so the Planner mini-board reuses the
 // exact same affordance (same classes/markup → same styling). `disabled` renders a
 // read-only indicator (teammates' lanes in the Planner).
+//
+// The board's own states (BOARD_STATES_PLAN): the menu lists the visible ones, and the indicator
+// takes its shape from the state's category and its color from the state.
 
 import { useState, useEffect, useRef } from 'react';
-import type { TaskStatus } from '../types';
-import { TASK_STATUSES, isDoneStatus } from '../../shared/status';
-
-export const STATUS_ORDER: TaskStatus[] = TASK_STATUSES.map((s) => s.key);
-export const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.key, s.label])) as Record<TaskStatus, string>;
+import type { ID } from '../types';
+import { stateIn, stateStyle, useBoardStates } from '../tasks/states';
+import { visible } from '../../shared/status';
 
 interface Props {
-  status: TaskStatus;
+  tabId: ID;
+  status: string;
   onToggle: () => void;
-  onPick: (s: TaskStatus) => void;
-  accentColor?: string;
+  onPick: (s: string) => void;
   disabled?: boolean;
 }
 
-export function StatusControl({ status, onToggle, onPick, accentColor, disabled }: Props) {
-  const done = isDoneStatus(status);
+export function StatusControl({ tabId, status, onToggle, onPick, disabled }: Props) {
+  const states = useBoardStates(tabId);
+  const state = stateIn(states, status);
+  const done = state.category === 'done';
+  // A hidden state stays valid on the tasks that have it, so show it there (selected) even though
+  // it isn't offered for anything else.
+  const options = visible(states);
+  if (!options.some((s) => s.key === status)) options.push(state);
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -36,11 +43,12 @@ export function StatusControl({ status, onToggle, onPick, accentColor, disabled 
     <div className="task-status" contentEditable={false} ref={rootRef}>
       <button
         type="button"
-        className={`task-indicator status-${status}`}
+        className={`task-indicator cat-${state.category}`}
         onClick={onToggle}
         disabled={disabled}
         aria-label={done ? 'Mark not done' : 'Mark done'}
-        style={accentColor ? ({ '--accent': accentColor } as React.CSSProperties) : undefined}
+        title={state.label}
+        style={stateStyle(state)}
       >
         <span className="dot" />
         <svg viewBox="0 0 16 16" className="check" aria-hidden>
@@ -63,20 +71,22 @@ export function StatusControl({ status, onToggle, onPick, accentColor, disabled 
       )}
       {menuOpen && (
         <ul className="status-menu" role="listbox">
-          {STATUS_ORDER.map((s) => (
+          {options.map((s) => (
             <li
-              key={s}
+              key={s.key}
               role="option"
-              aria-selected={s === status}
-              className={`status-option status-${s} ${s === status ? 'is-selected' : ''}`}
+              aria-selected={s.key === status}
+              className={`status-option ${s.key === status ? 'is-selected' : ''}`}
+              title={s.description ?? undefined}
+              style={stateStyle(s)}
               onMouseDown={(e) => {
                 e.preventDefault();
-                onPick(s);
+                onPick(s.key);
                 setMenuOpen(false);
               }}
             >
               <span className="status-swatch" />
-              {STATUS_LABEL[s]}
+              {s.label}
             </li>
           ))}
         </ul>

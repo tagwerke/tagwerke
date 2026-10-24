@@ -12,11 +12,12 @@ import { NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react';
 import { useStore } from '../store';
 import { boardTaskPath, navigate } from '../util/router';
 import type { ID } from '../types';
-import { isTerminalStatus } from '../../shared/status';
+import { stateIn, stateStyle, useBoardStates } from '../tasks/states';
 
 export function TaskMentionView({ node }: ReactNodeViewProps) {
   const id = (node.attrs.id as ID | null) ?? null;
   const task = useStore((s) => (id ? s.tasks[id] : undefined));
+  const states = useBoardStates(task?.homeTabId);
 
   if (!id) return null;
 
@@ -28,8 +29,8 @@ export function TaskMentionView({ node }: ReactNodeViewProps) {
     );
   }
 
-  const status = task.status ?? 'todo';
-  const done = isTerminalStatus(status);
+  const state = stateIn(states, task.status);
+  const done = state.category === 'done' || state.category === 'closed';
 
   return (
     <NodeViewWrapper as="span" className={`task-mention ${done ? 'is-done' : ''}`} contentEditable={false}>
@@ -39,7 +40,7 @@ export function TaskMentionView({ node }: ReactNodeViewProps) {
         title={`Open — ${task.text || 'untitled task'}`}
         onClick={() => navigate(boardTaskPath(task.homeTabId, task.id))}
       >
-        <span className={`list-dot status-${status}`} />
+        <span className="list-dot" style={stateStyle(state)} />
         <span className="task-mention-text">{task.text || 'untitled task'}</span>
         <svg viewBox="0 0 16 16" width="9" height="9" aria-hidden>
           <path d="M6 3h7v7M13 3L4 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />

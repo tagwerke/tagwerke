@@ -2,9 +2,9 @@
 //
 // Grouping and sorting for the table, kept out of the component so they stay pure.
 
-import { STATUS_LABEL, STATUS_ORDER } from '../StatusControl';
 import { compareRank } from '../../../shared/rank';
-import type { ID, Member, Sprint, Task } from '../../types';
+import { stateIn } from '../../tasks/states';
+import type { BoardState, ID, Member, Sprint, Task } from '../../types';
 import { newestFirst } from '../../util/sprints';
 
 export type Grouping = 'status' | 'assignee' | 'sprint' | 'none';
@@ -15,8 +15,6 @@ export interface Sort { key: SortKey; dir: SortDir }
 export interface Group {
   key: string;
   label: string;
-  /** A status group's dot class. */
-  swatch?: string;
   tasks: Task[];
 }
 
@@ -33,7 +31,7 @@ export function groupingOfSort(sort: Sort): Grouping {
 /** The bucket a task belongs to under `grouping`. `null` means "the unset bucket". */
 export function bucketOf(task: Task, grouping: Grouping): string | null {
   switch (grouping) {
-    case 'status': return task.status ?? 'todo';
+    case 'status': return task.status;
     case 'assignee': return task.assigneeId ?? null;
     case 'sprint': return task.sprintId ?? null;
     case 'none': return 'all';
@@ -51,6 +49,8 @@ export function groupTasks(
   grouping: Grouping,
   members: Member[],
   sprints: Sprint[],
+  /** The board's states, for the status grouping's order and labels. */
+  states: readonly BoardState[],
   /** Direction of the group order. The unset group (Unassigned, Backlog) is last either way. */
   dir: SortDir = 'asc',
 ): Group[] {
@@ -65,13 +65,13 @@ export function groupTasks(
   if (grouping === 'none') return [{ key: 'all', label: 'Outline', tasks: buckets.get('all') ?? [] }];
 
   if (grouping === 'status') {
-    const order = dir === 'asc' ? STATUS_ORDER : [...STATUS_ORDER].reverse();
-    return order.map((s) => ({
-      key: s,
-      label: STATUS_LABEL[s],
-      swatch: `status-${s}`,
-      tasks: buckets.get(s) ?? [],
-    }));
+    // Every visible state (an empty group is still somewhere to drop work), plus a hidden one only
+    // while tasks still sit on it, in the board's order.
+    const shown = states.filter((s) => !s.hidden || buckets.has(s.key));
+    for (const key of buckets.keys()) if (!states.some((s) => s.key === key)) shown.push(stateIn(states, key));
+    shown.sort((a, b) => a.position - b.position);
+    if (dir === 'desc') shown.reverse();
+    return shown.map((s) => ({ key: s.key, label: s.label, tasks: buckets.get(s.key) ?? [] }));
   }
 
   if (grouping === 'assignee') {
@@ -91,10 +91,10 @@ export function groupTasks(
 }
 
 /** Display value for a sort comparison. Unset always sorts last, whichever direction. */
-function sortValue(t: Task, key: SortKey, names: Map<ID, string>, sprintStarts: Map<ID, string>): string | number | null {
+function sortValue(t: Task, key: SortKey, names: Map<ID, string>, sprintStarts: Map<ID, string>, statePos: Map<string, number>): string | number | null {
   switch (key) {
     case 'title': return t.text.trim().toLowerCase() || null;
-    case 'status': return STATUS_ORDER.indexOf(t.status ?? 'todo');
+    case 'status': return statePos.get(t.status) ?? Number.MAX_SAFE_INTEGER;
     case 'assignee': return t.assigneeId ? (names.get(t.assigneeId) ?? '').toLowerCase() : null;
     case 'due': return t.date ?? null;
     case 'priority': return t.priority ?? null;
@@ -117,12 +117,14 @@ export function sortTasks(
   names: Map<ID, string>,
   /** Sprint id → its `startsAt`, which is what the Sprint column sorts by. */
   sprintStarts: Map<ID, string>,
+  states: readonly BoardState[],
 ): Task[] {
   if (sort.key === 'rank') return tasks;
   const dir = sort.dir === 'asc' ? 1 : -1;
+  const statePos = new Map(states.map((s) => [s.key, s.position]));
   return [...tasks].sort((a, b) => {
-    const av = sortValue(a, sort.key, names, sprintStarts);
-    const bv = sortValue(b, sort.key, names, sprintStarts);
+    const av = sortValue(a, sort.key, names, sprintStarts, statePos);
+    const bv = sortValue(b, sort.key, names, sprintStarts, statePos);
     if (av === null && bv === null) return compareRank(a, b);
     if (av === null) return 1; // unset last, regardless of direction
     if (bv === null) return -1;
