@@ -21,11 +21,11 @@ import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
 import { requireAgent, requireScope, type AgentScope } from '../auth/agent.ts';
 import { diffChanges, recordAudit } from '../lib/audit.ts';
-import { notify } from '../lib/notify.ts';
 import { boardChannel, publish } from '../lib/bus.ts';
 import { taskDTO } from '../lib/assembleState.ts';
+import { AGENT_STATUS_KEYS } from '../../shared/status.ts';
 import {
-  AUDITED_FIELDS, PARENT_REFUSAL_MESSAGE, assigneeAllowed, nextSiblingRank, notifyAssigneeChange, parentRefusal, sprintAllowed, taskLabel,
+  AUDITED_FIELDS, PARENT_REFUSAL_MESSAGE, assigneeAllowed, nextSiblingRank, notifyAssigneeChange, parentRefusal, sprintAllowed,
 } from './tasks.ts';
 import { commentDTO, authorEmailOf, resolveMentions, publishComment, notifyForComment } from './comments.ts';
 
@@ -46,7 +46,7 @@ const createBody = z.object({
 /**
  * What the agent writes is plain text. Drop markdown links/images (keep their label) and replace
  * bare URLs, so nothing the agent posts can become a fetched or clickable exfiltration channel.
- * `@[name](id)` mention tokens are kept: they are how an agent pings the reviewer.
+ * `@[name](id)` mention tokens are kept: they are how an agent pings a person.
  */
 export function neutralizeAgentText(s: string): string {
   return s
@@ -78,7 +78,7 @@ const SCOPE_TEXT: Record<AgentScope, string> = {
   'board:read': "read this board's notes, tasks, sprints and comments",
   'task:comment': "post comments on this board's tasks",
   'task:write':
-    "create tasks and edit their title, description, status (never to done), assignee, reviewer, priority, due date, sprint and parent",
+    "create tasks and edit their title, description, status (never to done), assignee, priority, due date, sprint and parent",
 };
 const CANNOT_ALWAYS: string[] = [
   'mark a task done',
@@ -92,14 +92,14 @@ const CANNOT_ALWAYS: string[] = [
 const cannotFor = (scopes: AgentScope[]): string[] =>
   scopes.includes('task:write')
     ? CANNOT_ALWAYS
-    : ['create tasks or change any task field, including status, assignee, reviewer and priority', ...CANNOT_ALWAYS];
+    : ['create tasks or change any task field, including status, assignee and priority', ...CANNOT_ALWAYS];
 
 // ---- task:write helpers ---------------------------------------------------------------------------
 
 const MAX_TITLE = 500;
 const MAX_DESCRIPTION = 20_000;
-// An agent can move work around but never finish it: `done` is a human's call.
-const agentStatus = z.enum(['todo', 'in_progress', 'in_review', 'cancelled']);
+// An agent can move work around but never finish it: a `done`-category status is a human's call.
+const agentStatus = z.enum(AGENT_STATUS_KEYS);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const priority = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 
@@ -107,7 +107,6 @@ const taskFields = {
   description: z.string().max(MAX_DESCRIPTION).nullable().optional(),
   status: agentStatus.optional(),
   assigneeId: z.string().min(1).nullable().optional(),
-  reviewerId: z.string().min(1).nullable().optional(),
   dueDate: isoDate.nullable().optional(),
   priority: priority.nullable().optional(),
   sprintId: z.string().min(1).nullable().optional(),
@@ -119,7 +118,6 @@ const patchTaskBody = z.object({ title: z.string().min(1).max(MAX_TITLE).optiona
 
 type TaskFieldsInput = {
   assigneeId?: string | null;
-  reviewerId?: string | null;
   sprintId?: string | null;
   sprint?: 'current';
   parentTaskId?: string | null;
@@ -129,7 +127,6 @@ type TaskFieldsInput = {
 async function refuseFields(tabId: string, id: string, f: TaskFieldsInput): Promise<string | null> {
   if (f.sprint && f.sprintId !== undefined) return 'give sprintId or sprint, not both';
   if (!(await assigneeAllowed(tabId, f.assigneeId))) return 'assignee is not a member of this board';
-  if (!(await assigneeAllowed(tabId, f.reviewerId))) return 'reviewer is not a member of this board';
   if (!(await sprintAllowed(tabId, f.sprintId))) return 'sprint is not on this board';
   const parent = await parentRefusal(tabId, id, f.parentTaskId);
   return parent ? PARENT_REFUSAL_MESSAGE[parent] : null;
@@ -246,7 +243,6 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
           dueDate: t.date,
           sprint: sprint ?? null,
           assignee: who(t.assigneeId),
-          reviewer: who(t.reviewerId),
           // Provenance for a task's text is its creator; later edits by others are in the history.
           title: { text: t.text || t.lastTitle || '', author: who(t.createdBy) },
           description: { text: t.description ?? '', author: who(t.createdBy) },
@@ -316,7 +312,7 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
 
   // ---- task:write -------------------------------------------------------------------------------
   // ONE task per call; an agent that has many loops. Validation reuses the human routes' helpers
-  // (assignee/reviewer must be board members, the sprint and parent must be on this board). Text is
+  // (the assignee must be a board member, the sprint and parent must be on this board). Text is
   // neutralized like a comment, `done` is not a status an agent can set, and the explicit publish is
   // needed because the realtime hook only fans out writes under /api/{tasks,tabs,...}.
 
@@ -346,7 +342,7 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
         .values({
           id, createdBy: agent.userId, homeTabId: tabId, text: title, lastTitle: title, description,
           status, done: false,
-          assigneeId: b.data.assigneeId ?? null, reviewerId: b.data.reviewerId ?? null,
+          assigneeId: b.data.assigneeId ?? null,
           date: b.data.dueDate ?? null, priority: b.data.priority ?? null,
           rank: await nextSiblingRank(tabId, parentTaskId), parentTaskId, sprintId: sprintId ?? null,
         })
@@ -411,7 +407,6 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
         set.done = false;
       }
       if (b.data.assigneeId !== undefined) set.assigneeId = b.data.assigneeId;
-      if (b.data.reviewerId !== undefined) set.reviewerId = b.data.reviewerId;
       if (b.data.dueDate !== undefined) set.date = b.data.dueDate;
       if (b.data.priority !== undefined) set.priority = b.data.priority;
       if (sprintId !== undefined) set.sprintId = sprintId;
@@ -436,9 +431,6 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
       publish(boardChannel(tabId), { v: 1, type: 'entity', entity: 'task', id, action: 'PUT', patch: taskDTO(after), actorId: agent.userId });
 
       notifyAssigneeChange(b.data.assigneeId, before.assigneeId, agent.userId, tabId, id, after.text);
-      if (b.data.status === 'in_review' && before.status !== 'in_review' && after.reviewerId && after.reviewerId !== agent.userId) {
-        notify(after.reviewerId, { type: 'review_requested', title: 'Review requested', body: taskLabel(after.text), tabId, taskId: id, actorId: agent.userId });
-      }
       return reply.send({ ok: true });
     },
   );

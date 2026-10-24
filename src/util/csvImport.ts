@@ -68,6 +68,7 @@ export function distinctValues(rows: Record<string, string>[], column: string | 
 const STATUS_SYNONYMS: Record<string, TaskStatus> = {
   'to do': 'todo', todo: 'todo', open: 'todo', backlog: 'todo', new: 'todo',
   doing: 'in_progress', 'in progress': 'in_progress', wip: 'in_progress', started: 'in_progress',
+  blocked: 'blocked', 'on hold': 'blocked', stuck: 'blocked', waiting: 'blocked', impeded: 'blocked',
   'in review': 'in_review', review: 'in_review', reviewing: 'in_review', 'code review': 'in_review',
   done: 'done', closed: 'done', complete: 'done', completed: 'done', resolved: 'done',
   cancelled: 'cancelled', canceled: 'cancelled', wontfix: 'cancelled', "won't fix": 'cancelled',

@@ -19,6 +19,7 @@ import { useNotifications } from '../notifications/useNotifications';
 import { useComments } from '../comments/useComments';
 import { dlog, sid } from '../util/dlog';
 import type { Comment, DocumentDTO, ID, Notification, Task } from '../types';
+import { isDoneStatus } from '../../shared/status';
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
@@ -133,7 +134,7 @@ function syncSubscription(): void {
 /** Apply a remote store mutation without it echoing back to the server. See applyServerState. */
 const applyRemote = applyServerState;
 
-const TASK_FIELDS = ['text', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'rank', 'parentTaskId', 'homeTabId', 'owner'] as const;
+const TASK_FIELDS = ['text', 'status', 'assigneeId', 'date', 'priority', 'rank', 'parentTaskId', 'homeTabId', 'owner'] as const;
 
 /** Pick known Task fields from a wire patch; null → undefined (a cleared optional field). */
 function normalizeTaskPatch(raw: unknown): Partial<Task> | null {
@@ -171,7 +172,7 @@ function applyEntity(msg: { entity?: string; id?: string; action?: string; patch
     applyRemote(() =>
       useStore.setState((s) => {
         const merged: Task = { ...s.tasks[id], ...patch, id, homeTabId: patch.homeTabId ?? s.tasks[id].homeTabId };
-        if (patch.status !== undefined) merged.done = patch.status === 'done';
+        if (patch.status !== undefined) merged.done = isDoneStatus(patch.status as string);
         return { tasks: { ...s.tasks, [id]: merged } };
       }),
     );

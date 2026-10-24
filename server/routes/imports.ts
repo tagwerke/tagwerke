@@ -16,6 +16,7 @@ import { recordAudit } from '../lib/audit.ts';
 import { priority, statusEnum } from './tasks.ts';
 import { rankAfter } from '../../shared/rank.ts';
 import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
+import { isDoneStatus } from '../../shared/status.ts';
 
 const importRow = z.object({
   id: z.string().min(1),
@@ -140,7 +141,7 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
               parentTaskId: parentOf.get(r.id) ?? null,
               rank: rankOf.get(r.id) ?? null,
               owner: assigneeId ? null : r.assigneeRaw ?? null,
-              done: r.status === 'done',
+              done: isDoneStatus(r.status),
               createdBy: userId,
               lastTitle: r.title,
             };

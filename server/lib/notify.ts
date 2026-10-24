@@ -22,12 +22,12 @@ const PROTOCOL_VERSION = 1;
 
 export type NotificationType =
   | 'task_assigned'
-  | 'review_requested'
+  | 'review_requested' // legacy: no longer emitted, kept so old rows still render
   | 'task_approved' // legacy: no longer emitted, kept so old rows still render
   | 'board_added'
   | 'token_created' // a personal access token was minted on your account (PAT_PLAN.md D5)
   // Comments (COMMENTS_PLAN.md §4). `comment_mention` is the specific one — someone named you;
-  // `comment_added` is the ambient one — something was said on work you own or review.
+  // `comment_added` is the ambient one — something was said on work you own.
   | 'comment_mention'
   | 'comment_added';
 

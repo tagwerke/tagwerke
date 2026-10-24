@@ -16,6 +16,7 @@ import { SubtaskProgress } from './SubtaskProgress';
 import { TaskParentPath } from './TaskParentPath';
 import { TaskActionMenu } from './TaskActionMenu';
 import type { ID, TaskStatus } from '../../types';
+import { isTerminalStatus } from '../../../shared/status';
 
 export function TaskRow({ taskId, editable = true, indent = 0, showParent = false, onOpen }: {
   taskId: ID;
@@ -36,7 +37,7 @@ export function TaskRow({ taskId, editable = true, indent = 0, showParent = fals
   if (!task) return null;
 
   const status: TaskStatus = task.status ?? 'todo';
-  const done = status === 'done' || status === 'cancelled';
+  const done = isTerminalStatus(status);
 
   return (
     <div

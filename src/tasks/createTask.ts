@@ -11,6 +11,7 @@ import { nanoid } from 'nanoid';
 import { siblingsOf, useStore } from '../store';
 import { rankAfter, rankBetween } from '../../shared/rank';
 import type { ID, TaskStatus } from '../types';
+import { isDoneStatus } from '../../shared/status';
 
 /** Fields a `/command`, `@mention` or `!` sigil set on the line before it became a task. */
 export interface DraftFields {
@@ -56,7 +57,7 @@ export function createTaskInBoard(tabId: ID, opts: CreateTaskOptions): ID {
     text,
     parentTaskId,
     rank,
-    ...(status ? { status, done: status === 'done' } : {}),
+    ...(status ? { status, done: isDoneStatus(status) } : {}),
     ...(fields?.date !== undefined ? { date: fields.date ?? undefined } : {}),
     ...(fields?.priority !== undefined ? { priority: fields.priority ?? undefined } : {}),
     ...(fields?.assigneeId !== undefined ? { assigneeId: fields.assigneeId ?? undefined } : {}),

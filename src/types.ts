@@ -39,7 +39,9 @@ export interface Tab {
   settings?: BoardSettings;
 }
 
-export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
+// The status list and what each one means live in shared/status.ts, with the server.
+import type { TaskStatus } from '../shared/status';
+export type { TaskStatus };
 
 export interface Task {
   id: ID;
@@ -56,8 +58,6 @@ export interface Task {
   status?: TaskStatus;
   // P0: real user id of the assignee (a member of the home board). Supersedes `owner`.
   assigneeId?: ID;
-  // Who reviews it (a member of the home board). `in_review` is just a status; nothing gates on it.
-  reviewerId?: ID;
   date?: string;
   priority?: 1 | 2 | 3;
   // Sibling order within `parentTaskId` — a fractional index key compared lexicographically

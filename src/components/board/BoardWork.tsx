@@ -22,6 +22,7 @@ import {
   applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, NO_PRIORITY, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
 } from './workFilters';
 import type { BoardView, ID, Member, Sprint } from '../../types';
+import { isDoneStatus } from '../../../shared/status';
 import { EmptyState } from '../common/EmptyState';
 
 /** Shared empties. `?? []` would mint a new array each render and churn every memo below. */
@@ -294,7 +295,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
 
   const shown = visible.filter((t) => !contextIds.has(t.id));
   const total = shown.length;
-  const doneCount = shown.filter((t) => t.status === 'done').length;
+  const doneCount = shown.filter((t) => isDoneStatus(t.status)).length;
   const noMatch = total === 0 && filtersActive;
 
   return (

@@ -13,6 +13,7 @@ import { boardChannel, publish } from '../lib/bus.ts';
 import { taskDTO } from '../lib/assembleState.ts';
 import { isValidRank, rankAfter } from '../../shared/rank.ts';
 import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
+import { TASK_STATUS_KEYS, isDoneStatus } from '../../shared/status.ts';
 
 /** Sibling order key. Validated on the way in — a malformed rank would corrupt every view's order
  *  silently, and it costs nothing to reject it at the edge. See shared/rank.ts. */
@@ -44,7 +45,7 @@ export function notifyAssigneeChange(
 // between deliverables, which is a structural change, not reorder noise (SUBTASKS_PLAN P1.3).
 // `sprintId` IS audited for the same reason (SPRINTS_PLAN): which sprint a task is scoped to is a
 // planning decision worth a trail, unlike rank. See AUDIT_IMPLEMENTATION_PLAN §B2.
-export const AUDITED_FIELDS = ['text', 'description', 'status', 'assigneeId', 'reviewerId', 'date', 'priority', 'parentTaskId', 'sprintId'] as const;
+export const AUDITED_FIELDS = ['text', 'description', 'status', 'assigneeId', 'date', 'priority', 'parentTaskId', 'sprintId'] as const;
 
 // What a point-in-time restore puts back: the audited set MINUS the structural fields. Where a
 // task sits in the tree, and which sprint it's scoped to, are facts about the board as it is
@@ -52,7 +53,7 @@ export const AUDITED_FIELDS = ['text', 'description', 'status', 'assigneeId', 'r
 // Restoring a title and its metadata is recovery; silently re-parenting or re-sprinting a task on
 // top of that is a second edit nobody asked for. The task stays where it is and gets its old
 // values back.
-const REVERTABLE_FIELDS = ['text', 'description', 'status', 'assigneeId', 'reviewerId', 'date', 'priority'] as const;
+const REVERTABLE_FIELDS = ['text', 'description', 'status', 'assigneeId', 'date', 'priority'] as const;
 type RevertableField = (typeof REVERTABLE_FIELDS)[number];
 
 /** Resolve a task's home board (for routes whose body doesn't carry it). */
@@ -67,7 +68,7 @@ async function taskBoard(req: FastifyRequest): Promise<string | undefined> {
 }
 
 export const priority = z.union([z.literal(1), z.literal(2), z.literal(3)]);
-export const statusEnum = z.enum(['todo', 'in_progress', 'in_review', 'done', 'cancelled']);
+export const statusEnum = z.enum(TASK_STATUS_KEYS);
 
 const upsertBody = z.object({
   homeTabId: z.string().min(1),
@@ -75,7 +76,6 @@ const upsertBody = z.object({
   description: z.string().nullable().optional(),
   status: statusEnum.optional(),
   assigneeId: z.string().nullable().optional(),
-  reviewerId: z.string().nullable().optional(),
   date: z.string().nullable().optional(),
   priority: priority.nullable().optional(),
   rank: rankField,
@@ -90,7 +90,6 @@ const patchBody = z.object({
   description: z.string().nullable().optional(),
   status: statusEnum.optional(),
   assigneeId: z.string().nullable().optional(),
-  reviewerId: z.string().nullable().optional(),
   date: z.string().nullable().optional(),
   priority: priority.nullable().optional(),
   rank: rankField,
@@ -106,7 +105,6 @@ const revertShape: Record<RevertableField, z.ZodTypeAny> = {
   description: z.string().nullable(),
   status: statusEnum,
   assigneeId: z.string().min(1).nullable(),
-  reviewerId: z.string().min(1).nullable(),
   date: z.string().min(1).nullable(),
   priority: priority.nullable(),
 };
@@ -118,7 +116,7 @@ const orphanBody = z.object({
   keepIds: z.array(z.string().min(1)),
 });
 
-// `done` is a derived back-compat mirror of status==='done' (see schema + SPEC §3).
+// `done` is a derived back-compat mirror of the status's category being `done` (see schema + SPEC §3).
 // `owner` is the legacy free-text display fallback; `assigneeId` is the real assignment and,
 // when set, is constrained to a member of the task's home board (SPEC §5).
 
@@ -291,8 +289,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       if (!b.success) return reply.code(400).send({ error: 'invalid task' });
       if (!(await assigneeAllowed(b.data.homeTabId, b.data.assigneeId)))
         return reply.code(400).send({ error: 'assignee is not a member of the home board' });
-      if (!(await assigneeAllowed(b.data.homeTabId, b.data.reviewerId)))
-        return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
       if (!(await sprintAllowed(b.data.homeTabId, b.data.sprintId)))
         return reply.code(400).send({ error: 'sprint is not on the home board' });
       const putRefusal = await parentRefusal(b.data.homeTabId, id, b.data.parentTaskId);
@@ -329,7 +325,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         description: b.data.description !== undefined ? b.data.description : (before?.description ?? null),
         status,
         assigneeId: b.data.assigneeId ?? null,
-        reviewerId: b.data.reviewerId ?? null,
         date: b.data.date ?? null,
         priority: b.data.priority ?? null,
         rank,
@@ -341,7 +336,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           ? b.data.sprintId
           : before && before.homeTabId === b.data.homeTabId ? before.sprintId : null,
         owner: b.data.owner ?? null,
-        done: status === 'done',
+        done: isDoneStatus(status),
         // Retain a recognizable Trash label; null only when genuinely never titled (§G).
         lastTitle: hasTitle ? b.data.text : null,
       };
@@ -351,7 +346,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         description: values.description,
         status: values.status,
         assigneeId: values.assigneeId,
-        reviewerId: values.reviewerId,
         date: values.date,
         priority: values.priority,
         rank: values.rank,
@@ -397,11 +391,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const before = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0];
       if (!before) return reply.code(404).send({ error: 'not found' });
       const homeTabId = before.homeTabId;
-      // Enforce assignee/reviewer membership against the task's own home board.
+      // Enforce assignee membership against the task's own home board.
       if (b.data.assigneeId != null && !(await assigneeAllowed(homeTabId, b.data.assigneeId)))
         return reply.code(400).send({ error: 'assignee is not a member of the home board' });
-      if (b.data.reviewerId != null && !(await assigneeAllowed(homeTabId, b.data.reviewerId)))
-        return reply.code(400).send({ error: 'reviewer is not a member of the home board' });
       if (b.data.sprintId != null && !(await sprintAllowed(homeTabId, b.data.sprintId)))
         return reply.code(400).send({ error: 'sprint is not on the home board' });
       if (b.data.parentTaskId !== undefined) {
@@ -410,7 +402,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       }
       // Keep the derived `done` mirror in sync whenever status is patched.
       const set = { ...b.data } as Record<string, unknown>;
-      if (b.data.status !== undefined) set.done = b.data.status === 'done';
+      if (b.data.status !== undefined) set.done = isDoneStatus(b.data.status);
       // Retain the last non-empty title for Trash; emptying the text never clears it (§G).
       if (typeof b.data.text === 'string' && b.data.text.trim().length > 0) set.lastTitle = b.data.text;
       // Re-parented without a new rank: the old key was ordered against a DIFFERENT set of
@@ -429,11 +421,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const text = typeof b.data.text === 'string' ? b.data.text : before.text;
       // Assigned to you — assignment changed to a real, different user.
       notifyAssigneeChange(b.data.assigneeId, before.assigneeId, actor, homeTabId, id, text);
-      // Review requested — the task just transitioned INTO in_review and has a reviewer.
-      const reviewerId = b.data.reviewerId ?? before.reviewerId;
-      if (b.data.status === 'in_review' && before.status !== 'in_review' && reviewerId && reviewerId !== actor) {
-        notify(reviewerId, { type: 'review_requested', title: 'Review requested', body: taskLabel(text), tabId: homeTabId, taskId: id, actorId: actor });
-      }
       return reply.send({ ok: true });
     },
   );
@@ -456,7 +443,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
    *      because a document owned a slot per root task. Since the notes split it does not: a note
    *      may mention a task, and a mention that now points at another board's task still resolves
    *      to the same task, which is what a reference is for.
-   *   3. ASSIGNMENTS THAT NO LONGER HOLD ARE DROPPED. assignee/reviewer are constrained to members
+   *   3. ASSIGNMENTS THAT NO LONGER HOLD ARE DROPPED. assignee is constrained to members
    *      of the task's home board (SPEC §5), and the destination has a different roster. Rather
    *      than refuse the move (the assignment is the incidental detail; the move is the intent) we
    *      clear the ones that don't survive and SAY SO — in the response, so the mover is told, and
@@ -481,7 +468,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // Already there: succeed without touching anything, so a retried op (the network dropped the
       // response) is not an error the client has to distinguish from a real failure.
       if (toTabId === fromTabId) {
-        return reply.send({ ok: true, moved: [], subtaskCount: 0, clearedAssignees: 0, clearedReviewers: 0 });
+        return reply.send({ ok: true, moved: [], subtaskCount: 0, clearedAssignees: 0 });
       }
       // Editor on the destination too — the preHandler only proved it on the board being left.
       // 404 (not 403) keeps a board the caller can't see non-probeable, matching auth/boards.ts.
@@ -499,7 +486,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // Which assignments survive the move: everything pointing at a non-member of the destination
       // is cleared. Computed here (rather than in the UPDATE) so the counts below are exact.
       const rows = await db
-        .select({ id: schema.tasks.id, assigneeId: schema.tasks.assigneeId, reviewerId: schema.tasks.reviewerId })
+        .select({ id: schema.tasks.id, assigneeId: schema.tasks.assigneeId })
         .from(schema.tasks)
         .where(and(inArray(schema.tasks.id, ids), isNull(schema.tasks.deletedAt)));
       const roster = new Set(
@@ -509,7 +496,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           .where(eq(schema.boardMembers.tabId, toTabId))).map((m) => m.userId),
       );
       const clearAssignee = rows.filter((r) => r.assigneeId && !roster.has(r.assigneeId)).map((r) => r.id);
-      const clearReviewer = rows.filter((r) => r.reviewerId && !roster.has(r.reviewerId)).map((r) => r.id);
 
       const rank = await nextSiblingRank(toTabId, null);
       // ONE statement — see (1) above. Only the moved ROOT is re-parented and re-ranked; the
@@ -524,9 +510,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           rank: sql`CASE WHEN ${schema.tasks.id} = ${id} THEN ${rank} ELSE ${schema.tasks.rank} END`,
           ...(clearAssignee.length
             ? { assigneeId: sql`CASE WHEN ${inArray(schema.tasks.id, clearAssignee)} THEN NULL ELSE ${schema.tasks.assigneeId} END` }
-            : {}),
-          ...(clearReviewer.length
-            ? { reviewerId: sql`CASE WHEN ${inArray(schema.tasks.id, clearReviewer)} THEN NULL ELSE ${schema.tasks.reviewerId} END` }
             : {}),
           updatedAt: new Date(),
         })
@@ -559,7 +542,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           ...(kids.length ? { subtaskCount: kids.length } : {}),
           // Named, not just counted: "who lost this task" is the question the trail has to answer.
           ...(clearAssignee.length ? { clearedAssignees: rows.filter((r) => clearAssignee.includes(r.id)).map((r) => r.assigneeId) } : {}),
-          ...(clearReviewer.length ? { clearedReviewers: rows.filter((r) => clearReviewer.includes(r.id)).map((r) => r.reviewerId) } : {}),
         },
       });
 
@@ -568,7 +550,6 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         moved: dtos,
         subtaskCount: kids.length,
         clearedAssignees: clearAssignee.length,
-        clearedReviewers: clearReviewer.length,
       });
     },
   );
@@ -779,8 +760,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           continue;
         }
         const value = parsed.data as unknown;
-        // assignee/reviewer are constrained to the board's roster (SPEC §5), and rosters change.
-        if ((field === 'assigneeId' || field === 'reviewerId') && value != null && !(await assigneeAllowed(homeTabId, String(value)))) {
+        // assignee is constrained to the board's roster (SPEC §5), and rosters change.
+        if (field === 'assigneeId' && value != null && !(await assigneeAllowed(homeTabId, String(value)))) {
           skipped.push({ field, reason: 'that person is no longer a member of this board' });
           continue;
         }
@@ -795,7 +776,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         return reply.send({ ok: true, at: point.at, restored: [], skipped, task: taskDTO(before) });
       }
 
-      if (set.status !== undefined) set.done = set.status === 'done';
+      if (set.status !== undefined) set.done = isDoneStatus(set.status as string);
       if (typeof set.text === 'string' && set.text.trim()) set.lastTitle = set.text;
       await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
       const after = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0] ?? before;

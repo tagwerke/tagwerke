@@ -54,7 +54,7 @@ if (cmd === 'me') {
       console.error(`no task ${args[0]} on this board`);
       process.exit(1);
     }
-    console.log(`${t.title.text}\nstatus ${t.status} | assignee ${t.assignee?.name ?? '-'} | reviewer ${t.reviewer?.name ?? '-'} | due ${t.dueDate ?? '-'}`);
+    console.log(`${t.title.text}\nstatus ${t.status} | assignee ${t.assignee?.name ?? '-'} | due ${t.dueDate ?? '-'}`);
     console.log(`\n${t.description.text || '(no description)'}\n`);
     for (const c of t.comments) console.log(`-- ${c.content.author?.name} (${c.content.author?.role}) ${c.createdAt}\n${c.content.text}\n`);
   }

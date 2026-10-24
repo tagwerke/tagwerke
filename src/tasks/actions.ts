@@ -19,6 +19,7 @@
 
 import { childrenOf, descendantsOf, siblingsOf, useStore } from '../store';
 import { STATUS_LABEL, STATUS_ORDER } from '../components/StatusControl';
+import { isDoneStatus } from '../../shared/status';
 import { showToast } from '../toast/useToast';
 import { formatDateChip, todayISO } from '../util/dates';
 import { rankBetween } from '../../shared/rank';
@@ -29,7 +30,7 @@ import { newestFirst } from '../util/sprints';
 import type { ID, Member, Task, TaskStatus } from '../types';
 
 /** Which field a cell click scopes the menu to. Matches the table's column keys. */
-export type FocusField = 'status' | 'assignee' | 'due' | 'priority' | 'sprint' | 'reviewer';
+export type FocusField = 'status' | 'assignee' | 'due' | 'priority' | 'sprint';
 
 export interface ActionContext {
   ids: ID[];
@@ -84,23 +85,6 @@ function subject(ids: ID[]): string {
   return t?.text?.trim() ? `“${t.text.trim()}”` : 'the task';
 }
 
-/**
- * Drop the ids a write would fail on, tell the user which, and return the rest.
- *
- * `why` is phrased to complete "…skipped: <why>". Returning an empty array is a legitimate outcome
- * — the caller does nothing at all rather than firing a write it knows will bounce.
- */
-function keepValid(ids: ID[], ok: (t: Task) => boolean, why: string): ID[] {
-  const kept: ID[] = [];
-  let dropped = 0;
-  for (const t of tasksOf(ids)) {
-    if (ok(t)) kept.push(t.id);
-    else dropped++;
-  }
-  if (dropped) showToast(`${dropped} task${dropped === 1 ? '' : 's'} skipped: ${why}`);
-  return kept;
-}
-
 // ── Status ────────────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -114,7 +98,7 @@ function keepValid(ids: ID[], ok: (t: Task) => boolean, why: string): ID[] {
 function applyStatus(ids: ID[], status: TaskStatus): void {
   const store = useStore.getState();
   for (const id of ids) store.setTaskStatus(id, status);
-  if (status === 'done') store.offerCascadeFor(ids);
+  if (isDoneStatus(status)) store.offerCascadeFor(ids);
 }
 
 const statusAction: TaskAction = {
@@ -135,17 +119,14 @@ const statusAction: TaskAction = {
   },
 };
 
-// ── Assignee and reviewer ─────────────────────────────────────────────────────────────────────
+// ── Assignee ──────────────────────────────────────────────────────────────────────────────────
 
-function peopleOptions(ctx: ActionContext, field: 'assigneeId' | 'reviewerId'): ChoiceOption[] {
+function peopleOptions(ctx: ActionContext): ChoiceOption[] {
   const members = membersOf(ctx.tabId);
-  const current = new Set(tasksOf(ctx.ids).map((t) => t[field] ?? null));
+  const current = new Set(tasksOf(ctx.ids).map((t) => t.assigneeId ?? null));
   const set = (memberId: ID | undefined) => () => {
     const store = useStore.getState();
-    for (const id of ctx.ids) {
-      if (field === 'assigneeId') store.setTaskAssignee(id, memberId);
-      else store.setTaskMeta(id, { reviewerId: memberId });
-    }
+    for (const id of ctx.ids) store.setTaskAssignee(id, memberId);
   };
   return [
     { key: 'none', label: 'Nobody', selected: current.size === 1 && current.has(null), run: set(undefined) },
@@ -167,21 +148,7 @@ const assigneeAction: TaskAction = {
   // The server constrains assignee to a member of the home board, so a board with no roster
   // loaded yet offers nothing rather than a list that would be rejected.
   enabled: (ctx) => canEdit(ctx.tabId) && membersOf(ctx.tabId).length > 0,
-  options: (ctx) => peopleOptions(ctx, 'assigneeId'),
-};
-
-const reviewerAction: TaskAction = {
-  id: 'reviewer',
-  label: 'Reviewer',
-  key: 'v',
-  field: 'reviewer',
-  // Surfaced only where review is actually in play: a task already carrying a reviewer or sitting
-  // in review. A default board stays flat (AUDIT_IMPLEMENTATION_PLAN §F7).
-  enabled: (ctx) => {
-    if (!canEdit(ctx.tabId) || !membersOf(ctx.tabId).length) return false;
-    return tasksOf(ctx.ids).some((t) => t.reviewerId || t.status === 'in_review');
-  },
-  options: (ctx) => peopleOptions(ctx, 'reviewerId'),
+  options: (ctx) => peopleOptions(ctx),
 };
 
 // ── Due date ──────────────────────────────────────────────────────────────────────────────────
@@ -273,18 +240,6 @@ const sprintAction: TaskAction = {
 };
 
 // ── Commands ──────────────────────────────────────────────────────────────────────────────────
-
-const approveAction: TaskAction = {
-  id: 'approve',
-  label: 'Approve',
-  enabled: (ctx) => canEdit(ctx.tabId) && tasksOf(ctx.ids).some((t) => t.status === 'in_review'),
-  run: (ctx) => {
-    // Only from in_review: a direct jump to done is exactly what the review gate exists to stop,
-    // and the server would reject it.
-    const ids = keepValid(ctx.ids, (t) => t.status === 'in_review', 'not awaiting review');
-    if (ids.length) applyStatus(ids, 'done');
-  },
-};
 
 const nestAction: TaskAction = {
   id: 'nest',
@@ -382,8 +337,6 @@ export const TASK_ACTIONS: TaskAction[] = [
   dueAction,
   priorityAction,
   sprintAction,
-  reviewerAction,
-  approveAction,
   nestAction,
   unnestAction,
   moveAction,

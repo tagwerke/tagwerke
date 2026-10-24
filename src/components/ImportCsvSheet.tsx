@@ -27,6 +27,7 @@ import {
   distinctValues,
 } from '../util/csvImport';
 import { Notice } from './common/Notice';
+import { TASK_STATUSES } from '../../shared/status';
 
 type Step = 'upload' | 'map' | 'status' | 'preview' | 'result';
 
@@ -41,13 +42,7 @@ interface ColumnMap {
   parent: string | null;
 }
 
-const STATUS_OPTIONS: DropdownOption[] = [
-  { value: 'todo', label: 'todo' },
-  { value: 'in_progress', label: 'in progress' },
-  { value: 'in_review', label: 'in review' },
-  { value: 'done', label: 'done' },
-  { value: 'cancelled', label: 'cancelled' },
-];
+const STATUS_OPTIONS: DropdownOption[] = TASK_STATUSES.map((s) => ({ value: s.key, label: s.label.toLowerCase() }));
 
 export function ImportCsvSheet({ onClose }: { onClose: () => void }) {
   const tabs = useStore((s) => s.tabs);

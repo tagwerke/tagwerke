@@ -186,9 +186,9 @@ export const api = {
     reorderStarred: (order: ID[]) => submitMutation(M('POST', '/api/tabs/reorder-starred', { order })),
   },
   tasks: {
-    upsert: (id: ID, b: { homeTabId: ID; text: string; description?: string | null; status?: TaskStatus; assigneeId?: ID | null; reviewerId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; sprintId?: ID | null; owner?: string | null; done?: boolean }) =>
+    upsert: (id: ID, b: { homeTabId: ID; text: string; description?: string | null; status?: TaskStatus; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; sprintId?: ID | null; owner?: string | null; done?: boolean }) =>
       submitMutation(M('PUT', `/api/tasks/${id}`, b)),
-    patch: (id: ID, patch: { text?: string; description?: string | null; status?: TaskStatus; assigneeId?: ID | null; reviewerId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; sprintId?: ID | null; owner?: string | null; done?: boolean }) =>
+    patch: (id: ID, patch: { text?: string; description?: string | null; status?: TaskStatus; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; sprintId?: ID | null; owner?: string | null; done?: boolean }) =>
       submitMutation(M('PATCH', `/api/tasks/${id}`, patch)),
     remove: (id: ID) => submitMutation(M('DELETE', `/api/tasks/${id}`)),
     deleteOrphans: (homeTabId: ID, keepIds: ID[]) =>
@@ -569,7 +569,6 @@ export interface MoveResult {
   moved: Task[];
   subtaskCount: number;
   clearedAssignees: number;
-  clearedReviewers: number;
 }
 
 /**

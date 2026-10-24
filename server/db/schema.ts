@@ -249,10 +249,8 @@ export const tasks = pgTable(
     status: text('status').notNull().default('todo'),
     // P0: real user id of the assignee, constrained in app logic to a member of the home board.
     assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
-    // Who reviews it. Constrained in app logic to a member of the home board, like assigneeId.
     // approvedBy/approvedAt are LEGACY: the approval gate was removed, nothing writes them any
-    // more; old values stay so history is intact.
-    reviewerId: text('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
+    // more; old values stay so history is intact. (The reviewer column went with the review feature.)
     approvedBy: text('approved_by'),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     date: text('date'),
@@ -575,7 +573,7 @@ export const notifications = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    // Event kind: 'task_assigned' | 'review_requested' | 'task_approved' | 'board_added' |
+    // Event kind: 'task_assigned' | 'review_requested' (legacy) | 'task_approved' | 'board_added' |
     // 'comment_mention' | 'comment_added'.
     // Kept as free text (not an enum) so new kinds don't need a migration.
     type: text('type').notNull(),

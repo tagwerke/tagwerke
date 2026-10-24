@@ -12,6 +12,7 @@ import { NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react';
 import { useStore } from '../store';
 import { boardTaskPath, navigate } from '../util/router';
 import type { ID } from '../types';
+import { isTerminalStatus } from '../../shared/status';
 
 export function TaskMentionView({ node }: ReactNodeViewProps) {
   const id = (node.attrs.id as ID | null) ?? null;
@@ -28,7 +29,7 @@ export function TaskMentionView({ node }: ReactNodeViewProps) {
   }
 
   const status = task.status ?? 'todo';
-  const done = status === 'done' || status === 'cancelled';
+  const done = isTerminalStatus(status);
 
   return (
     <NodeViewWrapper as="span" className={`task-mention ${done ? 'is-done' : ''}`} contentEditable={false}>

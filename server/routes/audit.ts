@@ -174,7 +174,7 @@ async function boardNameOf(id: string | null): Promise<string | null> {
 async function resolveTask(id: string): Promise<PreviewRecord | null> {
   const [t] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1);
   if (!t) return null;
-  const [assignee, reviewer, board] = await Promise.all([emailOf(t.assigneeId), emailOf(t.reviewerId), boardNameOf(t.homeTabId)]);
+  const [assignee, board] = await Promise.all([emailOf(t.assigneeId), boardNameOf(t.homeTabId)]);
   return {
     type: 'task', id, deleted: !!t.deletedAt,
     title: t.text?.trim() || t.lastTitle || '(untitled task)',
@@ -182,7 +182,6 @@ async function resolveTask(id: string): Promise<PreviewRecord | null> {
       F('board', board ?? t.homeTabId),
       F('status', t.status),
       F('assignee', assignee),
-      F('reviewer', reviewer),
       F('due', t.date),
       F('priority', t.priority),
       F('created', iso(t.createdAt)),

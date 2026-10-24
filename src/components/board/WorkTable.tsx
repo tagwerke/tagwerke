@@ -17,6 +17,7 @@ import { COL, COLUMNS, columnAt, type ColumnDef } from './workColumns';
 import type { Group, Sort, SortKey } from './workView';
 import type { DraftFields } from '../../tasks/createTask';
 import type { ID, Member, Sprint, Task } from '../../types';
+import { isTerminalStatus } from '../../../shared/status';
 
 export function WorkTable({
   tabId, groups, sort, onSort, selection, onSelect, onSelectAll, onOpenMenu, onOpenTask, canReorder, onReorder,
@@ -168,7 +169,7 @@ export function WorkTable({
       case 'assignee': return <span className="wt-mono">{t.assigneeId ? memberName.get(t.assigneeId) ?? '—' : '—'}</span>;
       case 'due': {
         if (!t.date) return <span className="wt-mono muted">—</span>;
-        const active = t.status !== 'done' && t.status !== 'cancelled';
+        const active = !isTerminalStatus(t.status);
         return <span className={`wt-mono ${active && t.date < today ? 'is-overdue' : ''}`}>{formatDateChip(t.date)}</span>;
       }
       case 'priority': return <span className="wt-mono">{t.priority ? '!'.repeat(t.priority) : '—'}</span>;
@@ -225,7 +226,7 @@ export function WorkTable({
           <div key={g.key} className="wt-group">
             {g.tasks.map((t) => {
               const parent = t.parentTaskId ? tasksById[t.parentTaskId] : undefined;
-              const done = t.status === 'done' || t.status === 'cancelled';
+              const done = isTerminalStatus(t.status);
               const depth = nesting ? nesting.depthOf(t.id) : 0;
               const kids = nesting ? nesting.hasChildren(t.id) : false;
               return (

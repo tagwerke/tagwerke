@@ -31,7 +31,6 @@ export function taskDTO(t: typeof schema.tasks.$inferSelect): Record<string, unk
     updatedAt: t.updatedAt instanceof Date ? t.updatedAt.getTime() : undefined,
     ...(t.description != null ? { description: t.description } : {}),
     ...(t.assigneeId != null ? { assigneeId: t.assigneeId } : {}),
-    ...(t.reviewerId != null ? { reviewerId: t.reviewerId } : {}),
     ...(t.date != null ? { date: t.date } : {}),
     ...(t.priority != null ? { priority: t.priority } : {}),
     ...(t.parentTaskId != null ? { parentTaskId: t.parentTaskId } : {}),

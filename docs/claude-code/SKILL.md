@@ -55,13 +55,14 @@ user for a new token; don't guess ids.
 
 ## Tasks
 
-A task has: `text` (the title), `description`, `status`, `assigneeId`, `reviewerId`, `date`
+A task has: `text` (the title), `description`, `status`, `assigneeId`, `date`
 (due, `YYYY-MM-DD`), `priority`, `parentTaskId`, `sprintId`, and a board (`homeTabId`).
 
-- **status**: `todo`, `in_progress`, `in_review`, `done`, `cancelled`. `in_review` is just a status
-  (there is no approval gate); `reviewerId` says who should look.
+- **status**: `todo`, `in_progress`, `blocked`, `in_review`, `done`, `cancelled`. `blocked` means stalled
+  on someone or something, so say who or what in a comment. `in_review` is just a status (there is no
+  approval gate and no reviewer field).
 - **priority**: `3` is the **highest** (shown "!!!"), `1` the lowest. Not the P1-is-urgent convention.
-- **assignee / reviewer** must be a member of that board (ids from `membersByBoard`). There are no
+- **assignee** must be a member of that board (ids from `membersByBoard`). There are no
   labels or tags: if a person isn't a member, put their name in the title.
 - **sub-tasks**: set `parentTaskId` to a task on the **same board**; up to 4 levels deep. Create the
   parent before its children. Children do not inherit sprint or due date, and a parent's status does
@@ -120,7 +121,7 @@ tgw -X PUT $TAGWERKE_URL/api/tasks/t_ab12cd34 -d '{
 }'
 ```
 
-⚠️ `PUT` is create-or-**replace**. Re-sending an existing id rewrites it: assignee, reviewer, due
+⚠️ `PUT` is create-or-**replace**. Re-sending an existing id rewrites it: assignee, due
 date and priority you leave out are **cleared**. **Never use PUT to edit.** Never reuse an id that
 belongs to another board.
 
@@ -185,7 +186,7 @@ The cursor is an opaque base64 string (it can end in `=`), so pass it with `--da
 above rather than pasting it into the URL. For smaller pages add `--data-urlencode limit=20` (default and maximum 100).
 
 Types you'll see: `comment_mention` (someone asked your user something), `comment_added` (a comment
-on a task your user owns or reviews), `task_assigned`, `review_requested`, `board_added`. Your own
+on a task assigned to your user), `task_assigned`, `board_added`. Your own
 user's actions never appear, so your earlier comments don't echo back. You only see boards the token
 reaches, so the shared board must be ticked on your token.
 

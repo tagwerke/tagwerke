@@ -81,7 +81,6 @@ type TaskPatch = {
   description?: string | null;
   status?: Task['status'];
   assigneeId?: ID | null;
-  reviewerId?: ID | null;
   date?: string | null;
   priority?: 1 | 2 | 3 | null;
   rank?: string;
@@ -97,7 +96,6 @@ function changedFields(p: Task, t: Task): TaskPatch | null {
   if ((p.description ?? null) !== (t.description ?? null)) patch.description = t.description ?? null;
   if ((p.status ?? 'todo') !== (t.status ?? 'todo')) patch.status = t.status ?? 'todo';
   if ((p.assigneeId ?? null) !== (t.assigneeId ?? null)) patch.assigneeId = t.assigneeId ?? null;
-  if ((p.reviewerId ?? null) !== (t.reviewerId ?? null)) patch.reviewerId = t.reviewerId ?? null;
   if ((p.date ?? null) !== (t.date ?? null)) patch.date = t.date ?? null;
   if ((p.priority ?? null) !== (t.priority ?? null)) patch.priority = t.priority ?? null;
   if ((p.rank ?? null) !== (t.rank ?? null) && t.rank) patch.rank = t.rank;
@@ -118,7 +116,6 @@ function fullBody(t: Task) {
     ...(t.description != null ? { description: t.description } : {}),
     status: t.status ?? 'todo',
     assigneeId: t.assigneeId ?? null,
-    reviewerId: t.reviewerId ?? null,
     date: t.date ?? null,
     priority: t.priority ?? null,
     ...(t.rank ? { rank: t.rank } : {}),

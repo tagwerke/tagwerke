@@ -1,19 +1,14 @@
-// The task status control: a one-click done toggle + a caret that opens the 5-status
+// The task status control: a one-click done toggle + a caret that opens the status
 // menu. Extracted from the editor's TaskItemView so the Planner mini-board reuses the
 // exact same affordance (same classes/markup → same styling). `disabled` renders a
 // read-only indicator (teammates' lanes in the Planner).
 
 import { useState, useEffect, useRef } from 'react';
 import type { TaskStatus } from '../types';
+import { TASK_STATUSES, isDoneStatus } from '../../shared/status';
 
-export const STATUS_ORDER: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done', 'cancelled'];
-export const STATUS_LABEL: Record<TaskStatus, string> = {
-  todo: 'Todo',
-  in_progress: 'In progress',
-  in_review: 'In review',
-  done: 'Done',
-  cancelled: 'Cancelled',
-};
+export const STATUS_ORDER: TaskStatus[] = TASK_STATUSES.map((s) => s.key);
+export const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.key, s.label])) as Record<TaskStatus, string>;
 
 interface Props {
   status: TaskStatus;
@@ -24,7 +19,7 @@ interface Props {
 }
 
 export function StatusControl({ status, onToggle, onPick, accentColor, disabled }: Props) {
-  const done = status === 'done';
+  const done = isDoneStatus(status);
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 

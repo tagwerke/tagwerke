@@ -1,5 +1,5 @@
 // Sub-task roll-up on a parent row (SUBTASKS_PLAN P5). Segmented by STATUS, not a plain done/total
-// fraction — with five states, "0/3" reads as "nothing is happening" on a deliverable where two
+// fraction — with several states, "0/3" reads as "nothing is happening" on a deliverable where two
 // people are mid-flight. The strip says what is actually true at a glance, which is the point:
 // a parent's own status is never derived (D5), so this is what keeps the row honest.
 //
@@ -12,7 +12,7 @@ import { STATUS_LABEL } from '../StatusControl';
 import type { ID, TaskStatus } from '../../types';
 
 // Left-to-right: finished work first, unstarted last, so the bar fills as the deliverable advances.
-const SEGMENTS: TaskStatus[] = ['done', 'in_review', 'in_progress', 'todo', 'cancelled'];
+const SEGMENTS: TaskStatus[] = ['done', 'in_review', 'in_progress', 'blocked', 'todo', 'cancelled'];
 
 export function SubtaskProgress({ taskId, className = '' }: { taskId: ID; className?: string }) {
   const tasks = useStore((s) => s.tasks);

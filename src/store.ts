@@ -8,6 +8,7 @@ import { dlog, sid } from './util/dlog';
 import { api, ApiError, enqueue } from './api/client';
 import { compareRank, rankAfter, rankBetween } from '../shared/rank';
 import { MAX_TASK_DEPTH } from '../shared/tree';
+import { TASK_STATUSES, isDoneStatus, isTerminalStatus } from '../shared/status';
 
 export function nextPosition(orders: number[]): number {
   return orders.length ? Math.max(...orders) + 1 : 0;
@@ -116,10 +117,15 @@ export interface SubtaskStats {
 }
 
 export function subtaskStats(tasks: Record<ID, Task>, id: ID): SubtaskStats {
-  const byStatus: Record<TaskStatus, number> = { todo: 0, in_progress: 0, in_review: 0, done: 0, cancelled: 0 };
+  const byStatus = Object.fromEntries(TASK_STATUSES.map((s) => [s.key, 0])) as Record<TaskStatus, number>;
   const kids = descendantsOf(tasks, id);
-  for (const k of kids) byStatus[k.status ?? 'todo']++;
-  return { total: kids.length, done: byStatus.done, byStatus };
+  let done = 0;
+  for (const k of kids) {
+    const st = k.status ?? 'todo';
+    byStatus[st]++;
+    if (isDoneStatus(st)) done++;
+  }
+  return { total: kids.length, done, byStatus };
 }
 
 /** Every descendant of `id` (children, grandchildren, …) in outline order. */
@@ -172,7 +178,7 @@ interface Actions {
   setOpenTask(id: ID | null): void;
 
   upsertTask(t: Partial<Task> & { id: ID; homeTabId: ID; text: string }): Task;
-  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'reviewerId' | 'rank' | 'sprintId' | 'description'>>): void;
+  setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'done' | 'status' | 'assigneeId' | 'rank' | 'sprintId' | 'description'>>): void;
   setTaskText(id: ID, text: string): void;
   /** Re-parent a task. Always assigns a rank in the new sibling group (append unless given). */
   setTaskParent(id: ID, parentTaskId: ID | undefined, rank?: string): void;
@@ -336,11 +342,8 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
    * nobody implements. Declining is a real answer, not a nag to be repeated.
    */
   const offerCascade = (id: ID, next: TaskStatus): void => {
-    if (next !== 'done') return;
-    const open = descendantsOf(get().tasks, id).filter((t) => {
-      const st = t.status ?? 'todo';
-      return st !== 'done' && st !== 'cancelled';
-    });
+    if (!isDoneStatus(next)) return;
+    const open = descendantsOf(get().tasks, id).filter((t) => !isTerminalStatus(t.status ?? 'todo'));
     if (open.length) set({ pendingCascade: { taskIds: [id], count: open.length } });
   };
 
@@ -507,8 +510,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         let count = 0;
         for (const id of ids) {
           const open = descendantsOf(tasks, id).filter((t) => {
-            const st = t.status ?? 'todo';
-            return st !== 'done' && st !== 'cancelled' && !seen.has(t.id);
+            return !isTerminalStatus(t.status ?? 'todo') && !seen.has(t.id);
           });
           if (!open.length) continue;
           for (const t of open) seen.add(t.id);
@@ -525,8 +527,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         const swept = new Set<ID>();
         for (const parent of pending.taskIds) {
           for (const t of descendantsOf(get().tasks, parent)) {
-            const st = t.status ?? 'todo';
-            if (st === 'done' || st === 'cancelled') continue;
+            if (isTerminalStatus(t.status ?? 'todo')) continue;
             if (swept.has(t.id)) continue; // overlapping subtrees in a bulk sweep
             swept.add(t.id);
             patchTask(t.id, { status: 'done', done: true });
@@ -608,7 +609,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
           priority: meta.priority ?? existing?.priority,
           parentTaskId: meta.parentTaskId ?? existing?.parentTaskId,
           owner: meta.owner ?? existing?.owner,
-          done: status === 'done',
+          done: isDoneStatus(status),
           // Every task gets a sibling rank at birth, so nothing ever renders in an undefined
           // order. An explicit rank wins; an existing one is preserved; otherwise append.
           rank:
@@ -621,7 +622,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       },
       setTaskMeta(id, meta) {
         // Keep the derived `done` mirror in sync whenever status is set here.
-        const patch = meta.status !== undefined ? { ...meta, done: meta.status === 'done' } : meta;
+        const patch = meta.status !== undefined ? { ...meta, done: isDoneStatus(meta.status) } : meta;
         patchTask(id, patch);
       },
       setTaskText(id, text) {
@@ -658,7 +659,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         patchTask(id, { parentTaskId: parent, rank });
       },
       setTaskStatus(id, status) {
-        patchTask(id, { status, done: status === 'done' });
+        patchTask(id, { status, done: isDoneStatus(status) });
         offerCascade(id, status);
       },
       setTaskAssignee(id, assigneeId) {
@@ -667,8 +668,8 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       toggleTaskDone(id) {
         const t = get().tasks[id];
         if (!t) return;
-        const target: TaskStatus = (t.status ?? 'todo') === 'done' ? 'todo' : 'done';
-        patchTask(id, { status: target, done: target === 'done' });
+        const target: TaskStatus = isDoneStatus(t.status) ? 'todo' : 'done';
+        patchTask(id, { status: target, done: isDoneStatus(target) });
         offerCascade(id, target);
       },
       deleteTask(id) {

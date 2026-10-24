@@ -170,13 +170,13 @@ try {
   subscribe(sub, boardChannel(boardA));
 
   const newId = nanoid();
-  const made1 = await post(tokW.token, { id: newId, title: 'Draft [the plan](https://evil.example/x)', description: 'see https://evil.example/y', status: 'in_progress', priority: 2, dueDate: '2026-02-01', sprint: 'current', assigneeId: human, reviewerId: human });
+  const made1 = await post(tokW.token, { id: newId, title: 'Draft [the plan](https://evil.example/x)', description: 'see https://evil.example/y', status: 'in_progress', priority: 2, dueDate: '2026-02-01', sprint: 'current', assigneeId: human });
   check('create a task -> 201', made1.statusCode === 201, made1.body);
   const row = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, newId)))[0];
   check('on the token\'s board, created by the agent, rank assigned', row?.homeTabId === boardA && row.createdBy === writer && !!row.rank);
   check('title and description are neutralized', !!row && !/evil\.example|\]\(/.test(row.text + (row.description ?? '')) && row.text.includes('the plan'), row);
   check("sprint 'current' resolved to the board's current sprint", row?.sprintId === sprintCur);
-  check('fields stored (status, priority, due, assignee, reviewer)', row?.status === 'in_progress' && row.priority === 2 && row.date === '2026-02-01' && row.assigneeId === human && row.reviewerId === human);
+  check('fields stored (status, priority, due, assignee)', row?.status === 'in_progress' && row.priority === 2 && row.date === '2026-02-01' && row.assigneeId === human);
   const retry = await post(tokW.token, { id: newId, title: 'Draft again' });
   check('a retried id is idempotent (200, not created, no duplicate)', retry.statusCode === 200 && (retry.json() as any).created === false && (await db.select().from(schema.tasks).where(eq(schema.tasks.id, newId))).length === 1);
   check("someone else's id -> 409", (await post(tokW.token, { id: taskA, title: 'steal' })).statusCode === 409);

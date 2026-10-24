@@ -57,7 +57,7 @@ export const HELP_DETAILS: HelpDetail[] = [
   },
   {
     heading: 'Everything else',
-    body: 'Right-click any task — or click the `⋯` on the row — for the full list: status, sprint, reviewer, move to another board, delete. The same menu opens from a cell, already on that field.',
+    body: 'Right-click any task — or click the `⋯` on the row — for the full list: status, sprint, move to another board, delete. The same menu opens from a cell, already on that field.',
   },
 ];
 

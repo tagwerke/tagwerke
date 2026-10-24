@@ -7,6 +7,7 @@ import { and, eq, isNull, notInArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/client.ts';
 import { currentWeekRange } from '../../shared/sprintWeek.ts';
+import { TERMINAL_STATUS_KEYS } from '../../shared/status.ts';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -73,7 +74,7 @@ export async function ensureCurrentSprint(tx: Tx, tabId: string, now: Date): Pro
       eq(schema.tasks.homeTabId, tabId),
       eq(schema.tasks.sprintId, current.id),
       isNull(schema.tasks.deletedAt),
-      notInArray(schema.tasks.status, ['done', 'cancelled']),
+      notInArray(schema.tasks.status, TERMINAL_STATUS_KEYS),
     ))
     .returning({ id: schema.tasks.id });
   return { fromSprintId: current.id, toSprintId: thisWeek.id, movedTaskIds: moved.map((r) => r.id) };

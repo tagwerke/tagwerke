@@ -5,7 +5,7 @@ const FIELD_LABELS: Record<string, string> = {
   text: 'text',
   status: 'status',
   assigneeId: 'assignee',
-  reviewerId: 'reviewer',
+  reviewerId: 'reviewer', // legacy: the field is gone, but old history rows still name it
   date: 'due',
   priority: 'priority',
   homeTabId: 'board',

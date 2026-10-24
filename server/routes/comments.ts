@@ -8,7 +8,7 @@
 //
 // Every write records its own audit row (targetType 'task_comment', scoped to the board) and
 // publishes a live frame on the board channel. Notification fan-out is §4 of the plan: mentions
-// first, then the task's assignee/reviewer, deduped, actor always skipped.
+// first, then the task's assignee, deduped, actor always skipped.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -272,9 +272,9 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
  * Fan a new comment out to the people it concerns (§4):
  *
  *   1. everyone mentioned in it   → `comment_mention`
- *   2. the task's assignee + reviewer → `comment_added`
+ *   2. the task's assignee → `comment_added`
  *
- * Deduped, and the actor never notifies themselves. A mention WINS over the assignee/reviewer
+ * Deduped, and the actor never notifies themselves. A mention WINS over the assignee
  * kind for someone who qualifies twice — it is the more specific and more actionable framing.
  *
  * NOT included, deliberately: everyone who previously commented on the task. Thread-wide fan-out
@@ -290,7 +290,7 @@ export async function notifyForComment(input: {
 }): Promise<void> {
   const task = (
     await db
-      .select({ text: schema.tasks.text, assigneeId: schema.tasks.assigneeId, reviewerId: schema.tasks.reviewerId })
+      .select({ text: schema.tasks.text, assigneeId: schema.tasks.assigneeId })
       .from(schema.tasks)
       .where(eq(schema.tasks.id, input.taskId))
       .limit(1)
@@ -315,7 +315,7 @@ export async function notifyForComment(input: {
     });
   }
 
-  for (const userId of [task.assigneeId, task.reviewerId]) {
+  for (const userId of [task.assigneeId]) {
     if (!userId || sent.has(userId)) continue;
     // A recipient who has since lost access to the board must not be told what was said on it.
     if (!(await boardRole(userId, input.tabId))) continue;

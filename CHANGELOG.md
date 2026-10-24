@@ -26,7 +26,7 @@ automatically on boot — always take a backup before upgrading.
   filtered to, and is hidden when several are selected.
 
 - **Point-in-time restore for a task** — every row in a task's History drawer is now a point you
-  can put the task back to. Its title, status, assignee, reviewer, due date and priority are
+  can put the task back to. Its title, status, assignee, due date and priority are
   reconstructed from the audit trail and rewritten; where the task sits on the board is left
   alone. Values today's board would refuse (an assignee who has since left) are kept as they are
   and reported rather than forced, and the restore is itself recorded — so it can be walked back
@@ -35,8 +35,11 @@ automatically on boot — always take a backup before upgrading.
 ### Removed
 
 - **"Require review before Done"** — the board setting, the approval gate and the "Task approved"
-  notification are gone. `in_review` is now an ordinary status that nothing gates on. Reviewer is
-  still a field, and old approval stamps stay in the database but are no longer shown or written.
+  notification are gone. `in_review` is now an ordinary status that nothing gates on. Old approval
+  stamps stay in the database but are no longer shown or written.
+- **Reviewer** — the field, its picker, the "review requested" notification and the reviewer's copy of
+  new-comment notifications are gone. Assign the task to whoever should look. Existing reviewer
+  values are dropped by the migration; past history entries that mention one still read as before.
 
 ### Changed
 

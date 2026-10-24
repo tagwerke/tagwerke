@@ -31,7 +31,7 @@ export function moveTargets(tabs: Record<ID, Tab>, homeTabId: ID | undefined): T
 export function describeMove(result: MoveResult, boardName: string): string {
   const parts: string[] = [`Moved to ${boardName}`];
   if (result.subtaskCount) parts.push(`with ${result.subtaskCount} sub-task${result.subtaskCount === 1 ? '' : 's'}`);
-  const cleared = result.clearedAssignees + result.clearedReviewers;
+  const cleared = result.clearedAssignees;
   if (cleared) {
     // Said plainly: the destination board's roster could not hold the assignment, so it is gone.
     // The audit row names who lost it; this line makes sure the mover knows it happened at all.

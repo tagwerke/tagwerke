@@ -183,15 +183,6 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
             />
           </Field>
 
-          <Field label="Reviewer">
-            <Dropdown
-              value={task.reviewerId ?? ''}
-              disabled={!editable}
-              options={[{ value: '', label: 'None' }, ...(members ?? []).map((m) => ({ value: m.id, label: m.name }))]}
-              onChange={(v) => setTaskMeta(task.id, { reviewerId: v || undefined })}
-            />
-          </Field>
-
           <Field label="Priority">
             <Dropdown
               value={task.priority ? String(task.priority) : ''}
