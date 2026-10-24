@@ -10,6 +10,16 @@ automatically on boot — always take a backup before upgrading.
 
 ### Added
 
+- **Per-board task states** — each board can name, color, order, describe and hide its own task
+  states (board panel → States; admins edit, everyone can read what each one means). Every state
+  picks a category — Not started, In progress, Waiting, Done or Closed — and the app goes by the
+  category, not the name: the checkmark, the overdue flag, sprint carry-over and the sub-task bar
+  all work the same on a board whose done state is called "Won". A board always keeps at least one
+  Not started and one Done state. Deleting a state that tasks use moves them to a state you pick
+  (Trash included), or you can hide it instead. Moving a task to a board that lacks some of its
+  states asks where they go. History shows each status under the name it had at the time. Agents
+  and API tokens read a board's states from `statesByBoard` in `/api/state` (and `states` on the
+  agent board read); an unknown status is refused with the valid list.
 - **API tokens** — personal access tokens (Security) let your own scripts and agents act as you on
   the boards you tick, with separate permissions for tasks, comments and boards; board admins can
   also mint a token for a project's agent (Share → API tokens) that reads the board and can comment
@@ -43,6 +53,9 @@ automatically on boot — always take a backup before upgrading.
 
 ### Changed
 
+- **Migration `0039`** gives every existing board the six default states (Todo, In progress,
+  Blocked, In review, Done, Cancelled — the keys tasks already store, so no task changes) and drops
+  the unused `tasks.done` column. Take a backup before upgrading.
 - **Only a comment's author can delete it.** Board admins can no longer remove other people's
   comments.
 

@@ -45,11 +45,12 @@ tgw $TAGWERKE_URL/api/state > /tmp/tgw-state.json
 jq -r '.tabs | to_entries[] | "\(.key)\t\(.value.name)\t\(.value.role)"' /tmp/tgw-state.json   # boards
 jq -r '.sprintsByBoard["BOARD_ID"][] | "\(.id)\t\(.label)\t\(.isCurrent)"' /tmp/tgw-state.json  # sprints
 jq -r '.membersByBoard["BOARD_ID"][] | "\(.id)\t\(.email)"' /tmp/tgw-state.json                 # people
+jq -r '.statesByBoard["BOARD_ID"][] | "\(.key)\t\(.category)\t\(.label)\t\(.description // "")"' /tmp/tgw-state.json  # task states
 jq -r '.tasks[] | select(.homeTabId=="BOARD_ID") | "\(.id)\t\(.status)\t\(.parentTaskId // "-")\t\(.text)"' /tmp/tgw-state.json
 ```
 
 `/api/state` returns: `tabs` (boards, with your `role`), `tasks` (every task, keyed by id),
-`membersByBoard`, `sprintsByBoard`, `commentCounts`, and `projects` (your own categories). Only boards
+`membersByBoard`, `sprintsByBoard`, `statesByBoard`, `commentCounts`, and `projects` (your own categories). Only boards
 the token reaches appear. If a board you expect is missing, the token wasn't ticked for it — ask the
 user for a new token; don't guess ids.
 
@@ -58,9 +59,14 @@ user for a new token; don't guess ids.
 A task has: `text` (the title), `description`, `status`, `assigneeId`, `date`
 (due, `YYYY-MM-DD`), `priority`, `parentTaskId`, `sprintId`, and a board (`homeTabId`).
 
-- **status**: `todo`, `in_progress`, `blocked`, `in_review`, `done`, `cancelled`. `blocked` means stalled
-  on someone or something, so say who or what in a comment. `in_review` is just a status (there is no
-  approval gate and no reviewer field).
+- **status**: statuses are per board; read `statesByBoard[BOARD_ID]` (key, label, description,
+  category) and only send a `key` from it. Use the category, not the label, to decide what a state
+  means: `open` (not started), `active` (being worked on), `waiting` (stalled on someone or something),
+  `done` (finished), `closed` (dropped or lost). The description says what the state means on that
+  board. A 400 `unknown_status` lists the valid ones. A `hidden` state is valid but not offered for
+  new work. Most boards keep the defaults (`todo`, `in_progress`, `blocked`, `in_review`, `done`,
+  `cancelled`), but check: a lead-gen board may have `Contacted` / `Won` instead. When you move a task
+  to a `waiting` state, say who or what it waits on in a comment.
 - **priority**: `3` is the **highest** (shown "!!!"), `1` the lowest. Not the P1-is-urgent convention.
 - **assignee** must be a member of that board (ids from `membersByBoard`). There are no
   labels or tags: if a person isn't a member, put their name in the title.
@@ -137,6 +143,9 @@ tgw -X PATCH $TAGWERKE_URL/api/tasks/t_ab12cd34 -d '{"date":null}'              
 
 - Move to another board: `POST /api/tasks/{id}/move` `{"toTabId":"BOARD_ID"}` (carries sub-tasks; the
   sprint and any assignee who isn't on the new board are cleared — the response says how many).
+  A status the destination doesn't have needs a mapping: `"states": {"FROM_KEY": "TO_KEY"}`. Without
+  one the move answers 409 `states_unmapped`, listing the states that need one and the destination's
+  `options`.
 - Delete: `DELETE /api/tasks/{id}` (soft delete, with its sub-tasks, recoverable). Restore:
   `POST /api/tasks/{id}/restore`. Trash list: `GET /api/tabs/{boardId}/trash`.
 - History: `GET /api/tasks/{id}/history`, `GET /api/tabs/{boardId}/history`.
@@ -237,7 +246,8 @@ them in the app.
   with everything at the top level is a failed import even if every task exists.
 - **Never put credentials, keys, tokens or personal data in a title, description or comment.** They are
   stored as plain text and copied into the audit log. Refer to *where* a secret lives, not what it is.
-- **Don't delete** without being asked. Prefer `status: cancelled` plus a comment saying why.
+- **Don't delete** without being asked. Move it to the board's `closed` state if it has one; otherwise
+  leave a comment and don't delete.
 - **Record verification in comments** ("what was checked, when, how"), not in the title.
 - Dates are `YYYY-MM-DD`; sprints don't set due dates.
 
@@ -250,4 +260,6 @@ them in the app.
 | `403 insufficient scope` | The token wasn't ticked to write this kind of thing. New token. |
 | `403 insufficient permission` | You're only a viewer on that board. |
 | `404 not found` | The token doesn't reach that board (not ticked), or the id is wrong. Check `/api/state`. |
+| `400 unknown_status` | That status key isn't one of this board's states. `valid` lists them (key, label, category). |
+| `409 states_unmapped` | A move needs a `states` mapping for the statuses the destination lacks (see *Other task actions*). |
 | `400 …` | The body was invalid (e.g. assignee not on the board, parent on another board, nesting too deep). |
