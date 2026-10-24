@@ -2,6 +2,7 @@
 // separate Share / Schedule modals. Each tab embeds the existing panel body:
 //   Members  — roster, roles, invite, board rules  (MembersPanel)
 //   Events   — agenda, location, RSVP              (EventsPanel)
+//   States   — the board's task states            (BoardStatesPanel)
 //   Activity — presence + board history + trash    (BoardActivity + ActivityDrawer/TrashPanel)
 // On desktop it's a persistent right rail; on mobile TabView mounts it inside a Sheet.
 
@@ -13,9 +14,10 @@ import { BoardActivity } from './BoardActivity';
 import { ActivityDrawer } from './ActivityDrawer';
 import { TrashPanel } from './TrashPanel';
 import { SprintsPage } from './SprintsPage';
+import { BoardStatesPanel } from './states/BoardStatesPanel';
 import { Tabs } from './common/Segmented';
 
-type PanelTab = 'members' | 'events' | 'activity' | 'sprints';
+type PanelTab = 'members' | 'events' | 'activity' | 'sprints' | 'states';
 
 export function BoardPanel({ tabId, tabName, onOpenSprint }: {
   tabId: string;
@@ -52,6 +54,7 @@ export function BoardPanel({ tabId, tabName, onOpenSprint }: {
           { value: 'members', label: 'Members' },
           { value: 'events', label: 'Events' },
           { value: 'sprints', label: 'Sprints' },
+          { value: 'states', label: 'States' },
           { value: 'activity', label: 'Activity' },
         ]}
         value={tab}
@@ -62,6 +65,7 @@ export function BoardPanel({ tabId, tabName, onOpenSprint }: {
         {tab === 'members' && <MembersPanel tabId={tabId} tabName={tabName} />}
         {tab === 'events' && <EventsPanel tabId={tabId} />}
         {tab === 'sprints' && <SprintsPage tabId={tabId} onOpenSprint={(id) => onOpenSprint?.(id)} />}
+        {tab === 'states' && <BoardStatesPanel tabId={tabId} />}
         {tab === 'activity' && (
           <div className="activity-tab">
             <BoardActivity tabId={tabId} />

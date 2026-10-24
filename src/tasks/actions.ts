@@ -294,8 +294,8 @@ const moveAction: TaskAction = {
       key: t.id,
       label: t.name,
       run: () => {
-        void moveTaskToBoard(ctx.ids[0], t.id)
-          .then((result) => showToast(describeMove(result, t.name)))
+        void moveTaskToBoard(ctx.ids[0], t.id, t.name)
+          .then((result) => { if (result) showToast(describeMove(result, t.name)); })
           .catch(() => showToast('Could not move the task'));
       },
     }));

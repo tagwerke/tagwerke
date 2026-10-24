@@ -8,6 +8,7 @@
 // stay as direct fetches and simply fail while offline.
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
+import type { BoardState, StatusCategory } from '../../shared/status';
 import type { BlockFilter, CalendarEvent, Comment as CommentDTO, DocumentDTO, DocumentItem, ExtractionRun, ID, Notification as NotificationDTO, RsvpStatus, SecretEntryDTO, SecretLinkDTO, Sprint, Task } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Handlers, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
@@ -204,8 +205,10 @@ export const api = {
      * batch operation with a real result to show. It therefore fails while offline, which is right:
      * there is nothing sensible to show for a move whose outcome we'd be guessing at.
      */
-    move: (id: ID, toTabId: ID) =>
-      req<MoveResult>(`/api/tasks/${id}/move`, { method: 'POST', body: JSON.stringify({ toTabId }) }),
+    // `states` maps each source state the destination lacks onto one of its own (D9); without it
+    // such a move is refused with 409 `states_unmapped`, which says what needs a choice.
+    move: (id: ID, toTabId: ID, states?: Record<string, string>) =>
+      req<MoveResult>(`/api/tasks/${id}/move`, { method: 'POST', body: JSON.stringify({ toTabId, ...(states ? { states } : {}) }) }),
     /**
      * Point-in-time restore: put the task back as it was at one entry of its history. Direct fetch
      * for the same reason as `move` — the server reconstructs the past state from the audit trail
@@ -241,6 +244,22 @@ export const api = {
   // hydrate is the primary load, see sprintsByBoard in the store). Writes go through the
   // durable outbox, same as tabs.update/remove: renaming/deleting/switching-current a sprint
   // is exactly as offline-critical as editing a board's own metadata.
+  // A board's task states (BOARD_STATES_PLAN P4). Direct calls, not the outbox: this is an admin
+  // configuring the board, the server's rules decide (required categories, the cap, the move on
+  // delete), and every call answers with the whole new list.
+  states: {
+    create: (tabId: ID, b: { label: string; category: StatusCategory; color?: string; description?: string | null }) =>
+      req<{ state: BoardState; states: BoardState[] }>(`/api/tabs/${tabId}/states`, { method: 'POST', body: JSON.stringify(b) }),
+    update: (tabId: ID, key: string, b: { label?: string; color?: string; description?: string | null; category?: StatusCategory; hidden?: boolean }) =>
+      req<{ state: BoardState; states: BoardState[] }>(`/api/tabs/${tabId}/states/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(b) }),
+    reorder: (tabId: ID, keys: string[]) =>
+      req<{ states: BoardState[] }>(`/api/tabs/${tabId}/states/order`, { method: 'PUT', body: JSON.stringify({ keys }) }),
+    // No body unless there is something to move: the server refuses an empty JSON body.
+    remove: (tabId: ID, key: string, moveTo?: string) =>
+      req<{ movedTasks: number; states: BoardState[] }>(`/api/tabs/${tabId}/states/${encodeURIComponent(key)}`, {
+        method: 'DELETE', ...(moveTo ? { body: JSON.stringify({ moveTo }) } : {}),
+      }),
+  },
   sprints: {
     list: (tabId: ID) => req<{ sprints: Sprint[] }>(`/api/tabs/${tabId}/sprints`),
     rename: (id: ID, label: string) => submitMutation(M('PATCH', `/api/sprints/${id}`, { label })),
@@ -572,6 +591,8 @@ export interface MoveResult {
   moved: Task[];
   subtaskCount: number;
   clearedAssignees: number;
+  /** Statuses the move rewrote to fit the destination's states, with the task count of each. */
+  stateChanges: { from: string; fromLabel: string; to: string; toLabel: string; count: number }[];
 }
 
 /**

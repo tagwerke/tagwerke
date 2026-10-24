@@ -324,6 +324,19 @@ export function ActivityDrawer({
         </>
       );
     }
+    // A move onto a board without some of the task's states: what each became.
+    if (Array.isArray(p.stateChanges) && p.stateChanges.length) {
+      return (
+        <ul className="history-changes">
+          {(p.stateChanges as { fromLabel: string; toLabel: string; count: number }[]).map((c, i) => (
+            <li key={i}>
+              <Change label="status" from={c.fromLabel} to={c.toLabel} />
+              {c.count > 1 && <span className="muted"> ({c.count} tasks)</span>}
+            </li>
+          ))}
+        </ul>
+      );
+    }
     // A deleted task state: where the tasks that used it went.
     if (typeof p.movedTasks === 'number' && p.movedTasks > 0) {
       return <div className="history-detail">moved {p.movedTasks} {p.movedTasks === 1 ? 'task' : 'tasks'} to “{String(p.moveToLabel ?? p.moveTo)}”</div>;

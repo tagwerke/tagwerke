@@ -44,3 +44,10 @@ export const doneKeyOf = (tabId: ID | null | undefined): string => firstDoneKey(
 /** Paints a state: every status dot, swatch and segment reads `--state-color`. */
 export const stateStyle = (state: Pick<BoardState, 'color'>): CSSProperties =>
   ({ '--state-color': `var(--state-${state.color})` }) as CSSProperties;
+
+/** A first guess at where each source state goes on another board (BOARD_STATES_PLAN P5.2): the
+ *  first target of the same category, by position, else the target board's start state. */
+export function suggestMapping(sources: readonly Pick<BoardState, 'key' | 'category'>[], targets: readonly BoardState[]): Record<string, string> {
+  const shown = visible(targets);
+  return Object.fromEntries(sources.map((s) => [s.key, shown.find((t) => t.category === s.category)?.key ?? startKey(targets)]));
+}

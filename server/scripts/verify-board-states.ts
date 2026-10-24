@@ -32,18 +32,24 @@ function check(label: string, ok: boolean, detail?: unknown): void {
   }
 }
 
-const [admin, editor, board, taskA, taskB, taskTrashed, event] = Array.from({ length: 7 }, () => nanoid());
+const [admin, editor, board, taskA, taskB, taskTrashed, event, boardDefault, boardLeads, lead, leadKid, plain] = Array.from({ length: 12 }, () => nanoid());
 
 async function seed(): Promise<void> {
   await db.insert(schema.users).values([
     { id: admin, email: `admin-${admin}@verify.test`, role: 'member' },
     { id: editor, email: `editor-${editor}@verify.test`, role: 'member' },
   ]);
-  await db.insert(schema.tabs).values({ id: board, name: 'verify-board-states', type: 'normal', createdBy: admin });
-  await seedBoardStates(db, board);
+  await db.insert(schema.tabs).values([
+    { id: board, name: 'verify-board-states', type: 'normal', createdBy: admin },
+    { id: boardDefault, name: 'verify-board-states default', type: 'normal', createdBy: admin },
+    { id: boardLeads, name: 'verify-board-states leads', type: 'normal', createdBy: admin },
+  ]);
+  for (const b of [board, boardDefault, boardLeads]) await seedBoardStates(db, b);
   await db.insert(schema.boardMembers).values([
     { tabId: board, userId: admin, role: 'admin' },
     { tabId: board, userId: editor, role: 'editor' },
+    { tabId: boardDefault, userId: admin, role: 'admin' },
+    { tabId: boardLeads, userId: admin, role: 'admin' },
   ]);
   await db.insert(schema.tasks).values([
     { id: taskA, homeTabId: board, text: 'A', status: 'todo', createdBy: admin, rank: 'a0' },
@@ -54,7 +60,7 @@ async function seed(): Promise<void> {
 
 async function cleanup(): Promise<void> {
   await db.delete(schema.auditLog).where(inArray(schema.auditLog.actorId, [admin, editor]));
-  await db.delete(schema.tabs).where(eq(schema.tabs.id, board)); // cascades tasks, states, members, events
+  await db.delete(schema.tabs).where(inArray(schema.tabs.id, [board, boardDefault, boardLeads])); // cascades tasks, states, members, events
   await db.delete(schema.users).where(inArray(schema.users.id, [admin, editor])); // cascades tokens, sessions
 }
 
@@ -147,6 +153,30 @@ try {
   check('...a state of the same category', (await statusOf(taskA)) === 'in_progress', await statusOf(taskA));
   const unusedKey = ((del.json() as any).states as any[]).find((s) => s.label === 'Extra 7').key;
   check('deleting an unused state needs no moveTo', (await A('DELETE', `${S}/${unusedKey}`)).statusCode === 200);
+
+  console.log('move');
+  const L = `/api/tabs/${boardLeads}/states`;
+  const contactedL = ((await A('POST', L, { label: 'Contacted', category: 'active' })).json() as any).state.key;
+  const wonL = ((await A('POST', L, { label: 'Won', category: 'done' })).json() as any).state.key;
+  await db.insert(schema.tasks).values([
+    { id: lead, homeTabId: boardLeads, text: 'lead', status: contactedL, createdBy: admin, rank: 'a0' },
+    { id: leadKid, homeTabId: boardLeads, text: 'kid', status: wonL, parentTaskId: lead, createdBy: admin, rank: 'a0' },
+    { id: plain, homeTabId: boardDefault, text: 'plain', status: 'in_review', createdBy: admin, rank: 'a0' },
+  ]);
+  const moveTo = (id: string, payload: object) => A('POST', `/api/tasks/${id}/move`, payload);
+  const plainMove = await moveTo(plain, { toTabId: boardLeads });
+  check('a move between boards that share the key needs no mapping', plainMove.statusCode === 200 && (await statusOf(plain)) === 'in_review', plainMove.body);
+  const asked = await moveTo(lead, { toTabId: boardDefault });
+  const aj = asked.json() as any;
+  check('a move with states the destination lacks -> 409 listing only those', asked.statusCode === 409 && aj.error === 'states_unmapped'
+    && aj.unmapped.map((u: any) => u.label).sort().join() === 'Contacted,Won' && aj.options.length === 6, asked.body);
+  check('a mapping to a key the destination lacks -> 400', (await moveTo(lead, { toTabId: boardDefault, states: { [contactedL]: 'nope', [wonL]: 'done' } })).statusCode === 400);
+  const mapped = await moveTo(lead, { toTabId: boardDefault, states: { [contactedL]: 'in_progress', [wonL]: 'done' } });
+  check('with a mapping the subtree moves and takes the mapped states', mapped.statusCode === 200 && (await statusOf(lead)) === 'in_progress' && (await statusOf(leadKid)) === 'done', mapped.body);
+  await new Promise((r) => setTimeout(r, 300));
+  const moveRow = (await db.select().from(schema.auditLog).where(and(eq(schema.auditLog.targetId, lead), eq(schema.auditLog.action, 'task_move'))))[0];
+  const sc = (moveRow?.payload as any)?.stateChanges ?? [];
+  check('the move audit row lists the state changes', sc.length === 2 && sc.some((c: any) => c.fromLabel === 'Won' && c.toLabel === 'Done' && c.count === 1), sc);
 } finally {
   await cleanup().catch((e) => console.error('cleanup failed', e));
   await app.close();

@@ -13,8 +13,8 @@ import { boardChannel, publish } from '../lib/bus.ts';
 import { taskDTO } from '../lib/assembleState.ts';
 import { isValidRank, rankAfter } from '../../shared/rank.ts';
 import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
-import { startKey } from '../../shared/status.ts';
-import { resolveStatus, statesOf, unknownStatusBody, withStatusLabels } from '../lib/boardStates.ts';
+import { categoryOf, startKey, visible } from '../../shared/status.ts';
+import { labelOf, liveStates, resolveStatus, statesOf, unknownStatusBody, withStatusLabels } from '../lib/boardStates.ts';
 
 /** Sibling order key. Validated on the way in — a malformed rank would corrupt every view's order
  *  silently, and it costs nothing to reject it at the edge. See shared/rank.ts. */
@@ -459,6 +459,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
    *      clear the ones that don't survive and SAY SO — in the response, so the mover is told, and
    *      in the audit row, so it is on the record who lost the task.
    *
+   *   4. EVERY STATE RESOLVES (BOARD_STATES_PLAN D9). States are per board, so each status in the
+   *      moved subtree has to name a state the destination has: one whose key is live there too
+   *      carries over as-is, any other needs the caller's choice in `states` (from key → to key).
+   *      Without one the move is refused with 409 `states_unmapped`, listing what needs a choice
+   *      and the options, so the client can ask and retry.
+   *
    * The task lands as a ROOT on the destination, appended: its old rank was ordered against a
    * different set of siblings and means nothing here.
    */
@@ -467,7 +473,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireBoardRole('editor', taskBoard), config: { pat: 'tasks' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
-      const b = z.object({ toTabId: z.string().min(1) }).safeParse(req.body);
+      const b = z.object({ toTabId: z.string().min(1), states: z.record(z.string(), z.string()).optional() }).safeParse(req.body);
       if (!b.success) return reply.code(400).send({ error: 'invalid move' });
       const userId = req.user!.id;
       const toTabId = b.data.toTabId;
@@ -478,7 +484,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // Already there: succeed without touching anything, so a retried op (the network dropped the
       // response) is not an error the client has to distinguish from a real failure.
       if (toTabId === fromTabId) {
-        return reply.send({ ok: true, moved: [], subtaskCount: 0, clearedAssignees: 0 });
+        return reply.send({ ok: true, moved: [], subtaskCount: 0, clearedAssignees: 0, stateChanges: [] });
       }
       // Editor on the destination too — the preHandler only proved it on the board being left.
       // 404 (not 403) keeps a board the caller can't see non-probeable, matching auth/boards.ts.
@@ -496,7 +502,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // Which assignments survive the move: everything pointing at a non-member of the destination
       // is cleared. Computed here (rather than in the UPDATE) so the counts below are exact.
       const rows = await db
-        .select({ id: schema.tasks.id, assigneeId: schema.tasks.assigneeId })
+        .select({ id: schema.tasks.id, assigneeId: schema.tasks.assigneeId, status: schema.tasks.status })
         .from(schema.tasks)
         .where(and(inArray(schema.tasks.id, ids), isNull(schema.tasks.deletedAt)));
       const roster = new Set(
@@ -506,6 +512,36 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           .where(eq(schema.boardMembers.tabId, toTabId))).map((m) => m.userId),
       );
       const clearAssignee = rows.filter((r) => r.assigneeId && !roster.has(r.assigneeId)).map((r) => r.id);
+
+      // (4) Where each status lands.
+      const fromStates = await statesOf(fromTabId);
+      const destStates = await liveStates(toTabId);
+      const destKeys = new Set(destStates.map((s) => s.key));
+      const counts = new Map<string, number>();
+      for (const r of rows) counts.set(r.status, (counts.get(r.status) ?? 0) + 1);
+      const mapTo = new Map<string, string>();
+      const unmapped: string[] = [];
+      for (const key of counts.keys()) {
+        const chosen = b.data.states?.[key];
+        if (chosen !== undefined) {
+          if (!destKeys.has(chosen)) return reply.code(400).send({ error: `“${chosen}” is not a state on the destination board` });
+          mapTo.set(key, chosen);
+        } else if (destKeys.has(key)) mapTo.set(key, key);
+        else unmapped.push(key);
+      }
+      if (unmapped.length) {
+        return reply.code(409).send({
+          error: 'states_unmapped',
+          unmapped: await Promise.all(unmapped.map(async (key) => ({
+            key, label: await labelOf(fromTabId, key), category: categoryOf(fromStates, key), color: fromStates.find((s) => s.key === key)?.color ?? 'grey', count: counts.get(key)!,
+          }))),
+          options: visible(destStates),
+        });
+      }
+      const remap = [...mapTo].filter(([from, to]) => from !== to);
+      const stateChanges = await Promise.all(remap.map(async ([from, to]) => ({
+        from, fromLabel: await labelOf(fromTabId, from), to, toLabel: await labelOf(toTabId, to), count: counts.get(from)!,
+      })));
 
       const rank = await nextSiblingRank(toTabId, null);
       // ONE statement — see (1) above. Only the moved ROOT is re-parented and re-ranked; the
@@ -520,6 +556,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           rank: sql`CASE WHEN ${schema.tasks.id} = ${id} THEN ${rank} ELSE ${schema.tasks.rank} END`,
           ...(clearAssignee.length
             ? { assigneeId: sql`CASE WHEN ${inArray(schema.tasks.id, clearAssignee)} THEN NULL ELSE ${schema.tasks.assigneeId} END` }
+            : {}),
+          ...(remap.length
+            ? { status: sql`CASE ${schema.tasks.status} ${sql.join(remap.map(([from, to]) => sql`WHEN ${from} THEN ${to}`), sql` `)} ELSE ${schema.tasks.status} END` }
             : {}),
           updatedAt: new Date(),
         })
@@ -552,6 +591,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           ...(kids.length ? { subtaskCount: kids.length } : {}),
           // Named, not just counted: "who lost this task" is the question the trail has to answer.
           ...(clearAssignee.length ? { clearedAssignees: rows.filter((r) => clearAssignee.includes(r.id)).map((r) => r.assigneeId) } : {}),
+          ...(stateChanges.length ? { stateChanges } : {}),
         },
       });
 
@@ -560,6 +600,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         moved: dtos,
         subtaskCount: kids.length,
         clearedAssignees: clearAssignee.length,
+        stateChanges,
       });
     },
   );

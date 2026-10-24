@@ -5,6 +5,8 @@ export interface DropdownOption {
   value: string;
   label: string;
   accent?: string;
+  /** A second line under the label, in the open list only (not the trigger). */
+  hint?: string;
 }
 
 interface Props {
@@ -122,7 +124,14 @@ export function Dropdown({ value, options, onChange, placeholder, searchable, se
                 onMouseDown={(e) => { e.preventDefault(); pick(o); }}
               >
                 {o.accent && <span className="dd-dot" style={{ background: o.accent }} />}
-                <span className="dd-option-label">{o.label}</span>
+                {o.hint ? (
+                  <span className="dd-option-label">
+                    {o.label}
+                    <span className="dd-option-hint">{o.hint}</span>
+                  </span>
+                ) : (
+                  <span className="dd-option-label">{o.label}</span>
+                )}
                 {o.value === value && (
                   <svg viewBox="0 0 16 16" width="12" height="12" className="dd-check" aria-hidden>
                     <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

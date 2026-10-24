@@ -4,6 +4,8 @@
 
 import { useOffline } from '../offline/status';
 import { askConfirm } from './useConfirm';
+import { UncontrolledStateMapper, type MapSource } from '../components/states/StateMapper';
+import type { BoardState } from '../../shared/status';
 
 /**
  * Deleting a space. Reachable from the sidebar (SpaceForm), the board grid (Board) and the filter
@@ -119,4 +121,25 @@ export function confirmDeleteComment(): Promise<boolean> {
     ),
     confirmLabel: 'Delete comment',
   });
+}
+
+/**
+ * Where the states a moved task uses go on a board that doesn't have them (BOARD_STATES_PLAN P5.3).
+ * Resolves the chosen mapping, or null on cancel. Asked only about the states with no match; a
+ * state whose key the destination also has carries over without a question.
+ */
+export async function askStateMapping(boardName: string, sources: MapSource[], targets: readonly BoardState[], initial: Record<string, string>): Promise<Record<string, string> | null> {
+  let chosen = initial;
+  const ok = await askConfirm({
+    title: `Move to ${boardName}`,
+    body: (
+      <>
+        <p>{boardName} doesn't have {sources.length === 1 ? 'this state' : 'these states'}. Pick where the tasks go.</p>
+        <UncontrolledStateMapper sources={sources} targets={targets} initial={initial} onChange={(v) => { chosen = v; }} />
+      </>
+    ),
+    confirmLabel: 'Move',
+    danger: false,
+  });
+  return ok ? chosen : null;
 }
