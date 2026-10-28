@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useStore } from './store';
 import { useSession } from './session/useSession';
 import { AuthScreen } from './components/AuthScreen';
-import { TopBar } from './components/TopBar';
 import { MobileNav } from './components/MobileNav';
 import { Sidebar } from './components/shell/Sidebar';
+import { NavTabs } from './components/shell/NavTabs';
+import { ShellHeader } from './components/shell/ShellHeader';
+import { useShell } from './components/shell/useShell';
 import { ScopeStrip } from './components/shell/ScopeStrip';
 import { Board } from './components/Board';
 import { TabView } from './components/TabView';
@@ -14,7 +16,7 @@ import { ImportCsvSheet } from './components/ImportCsvSheet';
 import { FilterPanel } from './components/FilterPanel';
 import { SearchPalette } from './components/SearchPalette';
 import { AdminPage } from './components/AdminPage';
-import { SecurityPanel } from './components/SecurityPanel';
+import { AppSettings } from './components/settings/AppSettings';
 import { MoreSheet } from './components/MoreSheet';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { CascadeToast } from './components/common/CascadeToast';
@@ -23,6 +25,7 @@ import { Toast } from './components/common/Toast';
 import { InfoPane } from './components/InfoPane';
 import { TaskPage } from './components/TaskPage';
 import { Loading } from './components/common/EmptyState';
+import { usePhone } from './util/usePhone';
 import {
   usePath,
   boardPath,
@@ -35,7 +38,7 @@ import {
   parseOpenTaskId,
 } from './util/router';
 
-export type Panel = 'new' | 'import' | 'filter' | 'search' | 'security' | 'more' | 'notifications' | 'help';
+export type Panel = 'new' | 'import' | 'filter' | 'search' | 'more' | 'notifications' | 'help';
 
 export default function App() {
   const status = useSession((s) => s.status);
@@ -165,12 +168,18 @@ function Workspace() {
 
   const active = activeTabId ? tabs[activeTabId] : null;
   const openTaskId = useStore((s) => s.openTaskId);
+  // The sidebar and the top bar hold the tabs and the header, one each; the layout setting says
+  // which. A phone has no sidebar, so its top bar is always the header (the bottom nav switches).
+  const layout = useShell((s) => s.layout);
+  const phone = usePhone();
+  const tabsTop = layout === 'tabs-top' && !phone;
+  const appSettingsOpen = useShell((s) => s.appSettings !== null);
 
   return (
     <div className="app-shell">
-      <Sidebar onOpen={setPanel} />
+      <Sidebar tabsHere={!tabsTop} onOpen={setPanel} />
       <div className="main">
-        <TopBar onOpen={setPanel} />
+        {tabsTop ? <NavTabs orientation="row" /> : <ShellHeader orientation="row" onOpen={setPanel} />}
         {plannerOpen ? (
           <CalendarView />
         ) : active && openTaskId ? (
@@ -192,9 +201,9 @@ function Workspace() {
       {panel === 'import' && <ImportCsvSheet onClose={closePanel} />}
       {panel === 'filter' && <FilterPanel onClose={closePanel} />}
       {panel === 'search' && <SearchPalette onClose={closePanel} />}
-      {panel === 'security' && <SecurityPanel onClose={closePanel} />}
       {panel === 'notifications' && <NotificationsPanel onClose={closePanel} />}
       {panel === 'more' && <MoreSheet onClose={closePanel} onOpen={setPanel} />}
+      {appSettingsOpen && <AppSettings />}
       {panel === 'help' && (
         <div className="modal-backdrop" onClick={closePanel}>
           <div className="info-modal" onClick={(e) => e.stopPropagation()}>

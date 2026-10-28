@@ -132,6 +132,12 @@ export interface HelpUpdate { id: string; date: string; title: string; body: str
 
 export const HELP_UPDATES: HelpUpdate[] = [
   {
+    id: '2026-10-28-tabs',
+    date: '2026-10-28',
+    title: 'Tabs for the boards you\'re working in',
+    body: 'Every board you open gets a tab, like in a browser, so switching between boards is one click. Close a tab with its ×, or middle-click it. "All boards" and "Calendar" are always the first two tabs. Your tabs are still there after a refresh. The board\'s name, space, Share and ⋯ now sit in the header, next to search, notifications and Import. Spaces moved to Settings (your account menu › Settings › Spaces), where you rename, recolour, delete and add them; to see one space\'s boards, pick it in the filter strip on the boards page. In Settings › Layout you choose whether the tabs go in the sidebar or across the top. The header takes the other one.',
+  },
+  {
     id: '2026-10-27-board-settings',
     date: '2026-10-27',
     title: 'Board settings, in one place',

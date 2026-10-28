@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { useStore } from '../../store';
+import { usePhone } from '../../util/usePhone';
 import { ActivityDrawer } from '../ActivityDrawer';
 import { MembersPanel } from '../MembersPanel';
 import { SprintsPage } from '../SprintsPage';
@@ -21,20 +22,6 @@ import { SecretsAccessSection } from './SecretsAccessSection';
 import { DangerSection } from './DangerSection';
 import { ADMIN_ONLY_SECTIONS, SECTION_GROUPS, SECTION_LABEL } from './sections';
 import type { BoardSettingsSection, ID } from '../../types';
-
-const PHONE = '(max-width: 720px)';
-
-/** Whether the phone layout applies — the same breakpoint the CSS uses. */
-function usePhone(): boolean {
-  const [phone, setPhone] = useState(() => window.matchMedia(PHONE).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(PHONE);
-    const onChange = () => setPhone(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return phone;
-}
 
 export function BoardSettings({ tabId, onOpenSprint }: {
   tabId: ID;

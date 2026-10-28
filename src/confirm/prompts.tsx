@@ -8,7 +8,7 @@ import { UncontrolledStateMapper, type MapSource } from '../components/states/St
 import type { BoardState } from '../../shared/status';
 
 /**
- * Deleting a space. Reachable from the sidebar (SpaceForm), the board grid (Board) and the filter
+ * Deleting a space. Reachable from Settings › Spaces (SpacesSection), the board grid (Board) and the filter
  * popover (FilterPanel).
  *
  * The copy describes what the SERVER does — a space is a personal category, and deleting one

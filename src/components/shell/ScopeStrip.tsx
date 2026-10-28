@@ -1,13 +1,18 @@
-// The scope strip: a full-width row under the top bar in the board grid. Shows the current
-// space scope + the filter facets inline (no popover) + a board count. Reuses the exact same
+// The scope strip: a full-width row under the top bar in the board grid. Shows the space picker
+// + the filter facets inline (no popover) + a board count. Reuses the exact same
 // `filter` state and setFilter toggles as the old FilterPanel — it's the same filter, surfaced
 // as a persistent strip instead of a dropdown. (The mobile MoreSheet still opens FilterPanel.)
 
+import { useMemo } from 'react';
 import { useStore } from '../../store';
 import { PRIORITY_LABELS } from '../../util/filter';
+import { Dropdown } from '../Dropdown';
+
+const ALL = 'all';
 
 export function ScopeStrip() {
   const projects = useStore((s) => s.projects);
+  const projectOrder = useStore((s) => s.projectOrder);
   const tabs = useStore((s) => s.tabs);
   const filter = useStore((s) => s.filter);
   const setFilter = useStore((s) => s.setFilter);
@@ -16,6 +21,14 @@ export function ScopeStrip() {
   const boardCount = Object.values(tabs).filter(
     (t) => t.type !== 'today' && (filter.projectIds.length ? filter.projectIds.includes(t.projectId) : true),
   ).length;
+
+  const spaceOptions = useMemo(
+    () => [
+      { value: ALL, label: 'All spaces' },
+      ...projectOrder.filter((id) => projects[id]).map((id) => ({ value: id, label: projects[id].name, accent: projects[id].color })),
+    ],
+    [projectOrder, projects],
+  );
 
   const togglePriority = (p: 1 | 2 | 3) => {
     const xs = filter.priorities.includes(p) ? filter.priorities.filter((x) => x !== p) : [...filter.priorities, p];
@@ -39,20 +52,15 @@ export function ScopeStrip() {
       </label>
 
       <div className="scope-facets">
-        {/* The space scope is a pill inline with the filter pills — it's the single place the name
-            is shown on the grid (the board group header is suppressed when scoped to one space).
-            Clicking it un-scopes. */}
-        {scoped && (
-          <button
-            className="pill pill-space"
-            title={`Clear ${scoped.name} scope`}
-            onClick={() => setFilter({ projectIds: [] })}
-          >
-            <span className="scope-dot" style={{ background: scoped.color }} />
-            {scoped.name}
-            <span className="pill-x" aria-hidden>×</span>
-          </button>
-        )}
+        {/* The space scope, now that spaces left the sidebar for Settings: one picker, inline with
+            the filter pills. It is the single place the name is shown on the grid (the board group
+            header is suppressed when scoped to one space). */}
+        <Dropdown
+          className="is-compact"
+          value={scoped?.id ?? ALL}
+          options={spaceOptions}
+          onChange={(id) => setFilter({ projectIds: id === ALL ? [] : [id] })}
+        />
         {([1, 2, 3] as const).map((p) => (
           <button
             key={p}

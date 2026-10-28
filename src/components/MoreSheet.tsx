@@ -2,6 +2,7 @@ import { useStore } from '../store';
 import { useSession } from '../session/useSession';
 import { useNotifications } from '../notifications/useNotifications';
 import { confirmSignOut } from '../confirm/prompts';
+import { useShell } from './shell/useShell';
 import type { Panel } from '../App';
 
 // Overflow sheet for the mobile bottom nav: secondary actions that don't earn a
@@ -9,6 +10,7 @@ import type { Panel } from '../App';
 export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (panel: Panel) => void }) {
   const needs2fa = useSession((s) => !!s.user && !s.user.totpEnabled);
   const logout = useSession((s) => s.logout);
+  const setAppSettings = useShell((s) => s.setAppSettings);
   const unread = useNotifications((s) => s.unread);
   const resetFilter = useStore((s) => s.resetFilter);
   const filterCount = useStore((s) => {
@@ -43,9 +45,9 @@ export function MoreSheet({ onClose, onOpen }: { onClose: () => void; onOpen: (p
             <span>clear filters</span>
           </button>
         )}
-        <button className="sheet-row" onClick={() => onOpen('security')}>
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8 2l5 2v3.5c0 3-2.1 5.3-5 6.5-2.9-1.2-5-3.5-5-6.5V4l5-2z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M6 8l1.5 1.5L11 6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          <span>security</span>
+        <button className="sheet-row" onClick={() => { setAppSettings(needs2fa ? 'security' : 'spaces'); onClose(); }}>
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          <span>settings</span>
           {needs2fa && <span className="sheet-dot" aria-label="two-factor not set up" />}
         </button>
         <button

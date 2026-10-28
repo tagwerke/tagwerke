@@ -1300,8 +1300,6 @@ button.pill:hover { border-color: var(--line-strong); }
   }
 
 /* ── security / two-factor panel ──────────────────────────────────────── */
-.security-modal { overflow-y: auto; }
-@media (min-width: 721px) { .security-modal { width: min(520px, calc(100vw - 32px)); max-height: min(84vh, 780px); } }
 .security-body { display: flex; flex-direction: column; gap: 14px; padding-top: 16px; }
 .security-body > .notice { margin-bottom: 0; }
 .security-act { align-self: flex-start; }
@@ -1666,9 +1664,7 @@ button.pill:hover { border-color: var(--line-strong); }
 .space-add-row { width: 100%; display: flex; align-items: center; gap: 9px; padding: 6px 8px 6px 9px; border-radius: var(--r-sm); border: 1px dashed var(--line-strong); background: none; color: var(--ink-mute); font-size: var(--fs-md); cursor: pointer; }
 .space-add-row:hover { color: var(--ink); border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .space-add-icon { width: 14px; flex: none; text-align: center; font-size: var(--fs-base); line-height: 1; }
-/* Shared space create/edit popover (SpaceForm). Anchored under its trigger (the + in the section
-   head, or a space row's gear) and spanning that container's width. */
-.space-form { position: absolute; top: calc(100% + 4px); left: 9px; right: 6px; z-index: 40; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-pop); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+/* Space editing rows (Settings › Spaces) reuse these field, swatch and action styles. */
 .space-form-name { width: 100%; padding: 6px 8px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg-paper); color: var(--ink); font-size: var(--fs-md); }
 .space-form-name:focus { outline: none; border-color: var(--line-strong); }
 .space-form-colors { display: flex; gap: 6px; }
@@ -1680,43 +1676,106 @@ button.pill:hover { border-color: var(--line-strong); }
 .space-form-action.danger { color: var(--pop); border-color: color-mix(in srgb, var(--pop) 30%, transparent); }
 .space-form-action.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--pop) 8%, transparent); }
 
-/* Agenda rail — timeline (matches internal/design/shell-d-hybrid.html). The header is the
-   calendar opener: a real (always-visible) chevron, not a hover-only text arrow, since this is a
-   navigation link, not just a content label. */
-.agenda-head { width: 100%; display: flex; align-items: center; gap: 8px; margin: 0; padding: 3px 4px 3px 9px; border: 0; border-radius: var(--r-sm); background: none; cursor: pointer; }
-.agenda-head:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
-.agenda-title { font-family: var(--serif); font-style: italic; font-size: var(--fs-h3); font-weight: 600; }
-.agenda-open { margin-left: auto; flex: none; color: var(--ink-mute); }
-.agenda-head:hover .agenda-open { color: var(--ink); }
-.agenda-sub { font-size: var(--fs-xs); color: var(--ink-mute); margin: 0; padding: 0 4px 12px 9px; }
+/* ── Tabs + header (the two bars) ────────────────────────────────────────
+   The sidebar and the top bar hold the tabs and the header, one each (useShell's layout). Each is
+   drawn in both shapes: .navtabs is the strip, .navtabs-col the column (on the sidebar's row
+   classes); .shell-header.is-row the bar, .shell-header.is-col the column. */
 
-.agenda-timeline { position: relative; margin: 0 2px 8px 46px; border-left: 1px solid var(--line); }
-.agenda-hour { position: relative; height: 50px; }
-.agenda-hour::before { content: attr(data-h); position: absolute; left: -42px; top: -7px; font-family: var(--mono); font-size: var(--fs-2xs); color: var(--ink-mute); width: 34px; text-align: right; }
-.agenda-hour::after { content: ""; position: absolute; left: 0; top: 0; width: 5px; height: 1px; background: var(--line); }
+/* Tabs as a strip: hugs the top edge of the main column like a browser's. */
+.navtabs {
+  display: flex; align-items: flex-end; gap: 2px;
+  margin: -20px calc(-1 * clamp(16px, 3vw, 32px)) 20px;
+  padding: 8px clamp(16px, 3vw, 32px) 0;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto; scrollbar-width: thin;
+}
+.navtab {
+  display: flex; align-items: center; flex: 0 1 200px; min-width: 96px;
+  border: 1px solid transparent; border-bottom: 0; border-radius: var(--r-md) var(--r-md) 0 0;
+  margin-bottom: -1px;
+}
+.navtab.is-fixed { flex: none; min-width: 0; }
+.navtab:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.navtab.on { background: var(--bg); border-color: var(--line); }
+.navtab-main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px 8px 12px; border: 0; background: none; text-align: left;
+  font-size: var(--fs-md); color: var(--ink-soft); cursor: pointer;
+}
+.navtab.on .navtab-main { color: var(--ink); font-weight: 600; }
+.navtab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.navtab-close {
+  width: 20px; height: 20px; margin-right: 6px; flex: none; display: grid; place-items: center;
+  border: 0; border-radius: var(--r-sm); background: none; color: var(--ink-mute);
+  font-size: var(--fs-base); cursor: pointer; opacity: 0; transition: opacity .12s;
+}
+.navtab:hover .navtab-close, .navtab.on .navtab-close, .navtab-close:focus-visible { opacity: 1; }
+.navtab-close:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+.navtabs-divider { flex: none; align-self: center; width: 1px; height: 18px; margin: 0 6px 8px; background: var(--line-strong); }
+.navtab-icon { flex: none; color: var(--ink-mute); }
+.on > * > .navtab-icon { color: var(--ink); }
 
-.agenda-ev { position: absolute; display: flex; flex-direction: column; gap: 1px; border-radius: var(--r-sm); padding: 4px 8px; cursor: pointer; box-shadow: var(--shadow-card); overflow: hidden; text-align: left; }
-.agenda-ev .k { font-family: var(--mono); font-size: var(--fs-2xs); letter-spacing: 0.3px; }
-.agenda-ev .nm2 { font-size: var(--fs-sm); font-weight: 600; line-height: 1.12; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.agenda-ev .mt { font-size: var(--fs-2xs); color: var(--ink-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.agenda-ev.meet { background: color-mix(in srgb, var(--accent, var(--pop)) 13%, var(--bg-paper)); border: 1px solid color-mix(in srgb, var(--accent, var(--pop)) 35%, transparent); }
-.agenda-ev.meet .k { color: var(--accent, var(--pop)); }
-.agenda-ev.solo { background: var(--bg-paper); border: 1px dashed var(--line-strong); }
-.agenda-ev.solo .k { color: var(--ink-mute); }
-.agenda-ev:hover { box-shadow: var(--shadow-pop); filter: brightness(1.02); z-index: 3; }
+/* Tabs as a column. */
+.navtabs-col { display: flex; flex-direction: column; gap: 18px; }
+.navtabs-col .space-main .navtab-icon { margin-left: -3px; }
+.navtabs-empty { margin: 0; padding: 0 4px 0 9px; font-size: var(--fs-sm); color: var(--ink-mute); }
 
-.agenda-nowline { position: absolute; left: -42px; right: 0; height: 1px; background: var(--pop); z-index: 4; pointer-events: none; }
-.agenda-nowline::before { content: ""; position: absolute; left: 34px; top: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--pop); }
-.agenda-nowline .lbl { position: absolute; left: -2px; top: -6px; font-family: var(--mono); font-size: var(--fs-2xs); color: var(--pop); font-weight: 700; }
+/* The header, either shape. The open board's part sits first and takes the free space. */
+.shell-board { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+.shell-board-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.shell-board-controls { display: flex; align-items: center; gap: 6px; flex: none; }
+.shell-label { display: none; }
 
-.agenda-add { margin: 6px 0 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-soft); background: var(--bg-paper); border: 1px solid var(--line-strong); border-radius: 999px; padding: 6px 10px; cursor: pointer; }
-.agenda-add:hover { color: var(--ink); border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.shell-header.is-row { justify-content: flex-start; gap: 12px; }
+.shell-header.is-row .topbar-actions { margin-left: auto; }
+.shell-header.is-row .board-title { font-size: var(--fs-h2); min-width: 80px; }
+.shell-header.is-row .sidebar-account { width: auto; padding: 3px; border-top: 0; border-radius: 999px; }
+.shell-header.is-row .sidebar-account-email { display: none; }
+@media (max-width: 1280px) {
+  /* Room for the board's name first: the app's buttons keep their icons and tooltips. */
+  .shell-header.is-row .topbar-actions > .btn:not(.btn-new-tab) > span,
+  .shell-header.is-row .topbar-utility > .btn:not(.topbar-help) > span:not(.notif-badge) { display: none; }
+}
+
+.shell-header.is-col {
+  flex: 1; min-height: 0; margin: 0;
+  flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 12px;
+}
+.shell-header.is-col .topbar-back { align-self: flex-start; }
+.shell-header.is-col .shell-board { flex: none; flex-direction: column; align-items: stretch; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.shell-header.is-col .shell-board-title { flex-direction: column; align-items: flex-start; gap: 6px; }
+.shell-header.is-col .board-title { font-size: var(--fs-h3); }
+.shell-header.is-col .shell-board-controls { flex-wrap: wrap; }
+.shell-header.is-col .topbar-actions,
+.shell-header.is-col .topbar-utility { flex-direction: column; align-items: stretch; gap: 2px; }
+.shell-header.is-col .topbar-actions { flex: 1; }
+.shell-header.is-col .topbar-actions .btn { justify-content: flex-start; }
+.shell-header.is-col .topbar-actions .btn.ghost { border-color: transparent; }
+.shell-header.is-col .topbar-actions .btn.ghost:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.shell-header.is-col .btn-new-tab { justify-content: center; margin-top: 8px; }
+.shell-header.is-col .topbar-divider { width: auto; height: 1px; margin: 6px 0; }
+.shell-header.is-col .shell-label { display: inline; }
+.shell-header.is-col .notif-badge { position: static; margin-left: auto; }
+.shell-header.is-col .help-btn-dot { position: static; margin-left: auto; }
+.shell-header.is-col .sidebar-account-wrap { margin-top: auto; }
+
+/* The account menu under a top-bar account button, right edges aligned. */
+.profile-drawer.is-below { bottom: auto; top: calc(100% + 6px); left: auto; right: 0; width: 240px; }
+
+/* Settings › Spaces: one editable row per space, then the add row. */
+.spaces-list { display: flex; flex-direction: column; gap: 10px; }
+.spaces-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.spaces-row .space-form-name { flex: 1 1 160px; width: auto; }
 
 /* Phones: the sidebar folds away; the bottom nav takes over (Phase 8 refines). */
 @media (max-width: 720px) {
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .main { padding: 16px 16px calc(72px + env(safe-area-inset-bottom)); }
+  .shell-header.is-row { flex-wrap: wrap; }
+  /* The space above the name, as the board's own title row had it, so the name gets the width. */
+  .shell-board { flex: 1 1 100%; }
+  .shell-board-title { flex-direction: column; align-items: flex-start; gap: 4px; }
 }
 
 /* ── Scope strip (board grid: scope + inline facets + count) ─────────────── */
@@ -1736,14 +1795,11 @@ button.pill:hover { border-color: var(--line-strong); }
 .scope-clear:hover { color: var(--ink); }
 @media (max-width: 720px) { .scope-strip { display: none; } }
 
-/* ── Open board: stripped header + view toggle + content|panel canvas ─────── */
+/* ── Open board: view toggle + content canvas (its title row is in the shell header) ── */
 .tab-view.tab-open { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
-.board-head { display: flex; align-items: center; gap: 12px; padding: 16px clamp(16px, 3vw, 32px) 6px; }
-.board-head-title { display: flex; flex-direction: column; gap: 5px; min-width: 0; margin-right: auto; }
 .board-eyebrow { color: var(--page-accent, var(--pop)); }
 .board-title { background: none; border: 0; padding: 0; font-family: var(--serif); font-style: italic; font-weight: 600; font-size: var(--fs-h1); letter-spacing: -0.5px; line-height: 1.1; color: var(--ink); outline: none; width: 100%; }
 .board-title:focus { background: color-mix(in srgb, var(--ink) 4%, transparent); border-radius: var(--r-sm); }
-.board-head-right { display: flex; align-items: center; gap: 6px; }
 .presence.avatar-stack { margin-right: 2px; }
 
 .help-btn-dot { position: absolute; top: 1px; right: 1px; width: 7px; height: 7px; border-radius: 50%; background: var(--pop); border: 1.5px solid var(--bg-paper); }
@@ -2077,7 +2133,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .sidebar .brand-name { font-size: var(--fs-h2); }
 .sidebar-account .avatar { flex: none; }
 
-/* Agenda rail item: tighter, mockup spacing. */
 
 /* ── Calendar (events time grid) ──────────────────────────────────────────
    A day/week hour grid. Header row + all-day row + scroll body share one grid
@@ -2152,8 +2207,6 @@ button.pill:hover { border-color: var(--line-strong); }
 
 /* RSVP row (reuses .rsvp-btn / .occ-rsvp). */
 .cal-rsvp { flex-direction: row; align-items: center; justify-content: space-between; }
-
-/* Sidebar agenda rows are now inline-editable; reveal a quick-delete on hover/focus. */
 
 /* Meeting agenda: live board tasks, filtered. */
 .cal-agenda-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
@@ -2567,11 +2620,6 @@ button.pill:hover { border-color: var(--line-strong); }
   text-overflow: ellipsis;
   flex-shrink: 0;
 }
-
-/* ── Board header ─────────────────────────────────────────────────────────
-   One definition, up at .board-head — this section only adds what is new.
-   The board's own controls (?, star, panel) sit together on the right; the
-   app's navigation left with the top strip entirely. */
 
 /* ── The table cursor: moving through rows like a document ────────────────── */
 .work-table:focus { outline: none; }
