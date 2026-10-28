@@ -55,6 +55,15 @@ export function formatDateChip(iso: string, now = new Date()): string {
   return sameYear ? `${m} ${d.getDate()}` : `${m} ${d.getDate()} ${d.getFullYear()}`;
 }
 
+/** A date as a control shows it: "Today", "Tomorrow", "Tue, Nov 4", "Tue, Nov 4, 2027". */
+export function formatDateLabel(iso: string, now = new Date()): string {
+  const chip = formatDateChip(iso, now);
+  if (chip === 'today' || chip === 'tomorrow') return chip[0].toUpperCase() + chip.slice(1);
+  const d = new Date(iso + 'T00:00:00');
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) });
+}
+
 /** Compact relative time for presence stamps: "just now", "5m ago", "3h ago", "2d ago". */
 export function timeAgo(iso: string, now = new Date()): string {
   const then = new Date(iso).getTime();

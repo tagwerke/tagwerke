@@ -13,6 +13,7 @@ import { EventEditor } from './EventEditor';
 import { dayOf } from './geometry';
 import type { CalendarEvent } from '../../types';
 import { Segmented } from '../common/Segmented';
+import { DatePicker } from '../common/DatePicker';
 
 interface EditorTarget {
   day: string;
@@ -114,7 +115,16 @@ export function CalendarView() {
               <svg viewBox="0 0 16 16" width="14" height="14"><path d="M6 3l6 5-6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
             </button>
           </div>
-          <input type="date" className="calendar-date-input" value={plannerDate} onChange={(e) => e.target.value && setPlannerDate(e.target.value)} />
+          {/* A jump, not a field: there is always a day showing, so nothing to clear, and Today is
+              already the button beside it. */}
+          <DatePicker
+            className="calendar-date-picker"
+            value={plannerDate}
+            clearable={false}
+            quickPicks={false}
+            ariaLabel="Go to date"
+            onChange={(d) => d && setPlannerDate(d)}
+          />
         </div>
         <Segmented
           className="calendar-modes"

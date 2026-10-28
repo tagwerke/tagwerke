@@ -26,6 +26,7 @@ import { newestFirst } from '../util/sprints';
 import { formatTimestamp, timeAgo } from '../util/dates';
 import { EmptyState } from './common/EmptyState';
 import { Dropdown } from './Dropdown';
+import { DatePicker } from './common/DatePicker';
 import { MAX_TASK_DEPTH } from '../../shared/tree';
 
 /** One row of the property rail: label left, a control that reads as plain text until hovered.
@@ -190,7 +191,10 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
           />
         </div>
 
+        {/* The aside is the full-height side pane (its rule runs to the foot of the board); the
+            inner block is what sticks while the thread scrolls. */}
         <aside className="task-page-props" aria-label="task properties">
+          <div className="task-page-props-inner">
           {/* No Status row here: the StatusControl in the title row is the one status affordance,
               shared with board rows and the Planner. */}
           <Prop label="Assignee">
@@ -214,12 +218,11 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
           </Prop>
 
           <Prop label="Date">
-            <input
-              type="date"
-              className={task.date ? '' : 'is-unset'}
-              value={task.date ?? ''}
+            <DatePicker
+              value={task.date}
               disabled={!editable}
-              onChange={(e) => setTaskMeta(task.id, { date: e.target.value || undefined })}
+              align="right"
+              onChange={(date) => setTaskMeta(task.id, { date })}
             />
           </Prop>
 
@@ -241,6 +244,7 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
               Created {timeAgo(iso(task.createdAt))}
             </div>
           )}
+          </div>
         </aside>
 
         <div className="task-page-main">

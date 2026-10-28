@@ -1898,26 +1898,25 @@ button.pill:hover { border-color: var(--line-strong); }
 .states-add { align-self: flex-start; }
 
 /* ── Task page (`/b/:id/task/:id`) ───────────────────────────────────────── */
-/* One surface: the page. Sections are a caps heading over a hairline, never a card of their own,
-   and the only box is the comment field. The content column and the property rail are centred
-   together so a wide screen does not open a dead gutter between them; the rail sticks while a
-   long thread scrolls under it. */
-.task-page-body {
-  display: grid;
-  grid-template-columns: minmax(0, 720px) 240px;
-  grid-template-rows: auto auto 1fr;
-  grid-template-areas: "crumbs crumbs" "title props" "main props";
-  justify-content: center;
-  column-gap: 48px;
-  padding: 14px clamp(16px, 3vw, 40px) 64px;
-  flex: 1; min-height: 0;
-}
-/* The document scrolls this page, not the card: nothing above it bounds its height. So no
+/* The board card, edge to edge. A toolbar row (where the task lives, ⋯) runs across the top; under
+   it the content takes every pixel the card has, and the properties are a full-height side pane
+   on the right. Inside the content, sections are a caps heading over a hairline, never a card of
+   their own, and the only box is the comment field.
+
+   The document scrolls this page, not the card: nothing above it bounds its height. So no
    ancestor between the rail and the viewport may clip, or `position: sticky` binds to a box that
    never scrolls and the rail rides away with the thread. (.tab-open clips for the board views.) */
-.tab-view.tab-open.task-page { overflow: visible; }
+.tab-view.tab-open.task-page { flex: 1 0 auto; overflow: visible; }
+.task-page-body {
+  --tp-pad: clamp(20px, 3vw, 40px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas: "crumbs crumbs" "title props" "main props";
+  flex: 1; min-height: 0;
+}
 
-.task-page-crumbs { grid-area: crumbs; display: flex; align-items: center; gap: 2px; min-width: 0; margin-bottom: 18px; font-size: var(--fs-md); }
+.task-page-crumbs { grid-area: crumbs; display: flex; align-items: center; gap: 2px; min-width: 0; min-height: 50px; padding: 8px var(--tp-pad); border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
 .task-crumb-step { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
 .task-crumb {
   display: inline-block; min-width: 0; max-width: 32ch; padding: 4px 6px;
@@ -1930,7 +1929,7 @@ button.pill:hover { border-color: var(--line-strong); }
 .task-crumb-sep { color: var(--ink-mute); }
 .task-page-menu { margin-left: auto; flex: none; width: 30px; height: 30px; }
 
-.task-page-title-row { grid-area: title; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.task-page-title-row { grid-area: title; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 28px var(--tp-pad) 0; }
 .task-page-title {
   flex: 1; min-width: 0; margin-left: -6px; padding: 2px 6px;
   font-family: var(--serif); font-style: italic; font-weight: 600; font-size: var(--fs-h1); letter-spacing: -0.4px; line-height: 1.25;
@@ -1938,31 +1937,35 @@ button.pill:hover { border-color: var(--line-strong); }
 }
 .task-page-title:hover:not(:disabled), .task-page-title:focus { background: color-mix(in srgb, var(--ink) 4%, transparent); }
 
-/* The property rail: label left, a control that reads as a plain value until you reach for it. */
-.task-page-props { grid-area: props; align-self: start; position: sticky; top: 16px; display: flex; flex-direction: column; padding: 2px 0 0 20px; border-left: 1px solid var(--line); }
-.task-prop { display: grid; grid-template-columns: 70px minmax(0, 1fr); align-items: center; min-height: 36px; }
+/* The property pane: label left, a control that reads as a plain value until you reach for it.
+   The pane runs the card's full height (a faint tint and a rule set it apart); what sticks is the
+   block inside it. Its corner is rounded to the card's, since the card no longer clips. */
+.task-page-props { grid-area: props; min-width: 0; border-left: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 2.5%, transparent); border-bottom-right-radius: calc(var(--r-lg) - 1px); }
+.task-page-props-inner { position: sticky; top: 0; display: flex; flex-direction: column; padding: 20px 24px; }
+.task-prop { display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; min-height: 38px; }
 .task-prop-label { font-size: var(--fs-sm); color: var(--ink-mute); }
 .task-prop-value { min-width: 0; }
-.task-prop .dd-trigger, .task-prop input[type="date"] {
+.task-prop .dd-trigger {
   width: calc(100% + 8px); margin-left: -8px; padding: 6px 8px;
   border: 1px solid transparent; border-radius: var(--r-sm); background: transparent;
   font: inherit; font-size: var(--fs-md); color: var(--ink); outline: none;
 }
-.task-prop .dd-trigger:hover:not(:disabled), .task-prop input[type="date"]:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.task-prop .dd-trigger:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .task-prop .dd-trigger:focus { border-color: transparent; }
-.task-prop .dd-trigger:focus-visible, .task-prop .dd.open .dd-trigger, .task-prop input[type="date"]:focus { border-color: var(--pop); background: var(--bg-elev); }
+.task-prop .dd-trigger:focus-visible, .task-prop .dd.open .dd-trigger { border-color: var(--pop); background: var(--bg-elev); }
 /* A viewer reads values; greying them out says "broken", not "read-only". */
-.task-prop .dd-trigger:disabled, .task-prop input[type="date"]:disabled { opacity: 1; cursor: default; }
+.task-prop .dd-trigger:disabled { opacity: 1; cursor: default; }
 .task-prop .dd-caret { opacity: 0; transition: opacity .12s; }
 .task-prop:hover .dd-caret, .task-prop .dd.open .dd-caret, .task-prop .dd-trigger:focus-visible .dd-caret { opacity: 1; }
 .task-prop .dd-trigger:disabled .dd-caret { display: none; }
-.task-prop .dd.is-unset .dd-trigger-value, .task-prop input.is-unset { color: var(--ink-mute); }
+.task-prop .dd.is-unset .dd-trigger-value { color: var(--ink-mute); }
 .task-prop .dd.is-priority .dd-trigger-value { font-family: var(--mono); font-weight: 700; color: var(--pop); }
 /* The rail is the right-most column: open its lists leftward so they never run off the page. */
 .task-prop .dd-panel { left: auto; right: -8px; min-width: 200px; }
+.task-prop .dp-icon { display: none; }
 .task-props-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-xs); line-height: 1.8; color: var(--ink-mute); }
 
-.task-page-main { grid-area: main; min-width: 0; }
+.task-page-main { grid-area: main; min-width: 0; padding: 0 var(--tp-pad) 56px; }
 /* Prose on the page, not a box with a scrollbar: it grows with its text (TaskPage sizes it). */
 .task-page-description {
   display: block; width: calc(100% + 16px); margin: 12px -8px 0; padding: 6px 8px;
@@ -2014,20 +2017,58 @@ button.pill:hover { border-color: var(--line-strong); }
   .task-prop .dd-caret { opacity: 1; }
 }
 @media (max-width: 720px) {
-  .task-page-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "crumbs" "title" "props" "main"; align-content: start; padding: 10px 16px 40px; }
-  .task-page-crumbs { margin-bottom: 10px; }
+  .task-page-body { --tp-pad: 16px; grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "crumbs" "title" "props" "main"; align-content: start; }
+  .task-page-crumbs { min-height: 44px; padding: 4px 10px; }
+  .task-page-title-row { padding-top: 16px; }
+  .task-page-main { padding-bottom: 40px; }
   /* Has to outrank the phone breakpoint's "every text input is 16px" rule (the iOS zoom fix),
      whose :not() chain beats a plain class. The title is larger than 16px, which is all that fix
      needs; the description and comment field are held at 16px for the same reason. */
   .task-page .task-page-title-row input.task-page-title:not([type="date"]) { font-size: var(--fs-h2); }
   .task-page-description, .task-page .comment-input { font-size: var(--fs-lg); }
-  /* On a phone the rail becomes a row of chips under the title — not a list below the thread. */
-  .task-page-props { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; margin-top: 14px; padding: 0; border-left: 0; }
+  /* On a phone the pane becomes a row of chips under the title — not a list below the thread. */
+  .task-page-props { border-left: 0; background: none; }
+  .task-page-props-inner { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 14px 16px 0; }
   .task-prop { display: inline-flex; align-items: center; gap: 2px; min-height: 40px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-paper); }
   .task-prop-label { font-size: var(--fs-xs); }
-  .task-prop .dd-trigger, .task-prop input[type="date"] { width: auto; margin-left: 0; padding: 6px 8px; }
+  .task-prop .dd-trigger { width: auto; margin-left: 0; padding: 6px 8px; }
   .task-prop .dd-caret { opacity: 1; }
   .task-props-foot { display: none; }
+}
+
+/* ── Date picker (common/DatePicker.tsx) ─────────────────────────────────
+   A Dropdown in every respect but its panel: same trigger, same floating surface. */
+.dp-icon { flex: none; color: var(--ink-mute); }
+.dp-panel { width: 272px; padding: 10px; gap: 8px; }
+.dp-panel.is-right { left: auto; right: 0; }
+.dp-head { display: flex; align-items: center; justify-content: space-between; }
+.dp-head .icon-btn { width: 30px; height: 30px; }
+.dp-month { font-family: var(--serif); font-style: italic; font-weight: 600; font-size: var(--fs-lg); color: var(--ink); }
+.dp-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.dp-weekday { padding: 4px 0; text-align: center; font-size: var(--fs-2xs); font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-mute); }
+.dp-day {
+  height: 34px; border: 0; border-radius: var(--r-sm); background: none;
+  font: inherit; font-size: var(--fs-md); font-variant-numeric: tabular-nums; color: var(--ink); cursor: pointer;
+}
+.dp-day:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.dp-day:focus-visible { outline: 2px solid var(--pop); outline-offset: -2px; }
+.dp-day.is-outside { color: var(--ink-mute); }
+.dp-day.is-today { box-shadow: inset 0 0 0 1px var(--line-strong); font-weight: 600; }
+.dp-day.is-selected, .dp-day.is-selected:hover { background: var(--ink); color: var(--bg-paper); font-weight: 600; box-shadow: none; }
+.dp-foot { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
+.dp-pick {
+  height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: none;
+  font: inherit; font-size: var(--fs-sm); color: var(--ink-soft); cursor: pointer;
+}
+.dp-pick:hover { border-color: var(--line-strong); color: var(--ink); }
+.dp-pick.is-selected { border-color: var(--ink); color: var(--ink); }
+.dp-clear { margin-left: auto; border-color: transparent; color: var(--ink-mute); }
+/* On a phone the trigger can sit anywhere in a wrapping row of chips, so no anchored panel is sure
+   to fit beside it. The month opens as a sheet above the bottom nav instead, full width, with
+   finger-sized days. */
+@media (max-width: 720px) {
+  .dp-panel, .dp-panel.is-right { position: fixed; top: auto; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom)); width: auto; min-width: 0; z-index: 70; }
+  .dp-day { height: 42px; }
 }
 
 /* ── Polish pass: align shipped UI with the internal mockups ──────────────── */
@@ -2049,7 +2090,7 @@ button.pill:hover { border-color: var(--line-strong); }
 .calendar-datenav .icon-btn { border-radius: 999px; }
 .calendar-datenav .btn.ghost { border: 0; background: none; height: 26px; padding: 0 10px; }
 .calendar-modes { margin-left: auto; }
-.calendar-date-input { height: 30px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-paper); color: var(--ink-soft); font: inherit; font-size: var(--fs-sm); padding: 0 8px; }
+.calendar-date-picker .dd-trigger { height: 30px; padding: 0 10px; background: var(--bg-paper); color: var(--ink-soft); font-size: var(--fs-sm); }
 .calendar-error { font-size: var(--fs-sm); color: var(--pop); margin-bottom: 8px; }
 
 .cal-grid { --cal-gutter: 52px; display: flex; flex-direction: column; min-height: 0; flex: 1; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; background: var(--bg-paper); }
