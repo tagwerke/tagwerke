@@ -13,7 +13,9 @@
   padding: 10px 12px;
   transition: border-color .12s ease, background .12s ease;
 }
-.doc-strip.is-task { margin-bottom: 20px; }
+/* On the task page the strip is a section of the page, not a card: TaskPage's CSS gives it the
+   page's section heading, and the border stays transparent so a drag can still light it up. */
+.doc-strip.is-task { padding: 0; border-color: transparent; background: transparent; border-radius: var(--r-sm); }
 .doc-strip.is-board { margin: 10px clamp(16px, 3vw, 32px); padding: 14px 16px; }
 
 /* Mid-drag. Same treatment as .btn.ghost.has-filter — the accent border plus a wash of it — so a

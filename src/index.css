@@ -247,7 +247,7 @@ input, select, textarea { font: inherit; color: inherit; }
    eyebrow-sm  — a compact column/section tag (10px, bold)
    label-caps  — a form label, divider or hint (11px, regular)
    Each selector below keeps only its own colour/margins; the typography lives here. */
-.sidebar-sec-label, .info-pane-updates h3, .info-section h3, .info-go-faster summary, .task-page-subtasks-head,
+.sidebar-sec-label, .info-pane-updates h3, .info-section h3, .info-go-faster summary, .task-section-title,
 .doc-group-head, .doc-strip-title, .secrets-title, .secret-reveal-brand, .admin-section h4,
 .board-settings strong, .record-history-head {
   font-size: var(--fs-xs); letter-spacing: 1px; text-transform: uppercase; font-weight: 700;
@@ -1536,15 +1536,16 @@ button.pill:hover { border-color: var(--line-strong); }
 
 /* ── comments in the task Activity timeline (COMMENTS_PLAN.md) ────────── */
 /* A comment sits in the same list as a change row but has to read as SPEECH, not as a log line:
-   it gets an avatar, a real body, and its own left rule. The change rows stay typographically
-   quieter so the eye can separate the two at a glance without a divider between them. */
-.comment { padding: 8px 2px 8px 8px; border-bottom: 1px solid var(--line); border-left: 2px solid var(--line); }
-.comment:last-child { border-bottom: none; }
+   it gets an avatar column and a real body. The change rows stay typographically quieter (on the
+   task page, one muted line behind a dot) so the eye separates the two without a divider. */
+.comment { padding: 10px 0; }
+/* Everything under the head lines up with the author's name, past the avatar column. */
+.comment > :not(.comment-head) { margin-left: 34px; }
 .comment-head { display: flex; align-items: baseline; gap: 6px; }
 .comment-avatar {
-  flex: none; width: 16px; height: 16px; border-radius: 50%;
+  flex: none; width: 24px; height: 24px; margin-right: 4px; border-radius: 50%;
   background: var(--bg-elev); border: 1px solid var(--line);
-  font-size: var(--fs-2xs); line-height: 14px; text-align: center; color: var(--ink-soft);
+  font-size: var(--fs-xs); font-weight: 600; line-height: 22px; text-align: center; color: var(--ink-soft);
   align-self: center;
 }
 .comment-author { font-weight: 600; font-size: var(--fs-md); color: var(--ink); }
@@ -1559,8 +1560,10 @@ button.pill:hover { border-color: var(--line-strong); }
 .comment-mention.me { color: var(--pop); background: color-mix(in srgb, var(--pop) 10%, transparent); border-radius: var(--r-xs); padding: 0 2px; }
 .comment-actions { display: flex; gap: 2px; margin-top: 4px; transition: opacity 0.12s ease; }
 .comment:hover .comment-actions, .comment:focus-within .comment-actions { opacity: 1; }
-.comment-replies { list-style: none; margin: 6px 0 0; padding: 0 0 0 10px; display: flex; flex-direction: column; }
-.comment-replies .comment { border-bottom: none; padding-bottom: 4px; }
+.comment-replies { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
+.comment-replies .comment { padding-bottom: 4px; }
+.comment-replies .comment-avatar { width: 20px; height: 20px; line-height: 18px; font-size: var(--fs-2xs); }
+.comment-replies .comment > :not(.comment-head) { margin-left: 30px; }
 
 /* The change-history fold. Quiet and full-width — it is a way down to the audit rows, not an
    action competing with the composer under it. */
@@ -1895,22 +1898,136 @@ button.pill:hover { border-color: var(--line-strong); }
 .states-add { align-self: flex-start; }
 
 /* ── Task page (`/b/:id/task/:id`) ───────────────────────────────────────── */
-.task-page-body { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 28px; padding: 10px clamp(16px, 3vw, 40px) 60px; overflow-y: auto; flex: 1; min-height: 0; }
-.task-page-main { min-width: 0; max-width: 720px; }
-.task-page-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.task-page-title { flex: 1; font-family: var(--serif); font-style: italic; font-weight: 600; font-size: var(--fs-h2); letter-spacing: -0.3px; border: 0; background: none; color: var(--ink); outline: none; }
-.task-page-title:focus { background: color-mix(in srgb, var(--ink) 4%, transparent); border-radius: var(--r-sm); }
-.task-page-description { width: 100%; min-height: 110px; resize: vertical; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-paper); color: var(--ink); font-size: var(--fs-md); line-height: 1.5; padding: 10px 12px; margin-bottom: 20px; }
-.task-page-subtasks { margin-bottom: 24px; }
-.task-page-subtasks-head { color: var(--ink-soft); margin-bottom: 6px; }
-.task-page-subtasks ul { display: flex; flex-direction: column; }
-.task-page-subtask-link { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--line); background: none; padding: 7px 4px; font-size: var(--fs-md); color: var(--ink); cursor: pointer; }
-.task-page-subtask-link:first-child { border-top: 0; }
-.task-page-subtask-link:hover { text-decoration: underline; }
-.task-page-fields { display: flex; flex-direction: column; padding-top: 4px; }
-.task-page .history-panel.is-embedded, .board-settings-modal .history-panel.is-embedded { width: 100%; max-width: none; max-height: none; overflow: visible; border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px; background: var(--bg-paper); box-shadow: none; }
+/* One surface: the page. Sections are a caps heading over a hairline, never a card of their own,
+   and the only box is the comment field. The content column and the property rail are centred
+   together so a wide screen does not open a dead gutter between them; the rail sticks while a
+   long thread scrolls under it. */
+.task-page-body {
+  display: grid;
+  grid-template-columns: minmax(0, 720px) 240px;
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas: "crumbs crumbs" "title props" "main props";
+  justify-content: center;
+  column-gap: 48px;
+  padding: 14px clamp(16px, 3vw, 40px) 64px;
+  flex: 1; min-height: 0;
+}
+/* The document scrolls this page, not the card: nothing above it bounds its height. So no
+   ancestor between the rail and the viewport may clip, or `position: sticky` binds to a box that
+   never scrolls and the rail rides away with the thread. (.tab-open clips for the board views.) */
+.tab-view.tab-open.task-page { overflow: visible; }
+
+.task-page-crumbs { grid-area: crumbs; display: flex; align-items: center; gap: 2px; min-width: 0; margin-bottom: 18px; font-size: var(--fs-md); }
+.task-crumb-step { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.task-crumb {
+  display: inline-block; min-width: 0; max-width: 32ch; padding: 4px 6px;
+  border: 0; border-radius: var(--r-sm); background: none; font: inherit; color: var(--ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+}
+.task-crumb.is-board { display: inline-flex; align-items: center; gap: 4px; margin-left: -6px; }
+.task-crumb.is-board span { overflow: hidden; text-overflow: ellipsis; }
+.task-crumb:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); }
+.task-crumb-sep { color: var(--ink-mute); }
+.task-page-menu { margin-left: auto; flex: none; width: 30px; height: 30px; }
+
+.task-page-title-row { grid-area: title; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.task-page-title {
+  flex: 1; min-width: 0; margin-left: -6px; padding: 2px 6px;
+  font-family: var(--serif); font-style: italic; font-weight: 600; font-size: var(--fs-h1); letter-spacing: -0.4px; line-height: 1.25;
+  border: 0; border-radius: var(--r-sm); background: none; color: var(--ink); outline: none;
+}
+.task-page-title:hover:not(:disabled), .task-page-title:focus { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+
+/* The property rail: label left, a control that reads as a plain value until you reach for it. */
+.task-page-props { grid-area: props; align-self: start; position: sticky; top: 16px; display: flex; flex-direction: column; padding: 2px 0 0 20px; border-left: 1px solid var(--line); }
+.task-prop { display: grid; grid-template-columns: 70px minmax(0, 1fr); align-items: center; min-height: 36px; }
+.task-prop-label { font-size: var(--fs-sm); color: var(--ink-mute); }
+.task-prop-value { min-width: 0; }
+.task-prop .dd-trigger, .task-prop input[type="date"] {
+  width: calc(100% + 8px); margin-left: -8px; padding: 6px 8px;
+  border: 1px solid transparent; border-radius: var(--r-sm); background: transparent;
+  font: inherit; font-size: var(--fs-md); color: var(--ink); outline: none;
+}
+.task-prop .dd-trigger:hover:not(:disabled), .task-prop input[type="date"]:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.task-prop .dd-trigger:focus { border-color: transparent; }
+.task-prop .dd-trigger:focus-visible, .task-prop .dd.open .dd-trigger, .task-prop input[type="date"]:focus { border-color: var(--pop); background: var(--bg-elev); }
+/* A viewer reads values; greying them out says "broken", not "read-only". */
+.task-prop .dd-trigger:disabled, .task-prop input[type="date"]:disabled { opacity: 1; cursor: default; }
+.task-prop .dd-caret { opacity: 0; transition: opacity .12s; }
+.task-prop:hover .dd-caret, .task-prop .dd.open .dd-caret, .task-prop .dd-trigger:focus-visible .dd-caret { opacity: 1; }
+.task-prop .dd-trigger:disabled .dd-caret { display: none; }
+.task-prop .dd.is-unset .dd-trigger-value, .task-prop input.is-unset { color: var(--ink-mute); }
+.task-prop .dd.is-priority .dd-trigger-value { font-family: var(--mono); font-weight: 700; color: var(--pop); }
+/* The rail is the right-most column: open its lists leftward so they never run off the page. */
+.task-prop .dd-panel { left: auto; right: -8px; min-width: 200px; }
+.task-props-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-xs); line-height: 1.8; color: var(--ink-mute); }
+
+.task-page-main { grid-area: main; min-width: 0; }
+/* Prose on the page, not a box with a scrollbar: it grows with its text (TaskPage sizes it). */
+.task-page-description {
+  display: block; width: calc(100% + 16px); margin: 12px -8px 0; padding: 6px 8px;
+  resize: none; overflow: hidden; field-sizing: content;
+  border: 0; border-radius: var(--r-sm); background: transparent; outline: none;
+  font: inherit; font-size: var(--fs-body); line-height: 1.6; color: var(--ink);
+}
+.task-page-description:hover:not(:disabled), .task-page-description:focus { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.task-page-description::placeholder { color: var(--ink-mute); }
+.task-page-description:disabled { cursor: default; }
+
+/* Sub-tasks and files: a full-width section each when they have content, a one-line button each
+   when they do not — and two of those share a line. */
+.task-page-attach { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 20px; }
+.task-page-attach > .task-section, .task-page-attach > .doc-strip:not(.is-collapsed) { flex: 1 1 100%; margin-top: 10px; }
+.task-section-add {
+  display: inline-flex; align-items: center; height: 32px; padding: 0 10px;
+  border: 0; border-radius: 999px; background: none; font: inherit; font-size: var(--fs-md); color: var(--ink-soft); cursor: pointer;
+}
+.task-section-add:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); }
+
+.task-section-head, .doc-strip.is-task .doc-strip-head {
+  display: flex; align-items: center; gap: 10px; min-height: 30px;
+  margin-bottom: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
+}
+.task-section-title { color: var(--ink-soft); }
+.task-section-head .history-toggle { margin: 0 0 0 auto; }
+.task-section .task-row { grid-template-columns: 24px minmax(0, 1fr) auto auto; align-items: center; padding: 6px 4px; border-radius: 0; border-bottom: 1px solid var(--line); }
+.task-section .task-row:hover { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.task-section .task-row .task-indicator { margin-top: 0; }
+.task-section .quick-add { height: 38px; margin: 0; padding: 0 4px 0 9px; border: 0; border-radius: var(--r-sm); background: none; }
+.task-section .quick-add:focus-within { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+/* Mid-drag: an outline rather than a border, so the drop target lights up without the section
+   shifting under the cursor. */
+.doc-strip.is-task.is-dragging { border-color: transparent; outline: 2px dashed var(--pop); outline-offset: 4px; }
+
+/* Activity: the drawer, unboxed, under the page's own section heading. */
+.task-page .history-panel.is-embedded { width: 100%; max-width: none; max-height: none; overflow: visible; margin-top: 30px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.board-settings-modal .history-panel.is-embedded { width: 100%; max-width: none; max-height: none; overflow: visible; border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px; background: var(--bg-paper); box-shadow: none; }
+/* Change rows are notes in the margin of the conversation: one muted line behind a small dot. */
+.task-page .history-entry { position: relative; border-bottom: 0; padding: 6px 0 6px 16px; }
+.task-page .history-entry::before { content: ''; position: absolute; left: 4px; top: 13px; width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong); }
+.task-page .history-actor { font-size: var(--fs-sm); color: var(--ink-soft); }
+.task-page .history-verb { font-size: var(--fs-sm); color: var(--ink-mute); }
+.task-page .comment-composer { margin-top: 12px; }
+.task-page .comment-input { min-height: 64px; padding: 9px 12px; border-color: var(--line-strong); border-radius: var(--r-md); font-size: var(--fs-base); }
+
+@media (hover: none) {
+  .task-prop .dd-caret { opacity: 1; }
+}
 @media (max-width: 720px) {
-  .task-page-body { grid-template-columns: minmax(0, 1fr); }
+  .task-page-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "crumbs" "title" "props" "main"; align-content: start; padding: 10px 16px 40px; }
+  .task-page-crumbs { margin-bottom: 10px; }
+  /* Has to outrank the phone breakpoint's "every text input is 16px" rule (the iOS zoom fix),
+     whose :not() chain beats a plain class. The title is larger than 16px, which is all that fix
+     needs; the description and comment field are held at 16px for the same reason. */
+  .task-page .task-page-title-row input.task-page-title:not([type="date"]) { font-size: var(--fs-h2); }
+  .task-page-description, .task-page .comment-input { font-size: var(--fs-lg); }
+  /* On a phone the rail becomes a row of chips under the title — not a list below the thread. */
+  .task-page-props { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; margin-top: 14px; padding: 0; border-left: 0; }
+  .task-prop { display: inline-flex; align-items: center; gap: 2px; min-height: 40px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-paper); }
+  .task-prop-label { font-size: var(--fs-xs); }
+  .task-prop .dd-trigger, .task-prop input[type="date"] { width: auto; margin-left: 0; padding: 6px 8px; }
+  .task-prop .dd-caret { opacity: 1; }
+  .task-props-foot { display: none; }
 }
 
 /* ── Polish pass: align shipped UI with the internal mockups ──────────────── */

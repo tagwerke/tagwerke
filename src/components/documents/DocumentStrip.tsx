@@ -197,6 +197,23 @@ export function DocumentStrip({ boardId, taskId, variant }: {
 
   const empty = docs.length === 0 && uploads.length === 0;
 
+  // On a task page an empty strip is one line, not a card with an invitation in it: most tasks
+  // never get a file, and a full empty section on every one of them is what made the page read as
+  // a form. It is still a drop target, and it lights up the same way the card does mid-drag. A
+  // viewer, who could not attach anything, gets nothing at all.
+  if (variant === 'task' && empty && !error) {
+    if (!editable) return null;
+    return (
+      <section
+        className={`doc-strip is-task is-collapsed ${dragging ? 'is-dragging' : ''}`}
+        aria-label="Files on this task"
+        {...dropProps}
+      >
+        <UploadButton onFiles={startUploads} label="+ Attach a file" className="task-section-add" />
+      </section>
+    );
+  }
+
   return (
     <section
       className={`doc-strip is-${variant} ${dragging ? 'is-dragging' : ''}`}
@@ -205,7 +222,7 @@ export function DocumentStrip({ boardId, taskId, variant }: {
     >
       <header className="doc-strip-head">
         <span className="doc-strip-title">Files{docs.length ? ` · ${docs.length}` : ''}</span>
-        {editable && <UploadButton onFiles={startUploads} label="Add a file" />}
+        {editable && <UploadButton onFiles={startUploads} label={variant === 'task' ? 'Attach a file' : 'Add a file'} />}
       </header>
 
       {error && <p className="doc-strip-error" role="status">{error}</p>}

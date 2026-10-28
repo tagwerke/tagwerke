@@ -17,7 +17,7 @@ import { registerQuickAdd } from '../../tasks/quickAddFocus';
 import { MAX_TASK_DEPTH } from '../../../shared/tree';
 import type { ID } from '../../types';
 
-export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, shortcut, onCreated }: {
+export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, shortcut, autoFocus, onCreated }: {
   tabId: ID;
   /** Nest what gets created under this task. */
   parentTaskId?: ID;
@@ -26,6 +26,8 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
   placeholder?: string;
   /** Bind the board-level `n` shortcut to this line. Exactly one per screen. */
   shortcut?: boolean;
+  /** Focus the line on mount — it was just opened by an explicit "add" click. */
+  autoFocus?: boolean;
   onCreated?: (id: ID) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -124,6 +126,7 @@ export function QuickAdd({ tabId, parentTaskId, presetFields, placeholder, short
       )}
       <input
         ref={inputRef}
+        autoFocus={autoFocus}
         className="quick-add-input"
         value={value}
         placeholder={nestUnder ? 'Sub-task' : placeholder ?? 'Add a task'}

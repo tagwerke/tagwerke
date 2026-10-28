@@ -283,6 +283,18 @@ export function ActivityDrawer({
   /** Change rows available to fold in — the count the toggle advertises ("50+" while more pages wait). */
   const historyCount = (entries ?? []).filter((e) => !COMMENT_ACTIONS.has(e.action)).length;
   const historyCountLabel = `${historyCount}${cursor ? '+' : ''} ${historyCount === 1 && !cursor ? 'change' : 'changes'}`;
+  // On the task page the drawer is one section among several, so it carries the page's section
+  // heading — and the fold moves up into it, beside the word "Activity", where the page's other
+  // section actions (add a sub-task, attach a file) also live.
+  const sectionHead = kind === 'task' && embedded;
+  const canFold = kind === 'task' && !historyDenied && historyCount > 0;
+  const foldButton = (
+    <button type="button" className="btn ghost tiny history-toggle" onClick={() => setShowHistory((v) => !v)}>
+      {sectionHead
+        ? (showHistory ? 'Hide changes' : `Show changes (${historyCount}${cursor ? '+' : ''})`)
+        : (showHistory ? 'Hide change history' : `Show change history (${historyCountLabel})`)}
+    </button>
+  );
 
   function value(field: string, v: unknown): string {
     if (v == null || v === '') return '—';
@@ -452,6 +464,12 @@ export function ActivityDrawer({
             <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
           </header>
         )}
+        {sectionHead && (
+          <div className="task-section-head">
+            <span className="task-section-title">Activity</span>
+            {canFold && foldButton}
+          </div>
+        )}
 
         {error && <Notice>{error}</Notice>}
         {commentsError && <Notice>{commentsError}</Notice>}
@@ -466,7 +484,9 @@ export function ActivityDrawer({
             <li><LoadMore hasMore busy={loadingMore} onLoad={() => void loadMore()} label="Show earlier changes" auto={false} /></li>
           )}
           {rows}
-          {!loading && items.length === 0 && (
+          {/* Not under a section head: there the composer is directly below, and its placeholder
+              already says what this line would. */}
+          {!loading && items.length === 0 && !sectionHead && (
             <EmptyState as="li">{isTask ? 'Nothing yet — say something below.' : 'No history yet.'}</EmptyState>
           )}
           {loading && !error && <Loading as="li" />}
@@ -475,15 +495,10 @@ export function ActivityDrawer({
           )}
         </ul>
 
-        {/* The fold. Placed under the timeline, not above it, so it reads as "there is more
-            underneath this" rather than as a filter over what you are looking at. */}
-        {isTask && !historyDenied && historyCount > 0 && (
-          <button type="button" className="btn ghost tiny history-toggle" onClick={() => setShowHistory((v) => !v)}>
-            {showHistory
-              ? 'Hide change history'
-              : `Show change history (${historyCountLabel})`}
-          </button>
-        )}
+        {/* The fold, in the overlay. Placed under the timeline, not above it, so it reads as
+            "there is more underneath this" rather than as a filter over what you are looking at.
+            On the task page it lives in the section heading instead (above). */}
+        {canFold && !sectionHead && foldButton}
 
         {isTask && (
           <CommentComposer tabId={boardId} onSubmit={(body) => void post(id, boardId, body)} />
