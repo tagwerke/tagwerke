@@ -65,8 +65,7 @@ export function TabView({ tabId }: { tabId: string }) {
           {view === 'notes' ? (
             <>
               <div className="work-toolbar notes-toolbar">
-                <span className="work-spacer" />
-                <ViewSwitcher view={view} onChange={setBoardView} />
+                <div className="scope-right"><ViewSwitcher view={view} onChange={setBoardView} /></div>
               </div>
               <div className="tab-view-body"><TabEditor tabId={tab.id} autoFocus /></div>
             </>

@@ -23,7 +23,7 @@ export interface WorkFilters {
   assignees: string[];
   /** Task statuses. Empty means every status. */
   statuses: string[];
-  /** Priorities: '1' | '2' | '3', plus NO_PRIORITY. Empty means every priority. */
+  /** Priorities: '1' | '2' | '3' (the Low/Medium/High pills). Empty means every priority. */
   priorities: string[];
   /** Title search. Never persisted: a leftover query on reopen reads as an empty board. */
   query: string;
@@ -107,12 +107,18 @@ function strings(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 }
 
+/** Priority is filtered by the Low/Medium/High pills, so only those may come back from storage: a
+ *  remembered "No priority" from the old dropdown would be a filter with no control to undo it. */
+function isPriorityPill(p: string): boolean {
+  return p === '1' || p === '2' || p === '3';
+}
+
 function load(tabId: ID): WorkFilters {
   try {
     const raw = localStorage.getItem(KEY(tabId));
     if (!raw) return NO_FILTERS;
     const p = JSON.parse(raw) as Partial<WorkFilters>;
-    return { sprints: strings(p.sprints), assignees: strings(p.assignees), statuses: strings(p.statuses), priorities: strings(p.priorities), query: '' };
+    return { sprints: strings(p.sprints), assignees: strings(p.assignees), statuses: strings(p.statuses), priorities: strings(p.priorities).filter(isPriorityPill), query: '' };
   } catch {
     return NO_FILTERS; // storage refused, or the value is not ours — start unfiltered
   }

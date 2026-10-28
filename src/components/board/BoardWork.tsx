@@ -17,8 +17,9 @@ import { newestFirst } from '../../util/sprints';
 import { DocumentStrip } from '../documents/DocumentStrip';
 import { SecretsView } from '../secrets/SecretsView';
 import { MultiSelect } from '../common/MultiSelect';
+import { PRIORITY_LABELS } from '../../util/filter';
 import {
-  applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, NO_PRIORITY, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
+  applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
 } from './workFilters';
 import type { BoardSettingsSection, BoardView, ID, Member, Sprint } from '../../types';
 import { useBoardStates } from '../../tasks/states';
@@ -30,6 +31,7 @@ const NO_MEMBERS: Member[] = [];
 const NO_SPRINTS: Sprint[] = [];
 
 const SORT_KEY = (tabId: ID) => `tw:work-sort:${tabId}`;
+const PRIORITIES = [1, 2, 3] as const;
 const SORT_KEYS: readonly SortKey[] = ['rank', 'title', 'status', 'assignee', 'due', 'priority', 'sprint'];
 const RANK_SORT: Sort = { key: 'rank', dir: 'asc' };
 const NO_PINNED: ReadonlySet<ID> = new Set();
@@ -260,12 +262,10 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
     () => visibleStates(states).map((st) => ({ value: st.key, label: st.label })),
     [states],
   );
-  const priorityOptions = useMemo(() => [
-    { value: '1', label: '!' },
-    { value: '2', label: '!!' },
-    { value: '3', label: '!!!' },
-    { value: NO_PRIORITY, label: 'No priority' },
-  ], []);
+  const togglePriority = (p: string) => onFilters((f) => ({
+    ...f,
+    priorities: f.priorities.includes(p) ? f.priorities.filter((x) => x !== p) : [...f.priorities, p],
+  }));
   const assigneeOptions = useMemo(() => [
     ...members.map((m) => ({ value: m.id, label: m.name })),
     { value: UNASSIGNED, label: 'Unassigned' },
@@ -281,8 +281,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
     return (
       <div className="board-work">
         <div className="work-toolbar">
-          <span className="work-spacer" />
-          <ViewSwitcher view={view} onChange={onViewChange} />
+          <div className="scope-right"><ViewSwitcher view={view} onChange={onViewChange} /></div>
         </div>
         <DocumentStrip variant="board" boardId={tabId} />
       </div>
@@ -294,8 +293,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
     return (
       <div className="board-work">
         <div className="work-toolbar">
-          <span className="work-spacer" />
-          <ViewSwitcher view={view} onChange={onViewChange} />
+          <div className="scope-right"><ViewSwitcher view={view} onChange={onViewChange} /></div>
         </div>
         <div className="secrets-surface"><SecretsView key={tabId} boardId={tabId} /></div>
       </div>
@@ -309,12 +307,34 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
 
   return (
     <div className="board-work">
+      {/* The same bar as the boards page's filter strip, in the same order: search, then the
+          dropdowns, then the priority pills, then Clear and the view switcher at the end. */}
       <div className="work-toolbar">
-        {/* The sprint filter is always shown once a board has sprints: a filter you cannot see is a
-            bug, and a board whose work is all in the backlog reads as an empty board. */}
-        {sprints.length > 0 && (
-          <span className="work-control">
-            <span className="work-control-label">Sprint</span>
+        <label className="scope-search" title="Search this board's tasks">
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <input
+            type="text"
+            value={text}
+            placeholder="Search tasks…"
+            aria-label="Search tasks"
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape') return;
+              e.stopPropagation();
+              if (text) {
+                setText('');
+                onFilters((f) => (f.query ? { ...f, query: '' } : f));
+              } else {
+                e.currentTarget.blur();
+              }
+            }}
+          />
+        </label>
+
+        <div className="scope-facets">
+          {/* The sprint filter is always shown once a board has sprints: a filter you cannot see is
+              a bug, and a board whose work is all in the backlog reads as an empty board. */}
+          {sprints.length > 0 && (
             <MultiSelect
               label="Filter by sprint"
               noun="sprints"
@@ -323,10 +343,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
               onChange={(sprintsSel) => onFilters((f) => ({ ...f, sprints: sprintsSel }))}
               footer={settingsLink('Manage sprints…', 'sprints')}
             />
-          </span>
-        )}
-        <span className="work-control">
-          <span className="work-control-label">Status</span>
+          )}
           <MultiSelect
             label="Filter by status"
             noun="statuses"
@@ -335,20 +352,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
             onChange={(statuses) => onFilters((f) => ({ ...f, statuses }))}
             footer={settingsLink(isAdmin ? 'Edit states…' : 'What these states mean…', 'states')}
           />
-        </span>
-        <span className="work-control">
-          <span className="work-control-label">Priority</span>
-          <MultiSelect
-            label="Filter by priority"
-            noun="priorities"
-            options={priorityOptions}
-            selected={filters.priorities}
-            onChange={(priorities) => onFilters((f) => ({ ...f, priorities }))}
-          />
-        </span>
-        {members.length > 0 && (
-          <span className="work-control">
-            <span className="work-control-label">Assignee</span>
+          {members.length > 0 && (
             <MultiSelect
               label="Filter by assignee"
               noun="people"
@@ -357,31 +361,25 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
               onChange={(assignees) => onFilters((f) => ({ ...f, assignees }))}
               footer={settingsLink(isAdmin ? 'Invite someone…' : 'See who’s on this board…', 'people')}
             />
-          </span>
-        )}
-        {filtersActive && (
-          <button type="button" className="list-mode" onClick={clearFilters}>Clear filters</button>
-        )}
-        <span className="work-spacer" />
-        <input
-          type="search"
-          className="work-search"
-          value={text}
-          placeholder="Search tasks"
-          aria-label="Search tasks"
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Escape') return;
-            e.stopPropagation();
-            if (text) {
-              setText('');
-              onFilters((f) => (f.query ? { ...f, query: '' } : f));
-            } else {
-              e.currentTarget.blur();
-            }
-          }}
-        />
-        <ViewSwitcher view={view} onChange={onViewChange} />
+          )}
+          {PRIORITIES.map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={`pill pill-priority p${p}`}
+              aria-pressed={filters.priorities.includes(String(p))}
+              onClick={() => togglePriority(String(p))}
+              title={`${PRIORITY_LABELS[p]} priority`}
+            >
+              {PRIORITY_LABELS[p]}
+            </button>
+          ))}
+        </div>
+
+        <div className="scope-right">
+          {filtersActive && <button type="button" className="scope-clear" onClick={clearFilters}>Clear</button>}
+          <ViewSwitcher view={view} onChange={onViewChange} />
+        </div>
       </div>
 
       {noMatch && (
