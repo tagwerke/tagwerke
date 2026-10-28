@@ -80,8 +80,36 @@ export function confirmRevertTask(when: string, laterCount: number): Promise<boo
 }
 
 /**
- * Deleting a calendar event. Reachable from the board's Events panel, the calendar's event editor,
- * and Delete/Backspace on a focused event card. Unlike tasks, events are NOT soft-deleted — there
+ * Deleting a board. Reachable from its card on the board grid (TabCard) and from its settings'
+ * Danger zone. A board is NOT soft-deleted: the server cascades its tasks, memberships, events and
+ * files for every member, and there is no Trash for it.
+ */
+export function confirmDeleteBoard(name: string, taskCount: number): Promise<boolean> {
+  return askConfirm({
+    title: `Delete “${name}”?`,
+    body: (
+      <p>
+        This deletes the board for everyone it's shared with, along with
+        {taskCount === 1 ? ' its 1 task' : ` its ${taskCount} tasks`} and anything scheduled from
+        it. It can't be undone.
+      </p>
+    ),
+    confirmLabel: 'Delete board',
+  });
+}
+
+/** Leaving a board. Reachable from your own row in People and from the Danger zone. */
+export function confirmLeaveBoard(name: string): Promise<boolean> {
+  return askConfirm({
+    title: `Leave “${name}”?`,
+    body: <p>You lose access immediately. An admin has to add you back to return.</p>,
+    confirmLabel: 'Leave board',
+  });
+}
+
+/**
+ * Deleting a calendar event. Reachable from the calendar's event editor and Delete/Backspace on a
+ * focused event card. Unlike tasks, events are NOT soft-deleted — there
  * is no Trash row and no restore, which is the fact this copy has to carry.
  */
 export function confirmDeleteEvent(opts: { title?: string | null; recurring?: boolean; shared?: boolean }): Promise<boolean> {

@@ -2,6 +2,7 @@
 // this only exists so /admin can be its own page reachable by typing the URL.
 
 import { useEffect, useState } from 'react';
+import { BOARD_SETTINGS_SECTIONS, type BoardSettingsSection } from '../types';
 
 /** Navigate to a path and notify usePath() listeners. */
 export function navigate(to: string): void {
@@ -28,13 +29,21 @@ export function parseBoardId(path: string): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/** The sprints page for a board — a real route (back-button support), unlike the other board
- *  sub-views (doc/list/kanban/calendar), which stay pure client state. */
-export function boardSprintsPath(tabId: string): string {
-  return `/b/${encodeURIComponent(tabId)}/sprints`;
+/** A section of a board's settings — a real route, so a link (or a refresh) lands on it, unlike the
+ *  board's views, which stay pure client state. */
+export function boardSettingsPath(tabId: string, section: BoardSettingsSection): string {
+  return `/b/${encodeURIComponent(tabId)}/settings/${section}`;
 }
-export function isBoardSprintsPath(path: string): boolean {
-  return /^\/b\/[^/]+\/sprints\/?$/.test(path);
+
+/** The settings section a path names, or null. `/b/:id/settings` alone is General, an unknown
+ *  section falls back to it too, and the old `/b/:id/sprints` (the sprints page, before it moved
+ *  into settings) still lands on Sprints. */
+export function parseBoardSettings(path: string): BoardSettingsSection | null {
+  if (/^\/b\/[^/]+\/sprints\/?$/.test(path)) return 'sprints';
+  const m = path.match(/^\/b\/[^/]+\/settings(?:\/([^/]+))?\/?$/);
+  if (!m) return null;
+  const section = m[1] as BoardSettingsSection | undefined;
+  return section && BOARD_SETTINGS_SECTIONS.includes(section) ? section : 'general';
 }
 
 /** The URL for a task's own page. Pushed as a NEW history entry (see navigate()'s caller in

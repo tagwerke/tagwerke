@@ -1,5 +1,5 @@
 import { useStore } from '../store';
-import { askConfirm } from '../confirm/useConfirm';
+import { confirmDeleteBoard } from '../confirm/prompts';
 import { CardPreview } from '../editor/CardPreview';
 import type { ID } from '../types';
 import { contrastText, hexToRgba } from '../util/color';
@@ -47,19 +47,7 @@ export function TabCard({ tabId, compact }: Props) {
               className="icon-btn delete"
               onClick={(e) => {
                 e.stopPropagation();
-                // Deleting a board removes it for EVERY member and cascades its tasks, events and
-                // planner blocks server-side — there is no Trash for this one.
-                void askConfirm({
-                  title: `Delete “${tab.name}”?`,
-                  body: (
-                    <p>
-                      This deletes the board for everyone it's shared with, along with
-                      {taskCount === 1 ? ' its 1 task' : ` its ${taskCount} tasks`} and anything scheduled from
-                      it. It can't be undone.
-                    </p>
-                  ),
-                  confirmLabel: 'Delete board',
-                }).then((ok) => {
+                void confirmDeleteBoard(tab.name, taskCount).then((ok) => {
                   if (ok) deleteTab(tab.id);
                 });
               }}

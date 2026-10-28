@@ -27,7 +27,7 @@ import { navigate, boardTaskPath } from '../util/router';
 import { describeMove, moveTargets, moveTaskToBoard } from './moveToBoard';
 import { newestFirst } from '../util/sprints';
 import type { CSSProperties } from 'react';
-import type { ID, Member, Task } from '../types';
+import type { BoardSettingsSection, ID, Member, Task } from '../types';
 
 /** Which field a cell click scopes the menu to. Matches the table's column keys. */
 export type FocusField = 'status' | 'assignee' | 'due' | 'priority' | 'sprint';
@@ -78,6 +78,19 @@ function membersOf(tabId: ID): Member[] {
   return useStore.getState().membersByBoard[tabId] ?? [];
 }
 
+/**
+ * The last choice in a field's list: a way into the board's settings, where that list is kept —
+ * "Edit states…" under the states, "Invite someone…" under the people. Not a value, so it is never
+ * `selected`; choosing it opens settings instead of writing to the tasks.
+ */
+function settingsChoice(tabId: ID, section: BoardSettingsSection, label: string): ChoiceOption {
+  return { key: `settings:${section}`, label, run: () => useStore.getState().openBoardSettings(tabId, section) };
+}
+
+function isAdmin(tabId: ID): boolean {
+  return useStore.getState().tabs[tabId]?.role === 'admin';
+}
+
 /** "3 tasks" / the single task's title — for a toast that has to name what it acted on. */
 function subject(ids: ID[]): string {
   if (ids.length !== 1) return `${ids.length} tasks`;
@@ -109,13 +122,16 @@ const statusAction: TaskAction = {
   enabled: (ctx) => canEdit(ctx.tabId),
   options: (ctx) => {
     const current = new Set(tasksOf(ctx.ids).map((t) => t.status));
-    return visibleStatesOf(ctx.tabId).map((s) => ({
-      key: s.key,
-      label: s.label,
-      swatchStyle: stateStyle(s),
-      selected: current.size === 1 && current.has(s.key),
-      run: () => applyStatus(ctx.tabId, ctx.ids, s.key),
-    }));
+    return [
+      ...visibleStatesOf(ctx.tabId).map((s) => ({
+        key: s.key,
+        label: s.label,
+        swatchStyle: stateStyle(s),
+        selected: current.size === 1 && current.has(s.key),
+        run: () => applyStatus(ctx.tabId, ctx.ids, s.key),
+      })),
+      settingsChoice(ctx.tabId, 'states', isAdmin(ctx.tabId) ? 'Edit states…' : 'What these states mean…'),
+    ];
   },
 };
 
@@ -137,6 +153,7 @@ function peopleOptions(ctx: ActionContext): ChoiceOption[] {
       selected: current.size === 1 && current.has(m.id),
       run: set(m.id),
     })),
+    settingsChoice(ctx.tabId, 'people', isAdmin(ctx.tabId) ? 'Invite someone…' : 'See who’s on this board…'),
   ];
 }
 
@@ -235,6 +252,7 @@ const sprintAction: TaskAction = {
         selected: current.size === 1 && current.has(s.id),
         run: set(s.id),
       })),
+      settingsChoice(ctx.tabId, 'sprints', 'Manage sprints…'),
     ];
   },
 };

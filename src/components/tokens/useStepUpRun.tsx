@@ -1,5 +1,6 @@
 // Run a request that may answer `401 sudo required`: ask for the step-up, then retry once. Token
-// creation needs a fresh sign-in (PAT_PLAN D5). Returns `undefined` when the user cancels the prompt.
+// creation needs a fresh sign-in (PAT_PLAN D5), and so does changing a board's secret network
+// policy; `reason` is what the prompt says. Returns `undefined` when the user cancels the prompt.
 // The same reactive shape the secrets view uses; `dialog` must be rendered by the caller.
 
 import { useCallback, useState, type ReactNode } from 'react';
@@ -8,7 +9,9 @@ import { StepUpDialog } from '../secrets/StepUpDialog';
 
 const isSudoRequired = (e: unknown) => e instanceof ApiError && e.status === 401 && e.data?.error === 'sudo required';
 
-export function useStepUpRun(): { run: <T>(fn: () => Promise<T>) => Promise<T | undefined>; dialog: ReactNode } {
+export function useStepUpRun(
+  reason = 'Creating an access token needs a fresh sign-in. This lasts ten minutes.',
+): { run: <T>(fn: () => Promise<T>) => Promise<T | undefined>; dialog: ReactNode } {
   const [stepUp, setStepUp] = useState<((ok: boolean) => void) | null>(null);
 
   const run = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
@@ -23,7 +26,7 @@ export function useStepUpRun(): { run: <T>(fn: () => Promise<T>) => Promise<T | 
     return fn();
   }, []);
 
-  const dialog = stepUp ? <StepUpDialog reason="Creating an access token needs a fresh sign-in. This lasts ten minutes." onDone={stepUp} /> : null;
+  const dialog = stepUp ? <StepUpDialog reason={reason} onDone={stepUp} /> : null;
   return { run, dialog };
 }
 

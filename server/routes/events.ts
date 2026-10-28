@@ -255,7 +255,8 @@ export async function eventRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true });
   });
 
-  // ── Legacy per-board routes (still consumed by EventsPanel / BoardCalendar) ──
+  // ── Legacy per-board routes. Their UI (EventsPanel, BoardCalendar) is gone; the client no longer
+  // calls them, but they are kept for anything else that still does. ──
   app.get('/api/tabs/:id/events', { preHandler: requireBoardRole('viewer', paramTabId) }, async (req) => {
     const { id } = req.params as { id: string };
     const q = req.query as { from?: string; to?: string };

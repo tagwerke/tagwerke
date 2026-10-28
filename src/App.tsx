@@ -29,8 +29,8 @@ import {
   parseBoardId,
   isCalendarPath,
   CALENDAR_PATH,
-  boardSprintsPath,
-  isBoardSprintsPath,
+  boardSettingsPath,
+  parseBoardSettings,
   boardTaskPath,
   parseOpenTaskId,
 } from './util/router';
@@ -94,21 +94,24 @@ function Workspace() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // The help modal is InfoPane wrapped for standalone use (it has no Escape handling of its own —
-  // its other home, swapped inline into an open board, closes via its own "x" button instead).
+  // The help modal is InfoPane wrapped for standalone use; InfoPane has no Escape handling of its
+  // own, so the modal supplies it. Capture phase, claiming the key: help opens over a board too, and
+  // TabView's own listener (registered first) would otherwise take the Escape as "leave the board".
   useEffect(() => {
     if (panel !== 'help') return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closePanel();
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      closePanel();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [panel]);
 
   // Navigation lives in the URL so a refresh (or a shared link) restores the open board, the
-  // calendar, the sprints page, or an open task. URL → store: whenever the path changes
+  // calendar, a board's settings, or an open task. URL → store: whenever the path changes
   // (initial load, back/forward), reflect it. /calendar the calendar; /b/:id a board;
-  // /b/:id/sprints its sprints page; /b/:id/task/:taskId an open task page; / the grid.
+  // /b/:id/settings/:section its settings; /b/:id/task/:taskId an open task page; / the grid.
   const path = usePath();
   useEffect(() => {
     const st = useStore.getState();
@@ -119,27 +122,24 @@ function Workspace() {
     if (st.plannerOpen) useStore.setState({ plannerOpen: false });
     const id = parseBoardId(path);
     const taskId = id ? parseOpenTaskId(path) : null;
-    const wantSprints = id ? isBoardSprintsPath(path) : false;
+    const wantSettings = id ? parseBoardSettings(path) : null;
     if (st.activeTabId !== id) {
       // A different (or no) board: full reset, same as setActiveTab, but landing on whatever
-      // sub-route the URL actually names instead of always defaulting to doc.
-      // Sprints is a board-PANEL tab now, not a view (§N2.3), so the old URL opens the board
-      // with that panel rather than landing on a view that no longer exists.
+      // sub-route the URL actually names instead of always defaulting to the table.
       useStore.setState({
         activeTabId: id, boardView: 'table', openTaskId: taskId, plannerOpen: false,
-        boardPanel: wantSprints ? 'sprints' : null,
+        boardSettings: wantSettings,
       });
       return;
     }
     // Same board: only reconcile the pieces the URL disagrees with — e.g. opening/closing the
-    // task page must not reset which of list/kanban/calendar was showing underneath it.
-    const patch: { openTaskId?: string | null; boardPanel?: typeof st.boardPanel } = {};
+    // task page must not reset which view was showing underneath it.
+    const patch: { openTaskId?: string | null; boardSettings?: typeof st.boardSettings } = {};
     if (st.openTaskId !== taskId) patch.openTaskId = taskId;
-    const wantPanel = wantSprints ? 'sprints' : null;
-    if (wantPanel !== st.boardPanel) patch.boardPanel = wantPanel;
+    if (wantSettings !== st.boardSettings) patch.boardSettings = wantSettings;
     if (Object.keys(patch).length) useStore.setState(patch);
   }, [path]);
-  // store → URL: when the open board, calendar, sprints page, or open task changes from
+  // store → URL: when the open board, calendar, settings section, or open task changes from
   // within the app, update the address bar. subscribe() only fires on an actual change, so it
   // never clobbers a deeper URL present on first paint. Every distinct destination gets its own
   // pushState (never replaceState) so back/forward steps through boards/task pages naturally.
@@ -149,7 +149,7 @@ function Workspace() {
         s.activeTabId === prev.activeTabId &&
         s.plannerOpen === prev.plannerOpen &&
         s.boardView === prev.boardView &&
-        s.boardPanel === prev.boardPanel &&
+        s.boardSettings === prev.boardSettings &&
         s.openTaskId === prev.openTaskId
       )
         return;
@@ -157,7 +157,7 @@ function Workspace() {
       if (s.plannerOpen) want = CALENDAR_PATH;
       else if (!s.activeTabId) want = '/';
       else if (s.openTaskId) want = boardTaskPath(s.activeTabId, s.openTaskId);
-      else if (s.boardPanel === 'sprints') want = boardSprintsPath(s.activeTabId);
+      else if (s.boardSettings) want = boardSettingsPath(s.activeTabId, s.boardSettings);
       else want = boardPath(s.activeTabId);
       if (window.location.pathname !== want) window.history.pushState(null, '', want);
     });

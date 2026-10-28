@@ -11,7 +11,7 @@ automatically on boot — always take a backup before upgrading.
 ### Added
 
 - **Per-board task states** — each board can name, color, order, describe and hide its own task
-  states (board panel → States; admins edit, everyone can read what each one means). Every state
+  states (Board settings → Task states; admins edit, everyone can read what each one means). Every state
   picks a category — Not started, In progress, Waiting, Done or Closed — and the app goes by the
   category, not the name: the checkmark, the overdue flag, sprint carry-over and the sub-task bar
   all work the same on a board whose done state is called "Won". A board always keeps at least one
@@ -22,7 +22,7 @@ automatically on boot — always take a backup before upgrading.
   agent board read); an unknown status is refused with the valid list.
 - **API tokens** — personal access tokens (Security) let your own scripts and agents act as you on
   the boards you tick, with separate permissions for tasks, comments and boards; board admins can
-  also mint a token for a project's agent (Share → API tokens) that reads the board and can comment
+  also mint a token for a project's agent (Board settings → People → Agents) that reads the board and can comment
   and create or edit tasks. Tokens are shown once, expire (30/90/365 days), can be revoked any time,
   and never reach secrets, members, board settings or account security. See `docs/access-tokens.md`.
 - **Board filters and search** — the board's Sprint, Assignee, Status and Priority filters are multi-select, with
@@ -44,6 +44,7 @@ automatically on boot — always take a backup before upgrading.
 
 ### Removed
 
+- **The board's Events tab** and the board location field it held. Use the Calendar for events.
 - **"Require review before Done"** — the board setting, the approval gate and the "Task approved"
   notification are gone. `in_review` is now an ordinary status that nothing gates on. Old approval
   stamps stay in the database but are no longer shown or written.
@@ -53,6 +54,19 @@ automatically on boot — always take a backup before upgrading.
 
 ### Changed
 
+- **Board settings, in one place** — the panel on the right of every board is gone, and the table
+  gets its full width. Everything about a board that isn't its work now lives in one Board settings
+  modal, grouped as Board (General, People, Permissions), Work (Task states, Sprints), Records
+  (History, Trash) and Admin (Secrets access, Danger zone). Every way in opens it at the right
+  section: Share and the live avatars open People; the ⋯ next to the star opens settings, History,
+  Trash, or Leave/Delete; the Status, Sprint and Assignee lists, in the toolbar filters and in the
+  table cells, end in "Edit states…", "Manage sprints…" and "Invite someone…"; and search (Ctrl+K)
+  finds settings by the words people use ("trash", "bin", "invite", "workflow"). Each section has its
+  own URL (`/b/:id/settings/people`); the old `/b/:id/sprints` still lands on Sprints. A board can
+  now be deleted from inside it (Danger zone, admins), not only from its card on the grid. People
+  shows when each member last edited or opened the board, and the board's API tokens appear there
+  as its Agents. The current sprint is tagged "current" instead of starred. Help (?) is in the top
+  bar on every page. Pressing Escape in search or help no longer also leaves the board.
 - **Migration `0039`** gives every existing board the six default states (Todo, In progress,
   Blocked, In review, Done, Cancelled — the keys tasks already store, so no task changes) and drops
   the unused `tasks.done` column. Take a backup before upgrading.

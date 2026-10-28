@@ -7,7 +7,7 @@
 // dozen components to render a local dialog would be far more code than it saves.
 //
 // Rendering at the App root also keeps the dialog OUT of the DOM subtree of whatever opened it:
-// SecurityPanel and TrashPanel each sit under a `.modal-backdrop` whose onClick closes
+// SecurityPanel and board settings each sit under a `.modal-backdrop` whose onClick closes
 // the panel, so a dialog nested inside one would dismiss its own host on every click.
 //
 // A standalone Zustand store (like useNotifications / useSession) rather than part of RootState —

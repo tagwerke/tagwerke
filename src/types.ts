@@ -183,7 +183,7 @@ export interface CalendarEvent {
 // The table's Kanban layout was removed 2026-10-14; a remembered 'kanban' lands on the table through
 // asBoardView like any other retired view.
 // 'list' folded into the table (group by status, columns off), 'calendar' into the /calendar
-// route which does that job properly, and 'sprints' into the board panel.
+// route which does that job properly, and 'sprints' into board settings.
 // 'secrets' is board-admin only: ViewSwitcher hides it from everyone else, and TabView normalises a
 // non-admin who lands on it back to the table.
 export type BoardView = 'table' | 'notes' | 'files' | 'secrets';
@@ -193,6 +193,17 @@ export const BOARD_VIEWS: BoardView[] = ['table', 'notes', 'files', 'secrets'];
 export function asBoardView(v: unknown): BoardView {
   return (BOARD_VIEWS as string[]).includes(v as string) ? (v as BoardView) : 'table';
 }
+
+/** The sections of a board's settings modal, in nav order. Everything about a board that is not
+ *  its work lives in one of these; the board itself only links into them. */
+export type BoardSettingsSection =
+  | 'general' | 'people' | 'permissions'
+  | 'states' | 'sprints'
+  | 'history' | 'trash'
+  | 'secrets' | 'danger';
+export const BOARD_SETTINGS_SECTIONS: BoardSettingsSection[] = [
+  'general', 'people', 'permissions', 'states', 'sprints', 'history', 'trash', 'secrets', 'danger',
+];
 
 // ── Sprints (SPRINTS_PLAN.md) ───────────────────────────────────────────────
 /** One sprint (a week) on a board, as the server serializes it. `isCurrent` is unique per
@@ -234,8 +245,8 @@ export interface RootState {
   activeTabId: ID | null;
   /** Which view the open board renders (table/notes/files/secrets). */
   boardView: BoardView;
-  /** A board-panel tab requested by the URL (`/b/:id/sprints`), or null (§N2.4). */
-  boardPanel: 'sprints' | null;
+  /** The open board's settings section (`/b/:id/settings/:section`), or null when closed. */
+  boardSettings: BoardSettingsSection | null;
   /** The task page's task id, or null when none is open. Independent of `activeTabId` — the
    *  task page is its own route (`/b/:id/task/:taskId`), reachable while a board is active. */
   openTaskId: ID | null;

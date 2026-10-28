@@ -20,7 +20,7 @@ import { MultiSelect } from '../common/MultiSelect';
 import {
   applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, NO_PRIORITY, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
 } from './workFilters';
-import type { BoardView, ID, Member, Sprint } from '../../types';
+import type { BoardSettingsSection, BoardView, ID, Member, Sprint } from '../../types';
 import { useBoardStates } from '../../tasks/states';
 import { isDone, visible as visibleStates } from '../../../shared/status';
 import { EmptyState } from '../common/EmptyState';
@@ -64,6 +64,14 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
   const states = useBoardStates(tabId);
   const role = useStore((s) => s.tabs[tabId]?.role);
   const editable = role === 'editor' || role === 'admin';
+  const openBoardSettings = useStore((s) => s.openBoardSettings);
+  // Each filter's list ends in a link to where that list is kept, in board settings — the way to
+  // find "where do I change the states" is the place you noticed you wanted to.
+  const isAdmin = role === 'admin';
+  const settingsLink = (label: string, section: BoardSettingsSection) => ({
+    label,
+    onSelect: () => openBoardSettings(tabId, section),
+  });
 
   const [sort, setSort] = useState<Sort>(() => readSort(tabId));
   const grouping = groupingOfSort(sort);
@@ -313,6 +321,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
               options={sprintOptions}
               selected={filters.sprints}
               onChange={(sprintsSel) => onFilters((f) => ({ ...f, sprints: sprintsSel }))}
+              footer={settingsLink('Manage sprints…', 'sprints')}
             />
           </span>
         )}
@@ -324,6 +333,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
             options={statusOptions}
             selected={filters.statuses}
             onChange={(statuses) => onFilters((f) => ({ ...f, statuses }))}
+            footer={settingsLink(isAdmin ? 'Edit states…' : 'What these states mean…', 'states')}
           />
         </span>
         <span className="work-control">
@@ -345,6 +355,7 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
               options={assigneeOptions}
               selected={filters.assignees}
               onChange={(assignees) => onFilters((f) => ({ ...f, assignees }))}
+              footer={settingsLink(isAdmin ? 'Invite someone…' : 'See who’s on this board…', 'people')}
             />
           </span>
         )}

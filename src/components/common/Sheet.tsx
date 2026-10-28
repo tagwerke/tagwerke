@@ -1,8 +1,7 @@
 // A drawer / sheet primitive: a right-side drawer on desktop, a bottom sheet on phones
 // (CSS switches at the 720px breakpoint). The body always scrolls (max-height + overflow
 // baked in) so long content never runs off-screen — the fix for the old centered-modal
-// overflow bug. Closes on Escape or backdrop click. Used for the mobile companion rail and
-// any panel that outgrows a centered modal.
+// overflow bug. Closes on Escape or backdrop click. For any panel that outgrows a centered modal.
 
 import { useEffect } from 'react';
 

@@ -1,7 +1,9 @@
-// The board's sprint list (SPRINTS_PLAN.md): every sprint (past, current, future) plus a
-// synthesized Backlog row, with the management actions — rename, make current/inactive,
-// delete — that used to be scattered across a toolbar stepper. This IS the management
-// surface, not a popover off one; clicking a row drills into List pre-filtered to it.
+// The board's sprint list (SPRINTS_PLAN.md), in board settings › Sprints: every sprint (past,
+// current, future) plus a synthesized Backlog row, with the management actions — rename, make
+// current/inactive, delete. Clicking a row closes settings onto the table, filtered to it.
+//
+// The current sprint is marked with a "current" tag, not the star it used to be: a star already
+// means a favourite board in the title row above, and one icon should not mean two things.
 
 import { useMemo, useState } from 'react';
 import { useStore } from '../store';
@@ -59,7 +61,6 @@ export function SprintsPage({ tabId, onOpenSprint }: { tabId: string; onOpenSpri
           return (
             <li className="sprints-row sprints-row-backlog">
               <div className="sprints-row-main">
-                <span className="sprints-current-toggle" aria-hidden />
                 <button type="button" className="sprints-row-label" title="Show the backlog on the board" onClick={() => onOpenSprint(null)}>
                   Backlog
                 </button>
@@ -76,25 +77,6 @@ export function SprintsPage({ tabId, onOpenSprint }: { tabId: string; onOpenSpri
           return (
           <li key={sprint.id} className={`sprints-row ${sprint.isCurrent ? 'is-current' : ''}`}>
             <div className="sprints-row-main">
-              <button
-                type="button"
-                className="sprints-current-toggle"
-                disabled={!canManage}
-                title={sprint.isCurrent ? 'Current sprint — click to unset' : 'Make this the current sprint'}
-                aria-label={sprint.isCurrent ? 'unset as current sprint' : 'set as current sprint'}
-                aria-pressed={sprint.isCurrent}
-                onClick={() => setSprintCurrent(tabId, sprint.id, !sprint.isCurrent)}
-              >
-                <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden>
-                  <path
-                    d="M8 1.7l1.9 4 4.4.5-3.3 3 .9 4.3L8 11.6l-3.9 1.9.9-4.3-3.3-3 4.4-.5z"
-                    fill={sprint.isCurrent ? 'currentColor' : 'none'}
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                  />
-                </svg>
-              </button>
-
               {editing === sprint.id ? (
                 <input
                   className="sprints-row-label-input"
@@ -119,11 +101,11 @@ export function SprintsPage({ tabId, onOpenSprint }: { tabId: string; onOpenSpri
                 </button>
               )}
 
+              {sprint.isCurrent && <span className="pill pill-soft">current</span>}
               <span className="sprints-row-count" title={`${n} task${n === 1 ? '' : 's'}`}>{n}</span>
 
-              {/* Rename and Delete used to sit in the row itself, which is wider than this rail;
-                  they fold under the row instead. The toggle stays visible — an affordance that
-                  only shows on hover is one nobody finds (COMMENTS_PLAN §8). */}
+              {/* The actions fold under the row behind an always-visible ⋯ — an affordance that only
+                  shows on hover is one nobody finds (COMMENTS_PLAN §8). */}
               {canManage && editing !== sprint.id && (
                 <button
                   type="button"
@@ -145,6 +127,9 @@ export function SprintsPage({ tabId, onOpenSprint }: { tabId: string; onOpenSpri
               <div className="sprints-row-actions">
                 <button type="button" className="btn ghost tiny" onClick={() => { setMenuFor(null); startEdit(sprint); }}>
                   Rename
+                </button>
+                <button type="button" className="btn ghost tiny" onClick={() => { setMenuFor(null); setSprintCurrent(tabId, sprint.id, !sprint.isCurrent); }}>
+                  {sprint.isCurrent ? 'Unset as current' : 'Make current'}
                 </button>
                 {canDelete && (
                   <button type="button" className="btn ghost tiny sprints-row-delete" onClick={() => { setMenuFor(null); void onDelete(sprint); }}>

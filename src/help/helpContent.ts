@@ -132,6 +132,12 @@ export interface HelpUpdate { id: string; date: string; title: string; body: str
 
 export const HELP_UPDATES: HelpUpdate[] = [
   {
+    id: '2026-10-27-board-settings',
+    date: '2026-10-27',
+    title: 'Board settings, in one place',
+    body: 'The panel on the right of a board is gone, and the table gets its full width. Everything about a board that isn\'t its work is now in Board settings: people and agents, permissions, task states, sprints, history, trash, secrets access, and leaving or deleting the board. Open it from "Share", from the ⋯ next to the star, or from the end of the Status, Sprint and Assignee lists ("Edit states…", "Manage sprints…", "Invite someone…"). Search finds settings too — try "trash" or "invite". The board\'s Events tab is gone; use the Calendar in the sidebar for events.',
+  },
+  {
     id: '2026-08-30-notes-split',
     date: '2026-08-30',
     title: 'Tasks left the document',

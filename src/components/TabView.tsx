@@ -1,31 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useStore } from '../store';
+import { api } from '../api/client';
 import { TabEditor } from '../editor/Editor';
 import { hexToRgba } from '../util/color';
 import { usePresence } from '../realtime/usePresence';
 import { Avatar } from './common/Avatar';
-import { BoardPanel } from './BoardPanel';
 import { BoardWork } from './board/BoardWork';
+import { BoardMenu } from './board/BoardMenu';
 import { BACKLOG, useWorkFilters } from './board/workFilters';
 import { ViewSwitcher } from './board/ViewSwitcher';
+import { BoardSettings } from './settings/BoardSettings';
 import { Dropdown } from './Dropdown';
-import { InfoPane } from './InfoPane';
-import { useHelpBadge } from '../help/useHelpBadge';
 import { asBoardView, type BoardView } from '../types';
 
 
-/** Live cursors present in this board, as ringed avatars (self excluded, deduped by name). */
-function PresenceAvatars({ tabId }: { tabId: string }) {
+/** Live cursors present in this board, as ringed avatars (self excluded, deduped by name). They
+ *  open People: who is here now is the first thing that list is about. */
+function PresenceAvatars({ tabId, onOpen }: { tabId: string; onOpen: () => void }) {
   const peers = usePresence(tabId).filter((p) => !p.self);
   const seen = new Set<string>();
   const uniq = peers.filter((p) => (seen.has(p.name) ? false : (seen.add(p.name), true)));
   if (!uniq.length) return null;
   return (
-    <div className="presence avatar-stack" title={`${uniq.length} editing now`}>
+    <button className="icon-btn presence avatar-stack" onClick={onOpen} title={`${uniq.length} editing now`} aria-label={`${uniq.length} editing now. Open People`}>
       {uniq.slice(0, 4).map((p) => (
         <Avatar key={p.clientId} name={p.name} color={p.color} size={26} ring title={`${p.name} — here now`} />
       ))}
-    </div>
+    </button>
   );
 }
 
@@ -38,6 +39,9 @@ export function TabView({ tabId }: { tabId: string }) {
   const boardView = useStore((s) => s.boardView);
   const projects = useStore((s) => s.projects);
   const setTabProject = useStore((s) => s.setTabProject);
+  const settingsOpen = useStore((s) => s.boardSettings !== null);
+  const openBoardSettings = useStore((s) => s.openBoardSettings);
+  const setBoardSettings = useStore((s) => s.setBoardSettings);
   const projectOptions = useMemo(
     () => Object.values(projects)
       .sort((a, b) => a.order - b.order)
@@ -45,23 +49,24 @@ export function TabView({ tabId }: { tabId: string }) {
     [projects],
   );
   const setBoardView = useStore((s) => s.setBoardView);
-  const [panelOpen, setPanelOpen] = useState(true);
-  // The board's work filters (sprints, assignees, search). Owned here, not in BoardWork, because the
-  // Sprints panel drills into them. Sprint and assignee choices are remembered per board; the search
-  // text is not (BOARD_FILTERS_PLAN D8).
+  // The board's work filters (sprints, assignees, search). Owned here, not in BoardWork, because
+  // settings › Sprints drills into them. Sprint and assignee choices are remembered per board; the
+  // search text is not (BOARD_FILTERS_PLAN D8).
   const [filters, updateFilters] = useWorkFilters(tabId);
-  // Not part of `boardView`/global store on purpose — it's an auxiliary pane, not a view of the
-  // board's task data, and must never persist as "the" view a board reopens into.
-  const [pane, setPane] = useState<'help' | null>(null);
-  const { hasNew: hasNewHelp } = useHelpBadge();
   // The title as it stood when editing began, so an emptied field can be put back on blur.
   const titleOnFocus = useRef(tab?.name ?? '');
+
+  // Opening a board marks the viewer present in its board_activity row — what People's "seen 2h ago"
+  // reads. Best-effort: presence is never worth an error.
+  useEffect(() => {
+    void api.activity.seen(tabId).catch(() => {});
+  }, [tabId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         // Something inside already took this Escape — a cell menu closing, the table releasing its
-        // cursor. Those all preventDefault, and none of them meant "leave the board".
+        // cursor, settings closing. Those all preventDefault, and none of them meant "leave the board".
         if (e.defaultPrevented) return;
         const target = e.target as HTMLElement;
         if (target?.closest('.ProseMirror')) return;
@@ -117,19 +122,17 @@ export function TabView({ tabId }: { tabId: string }) {
             aria-label="board title"
           />
         </div>
-        {/* Three small board-level controls, together: help, star, panel. They act on the board
-            as a whole, which is what makes them one group rather than three strays. */}
+        {/* Board-level controls only — app-level ones (search, help, notifications) are in the top
+            bar. Everything about the board beyond its name and star is in its settings, which these
+            open: Share and the live avatars at People, the ⋯ menu at the rest. */}
         <div className="board-head-right">
-          {isBoard && <PresenceAvatars tabId={tab.id} />}
+          {isBoard && <PresenceAvatars tabId={tab.id} onOpen={() => openBoardSettings(tab.id, 'people')} />}
           {isBoard && (
-            <button
-              className={`icon-btn help-btn ${pane === 'help' ? 'on' : ''}`}
-              onClick={() => setPane((p) => (p === 'help' ? null : 'help'))}
-              aria-label="how to use Tagwerke"
-              title="How to use Tagwerke"
-            >
-              ?
-              {hasNewHelp && pane !== 'help' && <span className="help-btn-dot" aria-label="new" />}
+            <button className="btn primary" onClick={() => openBoardSettings(tab.id, 'people')}>
+              <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
+                <path d="M6 7.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM1.5 13.5c0-2.2 2-4 4.5-4s4.5 1.8 4.5 4M12.5 5v4M10.5 7h4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span>Share</span>
             </button>
           )}
           <button
@@ -140,19 +143,13 @@ export function TabView({ tabId }: { tabId: string }) {
           >
             <svg viewBox="0 0 16 16" width="16" height="16"><path d="M8 1.7l1.9 4 4.4.5-3.3 3 .9 4.3L8 11.6l-3.9 1.9.9-4.3-3.3-3 4.4-.5z" fill={tab.starred ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.2"/></svg>
           </button>
-          {isBoard && (
-            <button className={`icon-btn panel-toggle ${panelOpen ? 'on' : ''}`} onClick={() => setPanelOpen((v) => !v)} aria-label="board panel" title="Board panel">
-              <svg viewBox="0 0 16 16" width="15" height="15"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M10 3v10" stroke="currentColor" strokeWidth="1.3"/></svg>
-            </button>
-          )}
+          {isBoard && <BoardMenu tabId={tab.id} />}
         </div>
       </header>
 
-      <div className={`board-canvas ${isBoard && panelOpen ? '' : 'no-panel'}`}>
+      <div className="board-canvas no-panel">
         <div className="board-content">
-          {pane === 'help' ? (
-            <InfoPane kind="help" onClose={() => setPane(null)} />
-          ) : view === 'notes' ? (
+          {view === 'notes' ? (
             <>
               <div className="work-toolbar notes-toolbar">
                 <span className="work-spacer" />
@@ -173,18 +170,19 @@ export function TabView({ tabId }: { tabId: string }) {
             />
           )}
         </div>
-        {isBoard && panelOpen && (
-          <BoardPanel
-            key={tab.id}
-            tabId={tab.id}
-            tabName={tab.name}
-            onOpenSprint={(id) => {
-              updateFilters((f) => ({ ...f, sprints: [id ?? BACKLOG], assignees: [] }));
-              setBoardView('table');
-            }}
-          />
-        )}
       </div>
+
+      {isBoard && settingsOpen && (
+        <BoardSettings
+          key={tab.id}
+          tabId={tab.id}
+          onOpenSprint={(id) => {
+            updateFilters((f) => ({ ...f, sprints: [id ?? BACKLOG], assignees: [] }));
+            setBoardView('table');
+            setBoardSettings(null);
+          }}
+        />
+      )}
     </main>
   );
 }

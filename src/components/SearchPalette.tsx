@@ -3,14 +3,18 @@ import { useStore } from '../store';
 import { TaskActionMenu } from './common/TaskActionMenu';
 import { extractDocText } from '../util/docText';
 import { EmptyState } from './common/EmptyState';
+import { SETTINGS_SEARCH } from './settings/sections';
+import type { BoardSettingsSection } from '../types';
 
 interface Hit {
-  kind: 'tab' | 'task' | 'note';
+  kind: 'tab' | 'task' | 'note' | 'setting';
   tabId: string;
   text: string;
   context?: string;
   /** Task hits only — lets the row carry the shared action menu. */
   taskId?: string;
+  /** Setting hits only — the open board's settings section the hit opens. */
+  section?: BoardSettingsSection;
 }
 
 /** A short excerpt around the match, so a hit against a long prose blob isn't the whole blob. */
@@ -26,22 +30,42 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
   const tabs = useStore((s) => s.tabs);
   const tasks = useStore((s) => s.tasks);
   const projects = useStore((s) => s.projects);
+  const activeTabId = useStore((s) => s.activeTabId);
   const setActiveTab = useStore((s) => s.setActiveTab);
+  const openBoardSettings = useStore((s) => s.openBoardSettings);
   const [q, setQ] = useState('');
   const [menu, setMenu] = useState<{ taskId: string; tabId: string; x: number; y: number } | null>(null);
 
+  // Capture phase, claiming the key: over an open board, TabView's listener (registered first) would
+  // otherwise also take this Escape as "leave the board".
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      onClose();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
   const hits = useMemo<Hit[]>(() => {
     const query = q.trim().toLowerCase();
     if (!query) return [];
     const out: Hit[] = [];
+    // The open board's settings, by the words people use for them ("bin", "share", "workflow"):
+    // a setting is something you look for, and search is where you look. First, because a board
+    // is open and its settings are what the query is most likely about.
+    const active = activeTabId ? tabs[activeTabId] : undefined;
+    if (active && active.type !== 'today') {
+      const words = query.split(/\s+/);
+      for (const s of SETTINGS_SEARCH) {
+        if (s.adminOnly && active.role !== 'admin') continue;
+        const hay = `${s.label} ${s.terms}`.toLowerCase();
+        if (words.every((w) => hay.includes(w))) {
+          out.push({ kind: 'setting', tabId: active.id, text: s.label, context: active.name, section: s.section });
+        }
+      }
+    }
     for (const tab of Object.values(tabs)) {
       if (tab.name.toLowerCase().includes(query)) {
         out.push({ kind: 'tab', tabId: tab.id, text: tab.name, context: projects[tab.projectId]?.name });
@@ -59,10 +83,11 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
       }
     }
     return out.slice(0, 50);
-  }, [q, tabs, tasks, projects]);
+  }, [q, tabs, tasks, projects, activeTabId]);
 
   const open = (hit: Hit) => {
-    setActiveTab(hit.tabId);
+    if (hit.section) openBoardSettings(hit.tabId, hit.section);
+    else setActiveTab(hit.tabId);
     onClose();
   };
 
@@ -71,7 +96,7 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
       <div className="search-palette" onMouseDown={(e) => e.stopPropagation()}>
         <input
           autoFocus
-          placeholder="search tabs and tasks"
+          placeholder="search tabs, tasks and settings"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {

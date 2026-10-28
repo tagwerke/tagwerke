@@ -1,6 +1,6 @@
-// Trash view (recoverability, §G): a board's soft-deleted tasks, each restorable. Editor+
-// (enforced server-side). Restoring reloads authoritative state so the task reappears with
-// its metadata intact. Auto-purged after the retention window by the prune job.
+// Trash (recoverability, §G): a board's soft-deleted tasks, each restorable — board settings ›
+// Trash. Editor+ (enforced server-side). Restoring reloads authoritative state so the task
+// reappears with its metadata intact. Auto-purged after the retention window by the prune job.
 
 import { useEffect, useState } from 'react';
 import { api, ApiError, type TrashedTask } from '../api/client';
@@ -10,7 +10,7 @@ import { Notice } from './common/Notice';
 import { EmptyState, Loading } from './common/EmptyState';
 import { LoadMore } from './common/LoadMore';
 
-export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName: string; onClose: () => void }) {
+export function TrashPanel({ tabId }: { tabId: string }) {
   const members = useStore((s) => s.membersByBoard[tabId]);
   const [tasks, setTasks] = useState<TrashedTask[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,36 +65,29 @@ export function TrashPanel({ tabId, tabName, onClose }: { tabId: string; tabName
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-list" role="dialog" aria-modal="true" aria-label="Trash" onClick={(e) => e.stopPropagation()}>
-        <header className="modal-head">
-          <h2>Trash — {tabName}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
-        </header>
+    <>
+      {error && <Notice>{error}</Notice>}
 
-        {error && <Notice>{error}</Notice>}
-
-        <ul className="trash-list modal-list-body">
-          {tasks?.map((t) => (
-            <li key={t.id} className="trash-item">
-              <div className="trash-main">
-                <span className={`trash-text ${label(t) === '(untitled)' ? 'is-untitled' : ''}`}>{label(t)}</span>
-                <span className="trash-meta">
-                  {assigneeName(t.assigneeId) ? `assigned to ${assigneeName(t.assigneeId)} · ` : ''}
-                  deleted by {t.deleterEmail?.split('@')[0] ?? t.deletedBy ?? 'system'}
-                  {t.deletedAt ? ` · ${timeAgo(t.deletedAt)}` : ''}
-                </span>
-              </div>
-              <button className="row-action" disabled={busy} onClick={() => restore(t.id)}>Restore</button>
-            </li>
-          ))}
-          {tasks && tasks.length === 0 && <EmptyState as="li">Trash is empty.</EmptyState>}
-          {!tasks && !error && <Loading as="li" />}
-          {tasks && tasks.length > 0 && (
-            <li><LoadMore hasMore={!!cursor} busy={loadingMore} onLoad={() => void loadMore()} /></li>
-          )}
-        </ul>
-      </div>
-    </div>
+      <ul className="trash-list">
+        {tasks?.map((t) => (
+          <li key={t.id} className="trash-item">
+            <div className="trash-main">
+              <span className={`trash-text ${label(t) === '(untitled)' ? 'is-untitled' : ''}`}>{label(t)}</span>
+              <span className="trash-meta">
+                {assigneeName(t.assigneeId) ? `assigned to ${assigneeName(t.assigneeId)} · ` : ''}
+                deleted by {t.deleterEmail?.split('@')[0] ?? t.deletedBy ?? 'system'}
+                {t.deletedAt ? ` · ${timeAgo(t.deletedAt)}` : ''}
+              </span>
+            </div>
+            <button className="row-action" disabled={busy} onClick={() => restore(t.id)}>Restore</button>
+          </li>
+        ))}
+        {tasks && tasks.length === 0 && <EmptyState as="li">Trash is empty.</EmptyState>}
+        {!tasks && !error && <Loading as="li" />}
+        {tasks && tasks.length > 0 && (
+          <li><LoadMore hasMore={!!cursor} busy={loadingMore} onLoad={() => void loadMore()} /></li>
+        )}
+      </ul>
+    </>
   );
 }

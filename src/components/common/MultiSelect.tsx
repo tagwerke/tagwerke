@@ -17,7 +17,7 @@ export interface MultiOption {
 /** Above this many options the panel gets a search box. */
 const SEARCH_THRESHOLD = 8;
 
-export function MultiSelect({ options, selected, onChange, noun, label }: {
+export function MultiSelect({ options, selected, onChange, noun, label, footer }: {
   options: MultiOption[];
   selected: string[];
   onChange: (selected: string[]) => void;
@@ -25,6 +25,8 @@ export function MultiSelect({ options, selected, onChange, noun, label }: {
   noun: string;
   /** Accessible name for the trigger. */
   label: string;
+  /** A last row under the options that goes to where the list itself is kept — "Manage sprints…". */
+  footer?: { label: string; onSelect: () => void };
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -139,6 +141,16 @@ export function MultiSelect({ options, selected, onChange, noun, label }: {
               );
             })}
           </ul>
+          {footer && (
+            <button
+              type="button"
+              className="dd-option"
+              // mousedown like the options, so it acts before the outside-click handler closes us.
+              onMouseDown={(e) => { e.preventDefault(); setOpen(false); footer.onSelect(); }}
+            >
+              <span className="dd-option-label">{footer.label}</span>
+            </button>
+          )}
         </div>
       )}
     </div>

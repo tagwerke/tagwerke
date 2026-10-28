@@ -1,4 +1,5 @@
-// API tokens for ONE board (PAT_PLAN.md), in Share, for board admins. The token is for a project's
+// API tokens for ONE board (PAT_PLAN.md), shown as the board's "Agents" in board settings › People,
+// for board admins. The token is for a project's
 // agent: it reads this board, and can comment and/or create and edit tasks. It belongs to the board,
 // not to whoever made it, and can never mark a task done, delete anything or touch members, settings,
 // documents or secrets.
@@ -11,6 +12,7 @@ import { TokenSecret } from './TokenSecret';
 import { toggled, tokenError, useStepUpRun } from './useStepUpRun';
 import { Notice } from '../common/Notice';
 import { EmptyState } from '../common/EmptyState';
+import { Section } from '../common/Section';
 
 const SCOPES: { key: AgentExtraScope; label: string }[] = [
   { key: 'task:comment', label: 'Comment on tasks' },
@@ -82,9 +84,10 @@ export function BoardTokens({ tabId, onChange }: { tabId: string; onChange: () =
   }
 
   return (
-    <div className="board-settings board-tokens">
-      <strong>API tokens</strong>
-      <span className="security-sub">For an agent working on this board. It can’t mark tasks done, delete anything or change members or settings.</span>
+    <Section
+      title="Agents"
+      description="An agent works on this board through an API token. It can’t mark tasks done, delete anything or change members or settings."
+    >
       {error && <Notice>{error}</Notice>}
       {created && <TokenSecret token={created.token} onDone={() => setCreated(null)} />}
 
@@ -104,7 +107,7 @@ export function BoardTokens({ tabId, onChange }: { tabId: string; onChange: () =
       </ul>
 
       {!open ? (
-        <button className="btn ghost" onClick={() => { setOpen(true); setCreated(null); }}>New API token</button>
+        <button className="btn ghost security-act" onClick={() => { setOpen(true); setCreated(null); }}>Add an agent</button>
       ) : (
         <form className="token-form" onSubmit={(e) => void create(e)}>
           <label className="field">
@@ -133,6 +136,6 @@ export function BoardTokens({ tabId, onChange }: { tabId: string; onChange: () =
         </form>
       )}
       {dialog}
-    </div>
+    </Section>
   );
 }

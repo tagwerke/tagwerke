@@ -7,7 +7,7 @@ hash. Send them as `Authorization: Bearer <token>`.
 |---|---|---|
 | Prefix | `tgw_pat_` | `tgw_agent_` |
 | Acts as | **You** (writes are attributed to you) | A bot user bound to one board |
-| Where | Security → Personal access tokens | Share → API tokens (board admins) |
+| Where | Security → Personal access tokens | Board settings → People → Agents (board admins) |
 | API | The normal `/api/*` routes | `/api/agent/*` |
 | Reaches | The boards you tick, or all your boards including future ones | That one board |
 
@@ -55,8 +55,8 @@ write your boards directly (tasks, sub-tasks, comments, sprints) with the right 
 
 For a project's agent. Pick **comment** and/or **create and edit tasks** when you create it. The agent
 reads its board and works through `/api/agent/*` (see the Agent API notes). It cannot mark a task
-done, delete anything, or touch members, settings, documents or secrets. It appears in Share with a
-"bot" badge; revoking the token removes it from the board.
+done, delete anything, or touch members, settings, documents or secrets. It appears under Agents in
+Board settings → People; revoking the token removes it from the board.
 
 ## Self-hosting notes
 

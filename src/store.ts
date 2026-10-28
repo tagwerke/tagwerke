@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
-import type { BlockFilter, BoardSettings, BoardState, BoardView, CalendarEvent, DocumentDTO, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task } from './types';
+import type { BlockFilter, BoardSettings, BoardSettingsSection, BoardState, BoardView, CalendarEvent, DocumentDTO, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task } from './types';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { dlog, sid } from './util/dlog';
@@ -165,8 +165,11 @@ interface Actions {
   setBoardStates(tabId: ID, states: BoardState[]): void;
   setActiveTab(id: ID | null): void;
   setBoardView(view: BoardView): void;
-  /** Which board-panel tab a URL asked for, or null. Cleared once the panel has opened it. */
-  setBoardPanel(panel: 'sprints' | null): void;
+  /** Open the open board's settings at a section, or close them with null. */
+  setBoardSettings(section: BoardSettingsSection | null): void;
+  /** Open a board's settings at a section from anywhere — another board, a task page, the
+   *  calendar, a search result. Every "Edit states…" / "Invite someone…" link goes through this. */
+  openBoardSettings(tabId: ID, section: BoardSettingsSection): void;
 
   // Sprints (SPRINTS_PLAN.md). Rename/delete/setCurrent, matching renameTab/deleteTab/
   // setTabStarred's shape: optimistic local mutate + durable-outbox persist.
@@ -322,7 +325,7 @@ function makeInitial(): RootState {
     starredRowOrder: [sampleTabId],
     activeTabId: null,
     boardView: 'table',
-    boardPanel: null,
+    boardSettings: null,
     openTaskId: null,
     pendingCascade: null,
     plannerOpen: false,
@@ -515,7 +518,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         // Opening a board lands on the doc view; leaving resets too (harmless). Any board /
         // space / home selection also leaves the calendar (they share the main content area)
         // and closes an open task page — it belonged to wherever we're navigating away from.
-        set({ activeTabId: id, boardView: 'table', plannerOpen: false, openTaskId: null, boardPanel: null });
+        set({ activeTabId: id, boardView: 'table', plannerOpen: false, openTaskId: null, boardSettings: null });
       },
       offerCascadeFor(ids) {
         // The bulk counterpart of offerCascade: ONE offer for the whole selection. Calling the
@@ -555,8 +558,14 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       dismissCascade() {
         set({ pendingCascade: null });
       },
-      setBoardPanel(panel) {
-        set({ boardPanel: panel });
+      setBoardSettings(section) {
+        set({ boardSettings: section });
+      },
+      openBoardSettings(tabId, section) {
+        // Settings sit over the board, so the board has to be what's showing: a task page or the
+        // calendar in front of it would hide them.
+        if (get().activeTabId !== tabId) get().setActiveTab(tabId);
+        set({ openTaskId: null, plannerOpen: false, boardSettings: section });
       },
       setBoardView(view) {
         set({ boardView: view });
