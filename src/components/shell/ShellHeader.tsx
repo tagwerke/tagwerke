@@ -1,13 +1,12 @@
 // The header: everything about what is on screen, plus the app's own tools. It is the old top bar
 // and the board's title row merged into one place — back, the board's space and name, who is here,
-// Share, star, the board menu; then search, help, notifications, import, a new board, and your
+// Share, star, the board menu; then search, notifications, import, a new board, and your
 // account. Drawn as a row in the top bar or a column in the sidebar; the tabs take the other bar.
 
 import { useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { useSession } from '../../session/useSession';
 import { useNotifications } from '../../notifications/useNotifications';
-import { useHelpBadge } from '../../help/useHelpBadge';
 import { usePresence } from '../../realtime/usePresence';
 import { hexToRgba } from '../../util/color';
 import { Avatar } from '../common/Avatar';
@@ -140,7 +139,6 @@ export function ShellHeader({ orientation, onOpen }: { orientation: Orientation;
   const tab = useStore((s) => (s.activeTabId ? s.tabs[s.activeTabId] : undefined));
   const setActiveTab = useStore((s) => s.setActiveTab);
   const unread = useNotifications((s) => s.unread);
-  const { hasNew: hasNewHelp } = useHelpBadge();
 
   return (
     <header className={`topbar main-topbar shell-header is-${orientation}`}>
@@ -160,11 +158,6 @@ export function ShellHeader({ orientation, onOpen }: { orientation: Orientation;
           <button className="btn ghost" onClick={() => onOpen('search')} title="Search (Ctrl+K)">
             <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             <span>search</span>
-          </button>
-          <button className="btn ghost topbar-help" onClick={() => onOpen('help')} aria-label="how to use Tagwerke" title="How to use Tagwerke">
-            <span>?</span>
-            <span className="shell-label">help</span>
-            {hasNewHelp && <span className="help-btn-dot" aria-label="new" />}
           </button>
           <button className="btn ghost notif-bell" onClick={() => onOpen('notifications')} title="Notifications" aria-label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}>
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden><path d="M8 2a3.5 3.5 0 00-3.5 3.5c0 3-1.5 4-1.5 4h10s-1.5-1-1.5-4A3.5 3.5 0 008 2zM6.5 12a1.5 1.5 0 003 0" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>

@@ -247,7 +247,7 @@ input, select, textarea { font: inherit; color: inherit; }
    eyebrow-sm  — a compact column/section tag (10px, bold)
    label-caps  — a form label, divider or hint (11px, regular)
    Each selector below keeps only its own colour/margins; the typography lives here. */
-.sidebar-sec-label, .info-pane-updates h3, .info-section h3, .info-go-faster summary, .task-section-title,
+.sidebar-sec-label, .task-section-title,
 .doc-group-head, .doc-strip-title, .secrets-title, .secret-reveal-brand, .admin-section h4,
 .board-settings strong, .record-history-head {
   font-size: var(--fs-xs); letter-spacing: 1px; text-transform: uppercase; font-weight: 700;
@@ -1734,7 +1734,7 @@ button.pill:hover { border-color: var(--line-strong); }
 @media (max-width: 1280px) {
   /* Room for the board's name first: the app's buttons keep their icons and tooltips. */
   .shell-header.is-row .topbar-actions > .btn:not(.btn-new-tab) > span,
-  .shell-header.is-row .topbar-utility > .btn:not(.topbar-help) > span:not(.notif-badge) { display: none; }
+  .shell-header.is-row .topbar-utility > .btn > span:not(.notif-badge) { display: none; }
 }
 
 .shell-header.is-col {
@@ -1756,7 +1756,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .shell-header.is-col .topbar-divider { width: auto; height: 1px; margin: 6px 0; }
 .shell-header.is-col .shell-label { display: inline; }
 .shell-header.is-col .notif-badge { position: static; margin-left: auto; }
-.shell-header.is-col .help-btn-dot { position: static; margin-left: auto; }
 /* Edge to edge and flush with the bottom: cancel the sidebar's own padding (16px 12px). */
 .shell-header.is-col .sidebar-account-wrap { margin: auto -12px -16px; }
 .shell-header.is-col .sidebar-account { padding: 12px 14px; }
@@ -1804,64 +1803,6 @@ button.pill:hover { border-color: var(--line-strong); }
 .board-title:focus { background: color-mix(in srgb, var(--ink) 4%, transparent); border-radius: var(--r-sm); }
 .presence.avatar-stack { margin-right: 2px; }
 
-.help-btn-dot { position: absolute; top: 1px; right: 1px; width: 7px; height: 7px; border-radius: 50%; background: var(--pop); border: 1.5px solid var(--bg-paper); }
-/* Top-bar "?" — same pill shape as its search/bell siblings, with the "new" dot above. */
-.topbar-help { position: relative; font-weight: 700; }
-
-/* Help pane opened from the top bar's "?" — a modal shell for InfoPane to sit in. */
-.info-modal {
-  background: var(--bg-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-pop);
-  width: min(760px, calc(100vw - 32px));
-  height: min(80vh, 760px);
-  overflow: hidden;
-}
-
-/* Help / info pane — the content behind the top bar's "?" button. */
-.info-pane { padding: 24px clamp(16px, 3vw, 32px) 40px; max-width: 760px; height: 100%; overflow-y: auto; }
-.info-pane-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
-.info-pane-head h2 { font-family: var(--serif); font-style: italic; font-size: var(--fs-h2); font-weight: 600; margin: 0; }
-.info-pane-updates { margin-bottom: 28px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-paper); }
-.info-pane-updates h3, .info-section h3 { margin: 0 0 8px; color: var(--ink-mute); }
-.info-update { display: flex; gap: 12px; padding: 6px 0; }
-.info-update + .info-update { border-top: 1px solid var(--line); }
-.info-update-date { font-family: var(--mono); font-size: var(--fs-2xs); color: var(--ink-mute); flex: none; width: 72px; padding-top: 2px; }
-.info-update-title { font-weight: 600; font-size: var(--fs-md); color: var(--ink); }
-.info-update-body { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--ink-soft); line-height: 1.4; }
-.info-pane-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; }
-.info-section dl { margin: 0; }
-.info-row { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; border-top: 1px solid var(--line); }
-.info-row:first-child { border-top: 0; }
-.info-row dt { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 700; color: var(--pop); }
-.info-row dd { margin: 0; font-size: var(--fs-sm); color: var(--ink-soft); line-height: 1.35; }
-
-/* Basics block — required reading, always unfolded, visually first. */
-.info-basics { display: flex; flex-direction: column; gap: 22px; }
-.info-basic h3 { margin: 0 0 6px; font-family: var(--serif); font-style: italic; font-size: var(--fs-h3); font-weight: 600; color: var(--ink); }
-.info-basic p { margin: 0; font-size: var(--fs-md); color: var(--ink-soft); line-height: 1.5; }
-.info-basic p + p { margin-top: 6px; }
-.info-basic ol { margin: 4px 0 0; padding-left: 20px; font-size: var(--fs-md); color: var(--ink-soft); line-height: 1.7; }
-.info-basic ol li::marker { color: var(--pop); font-weight: 700; }
-.info-basic code, .info-detail code { font-family: var(--mono); font-size: var(--fs-sm); background: var(--bg-paper); border: 1px solid var(--line); border-radius: var(--r-xs); padding: 1px 5px; color: var(--ink); }
-.info-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 8px; }
-.info-detail { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-paper); }
-.info-detail-title { font-weight: 700; font-size: var(--fs-sm); color: var(--pop); margin-bottom: 4px; }
-.info-detail p { margin: 0; font-size: var(--fs-sm); color: var(--ink-soft); line-height: 1.45; }
-
-/* Go-faster block — the old shortcut reference, collapsed by default so it never competes with
-   the basics above it. Native <details> keeps this a CSS-only affordance, no state to wire up. */
-.info-go-faster { margin: 28px 0 20px; padding-top: 18px; border-top: 1px solid var(--line); }
-.info-go-faster summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 7px; color: var(--ink-mute); }
-.info-go-faster summary::-webkit-details-marker { display: none; }
-.info-go-faster summary::before { content: '▸'; display: inline-block; font-size: var(--fs-2xs); color: var(--ink-mute); transition: transform 0.15s ease; }
-.info-go-faster[open] summary::before { transform: rotate(90deg); }
-.info-go-faster summary span { text-transform: none; font-weight: 500; letter-spacing: 0; opacity: 0.7; }
-.info-go-faster .info-pane-sections { margin-top: 18px; }
-
-/* What's new — demoted below Go-faster: quieter treatment, last thing on the page. */
-.info-pane-updates.info-pane-updates-demoted { margin: 0; opacity: 0.82; border-style: dashed; }
 .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px; background: var(--bg-paper); }
 .seg button { padding: 5px 15px; border-radius: 999px; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-mute); border: 0; background: none; cursor: pointer; }
 .seg button[aria-selected="true"] { background: var(--ink); color: var(--bg); }

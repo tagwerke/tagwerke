@@ -22,7 +22,6 @@ import { NotificationsPanel } from './components/NotificationsPanel';
 import { CascadeToast } from './components/common/CascadeToast';
 import { ConfirmDialog } from './components/common/ConfirmDialog';
 import { Toast } from './components/common/Toast';
-import { InfoPane } from './components/InfoPane';
 import { TaskPage } from './components/TaskPage';
 import { Loading } from './components/common/EmptyState';
 import { usePhone } from './util/usePhone';
@@ -38,7 +37,7 @@ import {
   parseOpenTaskId,
 } from './util/router';
 
-export type Panel = 'new' | 'import' | 'filter' | 'search' | 'more' | 'notifications' | 'help';
+export type Panel = 'new' | 'import' | 'filter' | 'search' | 'more' | 'notifications';
 
 export default function App() {
   const status = useSession((s) => s.status);
@@ -96,20 +95,6 @@ function Workspace() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-
-  // The help modal is InfoPane wrapped for standalone use; InfoPane has no Escape handling of its
-  // own, so the modal supplies it. Capture phase, claiming the key: help opens over a board too, and
-  // TabView's own listener (registered first) would otherwise take the Escape as "leave the board".
-  useEffect(() => {
-    if (panel !== 'help') return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      closePanel();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [panel]);
 
   // Navigation lives in the URL so a refresh (or a shared link) restores the open board, the
   // calendar, a board's settings, or an open task. URL → store: whenever the path changes
@@ -204,13 +189,6 @@ function Workspace() {
       {panel === 'notifications' && <NotificationsPanel onClose={closePanel} />}
       {panel === 'more' && <MoreSheet onClose={closePanel} onOpen={setPanel} />}
       {appSettingsOpen && <AppSettings />}
-      {panel === 'help' && (
-        <div className="modal-backdrop" onClick={closePanel}>
-          <div className="info-modal" onClick={(e) => e.stopPropagation()}>
-            <InfoPane kind="help" onClose={closePanel} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
