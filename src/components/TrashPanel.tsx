@@ -9,9 +9,12 @@ import { timeAgo } from '../util/dates';
 import { Notice } from './common/Notice';
 import { EmptyState, Loading } from './common/EmptyState';
 import { LoadMore } from './common/LoadMore';
+import { askConfirm } from '../confirm/useConfirm';
+import { showToast } from '../toast/useToast';
 
 export function TrashPanel({ tabId }: { tabId: string }) {
   const members = useStore((s) => s.membersByBoard[tabId]);
+  const isAdmin = useStore((s) => s.tabs[tabId]?.role === 'admin');
   const [tasks, setTasks] = useState<TrashedTask[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,6 +54,31 @@ export function TrashPanel({ tabId }: { tabId: string }) {
     void refresh();
   }, [tabId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Delete forever (CUSTOM_FIELDS_PLAN P5): board admins only, and the one thing in the app that
+  // can't be undone, so it asks first and says so.
+  async function purge(t: TrashedTask) {
+    const ok = await askConfirm({
+      title: `Delete “${label(t)}” forever?`,
+      body: 'The task, its sub-tasks in the Trash and their comments are erased. History keeps that it happened and which fields changed, not what they said. This can’t be undone.',
+      confirmLabel: 'Delete forever',
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.trash.purge(t.id);
+      setTasks((prev) => prev?.filter((x) => !r.deleted.includes(x.id)) ?? prev);
+      if (r.documents.length) {
+        const names = r.documents.map((d) => d.name).join(', ');
+        showToast(`Deleted forever. ${r.documents.length === 1 ? 'Its file stays' : 'Its files stay'} on the board's Files: ${names}`);
+      } else showToast('Deleted forever.');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message.replace(/^.*-> \d+\s*/, '') : 'delete failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function restore(id: string) {
     setBusy(true);
     setError(null);
@@ -80,6 +108,7 @@ export function TrashPanel({ tabId }: { tabId: string }) {
               </span>
             </div>
             <button className="row-action" disabled={busy} onClick={() => restore(t.id)}>Restore</button>
+            {isAdmin && <button className="row-action danger" disabled={busy} onClick={() => void purge(t)}>Delete forever</button>}
           </li>
         ))}
         {tasks && tasks.length === 0 && <EmptyState as="li">Trash is empty.</EmptyState>}

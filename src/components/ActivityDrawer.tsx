@@ -48,6 +48,19 @@ function actionVerb(action: string, payload: unknown): string {
   if (action === 'board_settings_change') return 'changed board settings';
   if (action === 'agent_token_created') return 'created a board token';
   if (action === 'bulk_task_import') return 'imported tasks';
+  if (action === 'task_purge') {
+    // No title, on purpose: deleting forever is how a title leaves the record (CUSTOM_FIELDS_PLAN D18).
+    const n = Number((payload as { taskCount?: number } | null)?.taskCount ?? 1);
+    return n > 1 ? `permanently deleted a task and its ${n - 1} sub-task${n === 2 ? '' : 's'}` : 'permanently deleted a task';
+  }
+  if (action === 'board_field_change') {
+    const p = (payload ?? {}) as { op?: string; fieldLabel?: string };
+    const name = p.fieldLabel ? ` “${p.fieldLabel}”` : '';
+    if (p.op === 'create') return `added the field${name}`;
+    if (p.op === 'delete') return `deleted the field${name}`;
+    if (p.op === 'reorder') return 'reordered the fields';
+    return `changed the field${name}`;
+  }
   if (action === 'board_state_change') {
     const p = (payload ?? {}) as { op?: string; state?: string };
     const name = p.state ? ` “${p.state}”` : '';
@@ -314,18 +327,27 @@ export function ActivityDrawer({
     // refusals belong in the trail as much as the changes — they are why the task doesn't match
     // the point it was restored to.
     const skipped = Array.isArray(p.skipped) ? (p.skipped as { field: string; reason: string }[]) : null;
+    type ChangeRow = { field: string; from: unknown; to: unknown; fromLabel?: string; toLabel?: string; label?: string };
+    // A custom field is named by the label it had when it changed (CUSTOM_FIELDS_PLAN D8).
+    const nameOfField = (c: ChangeRow) => (c.field.startsWith('fields.') ? c.label ?? c.field.slice(7) : fieldLabel(c.field));
+    // The task was deleted forever: the entry keeps which fields changed, not what they said (D18).
+    if (p.purged && Array.isArray(p.changes)) {
+      const names = (p.changes as ChangeRow[]).map(nameOfField);
+      return names.length ? <div className="history-detail">changed {names.join(', ')}</div> : null;
+    }
     if (Array.isArray(p.changes)) {
       return (
         <>
         <ul className="history-changes">
-          {(p.changes as { field: string; from: unknown; to: unknown; fromLabel?: string; toLabel?: string }[]).map((c, i) => {
+          {(p.changes as ChangeRow[]).map((c, i) => {
             if (c.field === 'docJSON') return <li key={i}>edited the document</li>;
             // A status shows the name it had at the time, not today's (D10).
             const from = c.field === 'status' ? statusLabelAt(c, 'from') ?? '—' : value(c.field, c.from);
             const to = c.field === 'status' ? statusLabelAt(c, 'to') ?? '—' : value(c.field, c.to);
+            const label = nameOfField(c);
             return (
-              <li key={i} title={`${fieldLabel(c.field)}: ${from} → ${to}`}>
-                <Change label={fieldLabel(c.field)} from={from} to={to} />
+              <li key={i} title={`${label}: ${from} → ${to}`}>
+                <Change label={label} from={from} to={to} />
               </li>
             );
           })}
@@ -377,8 +399,11 @@ export function ActivityDrawer({
   const loading = entries === null || (isTask && commentsLoading && !comments);
 
   /** The row's sentence as plain text — the tooltip for when the line is cut short. */
+  /** Whether a board's history row names its task. A task deleted forever has no name left to give. */
+  const namesTask = (e: HistoryEntry) => !isTask && e.targetType === 'task' && e.action !== 'task_purge' && !(e.payload as { purged?: boolean } | null)?.purged;
+
   function sentence(e: HistoryEntry): string {
-    const subject = !isTask && e.targetType === 'task' ? ` “${e.subject || 'untitled task'}”` : '';
+    const subject = namesTask(e) ? ` “${e.subject || 'untitled task'}”` : '';
     const move = e.action === 'task_move' ? moveNote(e.payload) : null;
     return `${actionVerb(e.action, e.payload)}${subject}${move ? ` ${move}` : ''}`;
   }
@@ -399,7 +424,7 @@ export function ActivityDrawer({
           <span className="history-verb" title={sentence(e)}>
             {actionVerb(e.action, e.payload)}
             {/* A board's history is mostly its tasks, so each row has to say WHICH. */}
-            {!isTask && e.targetType === 'task' && (
+            {namesTask(e) && (
               <> <span className="history-subject">“{e.subject || 'untitled task'}”</span></>
             )}
             {move && <> {move}</>}

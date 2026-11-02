@@ -1962,6 +1962,21 @@ button.pill:hover { border-color: var(--line-strong); }
 /* The rail is the right-most column: open its lists leftward so they never run off the page. */
 .task-prop .dd-panel { left: auto; right: -8px; min-width: 200px; }
 .task-prop .dp-icon { display: none; }
+/* A custom field (TaskPage FieldProp): an input that reads as text, the way the triggers above do,
+   or a link with its edit button beside it. */
+.task-field { display: flex; align-items: center; gap: 4px; }
+.task-field-input {
+  width: calc(100% + 8px); min-width: 0; margin-left: -8px; padding: 6px 8px;
+  border: 1px solid transparent; border-radius: var(--r-sm); background: transparent;
+  font: inherit; font-size: var(--fs-md); color: var(--ink); outline: none;
+}
+.task-field-input::placeholder { color: var(--ink-mute); }
+.task-field-input:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.task-field-input:focus { border-color: var(--pop); background: var(--bg-elev); }
+.task-field-input:disabled { opacity: 1; cursor: default; }
+.task-field-link { min-width: 0; padding: 6px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-md); color: var(--pop); text-decoration: none; }
+.task-field-link:hover { text-decoration: underline; }
+.task-field-edit { flex: none; color: var(--ink-mute); }
 .task-props-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-xs); line-height: 1.8; color: var(--ink-mute); }
 
 .task-page-main { grid-area: main; min-width: 0; padding: 0 var(--tp-pad) 56px; }
@@ -2032,6 +2047,8 @@ button.pill:hover { border-color: var(--line-strong); }
   .task-prop-label { font-size: var(--fs-xs); }
   .task-prop .dd-trigger { width: auto; margin-left: 0; padding: 6px 8px; }
   .task-prop .dd-caret { opacity: 1; }
+  .task-field-input { width: 10em; margin-left: 0; }
+  .task-field-link { max-width: 12em; padding: 6px 4px; }
   .task-props-foot { display: none; }
 }
 

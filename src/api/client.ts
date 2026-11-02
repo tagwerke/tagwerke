@@ -9,6 +9,7 @@
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import type { BoardState, StatusCategory } from '../../shared/status';
+import type { BoardField, FieldType, FieldValue, FieldValues } from '../../shared/fields';
 import type { Wallpaper } from '../../shared/wallpaper';
 import type { BlockFilter, CalendarEvent, Comment as CommentDTO, DocumentDTO, DocumentItem, ExtractionRun, ID, Notification as NotificationDTO, RsvpStatus, SecretEntryDTO, SecretLinkDTO, Sprint, Task } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Handlers, type Mutation } from '../offline/outbox';
@@ -191,9 +192,10 @@ export const api = {
     // Both answer `{ status }` when the server stored a different state than was sent (a state
     // deleted since this client last pulled — BOARD_STATES_PLAN D8); `handlers` lets persist.ts
     // apply it.
-    upsert: (id: ID, b: { homeTabId: ID; text: string; description?: string | null; status: string; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; sprintId?: ID | null; owner?: string | null }, handlers?: Handlers) =>
+    upsert: (id: ID, b: { homeTabId: ID; text: string; description?: string | null; status: string; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; sprintId?: ID | null; owner?: string | null; fields?: FieldValues }, handlers?: Handlers) =>
       submitMutation(M('PUT', `/api/tasks/${id}`, b), handlers),
-    patch: (id: ID, patch: { text?: string; description?: string | null; status?: string; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; sprintId?: ID | null; owner?: string | null }, handlers?: Handlers) =>
+    // `fields` merges per key on the server; a null value clears that key (CUSTOM_FIELDS_PLAN D5).
+    patch: (id: ID, patch: { text?: string; description?: string | null; status?: string; assigneeId?: ID | null; date?: string | null; priority?: 1 | 2 | 3 | null; rank?: string; parentTaskId?: ID | null; sprintId?: ID | null; owner?: string | null; fields?: Record<string, FieldValue | null> }, handlers?: Handlers) =>
       submitMutation(M('PATCH', `/api/tasks/${id}`, patch), handlers),
     remove: (id: ID) => submitMutation(M('DELETE', `/api/tasks/${id}`)),
     deleteOrphans: (homeTabId: ID, keepIds: ID[]) =>
@@ -260,6 +262,18 @@ export const api = {
       req<{ movedTasks: number; states: BoardState[] }>(`/api/tabs/${tabId}/states/${encodeURIComponent(key)}`, {
         method: 'DELETE', ...(moveTo ? { body: JSON.stringify({ moveTo }) } : {}),
       }),
+  },
+  // A board's custom fields (CUSTOM_FIELDS_PLAN P2). Direct calls for the same reasons as `states`:
+  // admin configuration, the server's rules decide, and every call answers with the whole list.
+  fields: {
+    create: (tabId: ID, b: { label: string; type: FieldType }) =>
+      req<{ field: BoardField; fields: BoardField[] }>(`/api/tabs/${tabId}/fields`, { method: 'POST', body: JSON.stringify(b) }),
+    update: (tabId: ID, key: string, b: { label?: string; hidden?: boolean }) =>
+      req<{ field: BoardField; fields: BoardField[] }>(`/api/tabs/${tabId}/fields/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(b) }),
+    reorder: (tabId: ID, keys: string[]) =>
+      req<{ fields: BoardField[] }>(`/api/tabs/${tabId}/fields/order`, { method: 'PUT', body: JSON.stringify({ keys }) }),
+    remove: (tabId: ID, key: string) =>
+      req<{ fields: BoardField[] }>(`/api/tabs/${tabId}/fields/${encodeURIComponent(key)}`, { method: 'DELETE' }),
   },
   sprints: {
     list: (tabId: ID) => req<{ sprints: Sprint[] }>(`/api/tabs/${tabId}/sprints`),
@@ -399,6 +413,9 @@ export const api = {
     // A board's soft-deleted tasks + restore (recoverability, §G). Editor+ (read/act → live).
     list: (tabId: ID, cursor?: string | null) => req<Page<{ tasks: TrashedTask[] }>>(`/api/tabs/${tabId}/trash${pageQuery(cursor)}`),
     restore: (id: ID) => req(`/api/tasks/${id}/restore`, { method: 'POST' }),
+    /** Delete forever (board admins): the task and its trashed sub-tasks leave for good. The files
+     *  that were attached stay on the board, and are listed so they can be deleted too. */
+    purge: (id: ID) => req<{ deleted: ID[]; documents: { id: ID; name: string }[] }>(`/api/tasks/${id}/forever`, { method: 'DELETE' }),
   },
   // A CSV import is a batch, blocking operation with a real result to show — direct fetch,
   // like admin.* below, not the optimistic-outbox path tasks/tabs use for single-entity edits.
@@ -594,6 +611,8 @@ export interface MoveResult {
   clearedAssignees: number;
   /** Statuses the move rewrote to fit the destination's states, with the task count of each. */
   stateChanges: { from: string; fromLabel: string; to: string; toLabel: string; count: number }[];
+  /** Field values the destination had no matching field for, so they were dropped (D7). */
+  droppedFields: number;
 }
 
 /**

@@ -12,7 +12,8 @@ import { dlog, sid } from '../lib/dlog.ts';
 import { applyBoardAccessChange } from '../realtime/connections.ts';
 import { destroyRoom } from '../realtime/ydoc.ts';
 import { ensureCurrentSprint } from '../lib/sprints.ts';
-import { seedBoardStates } from '../lib/boardStates.ts';
+import { insertBoardStates, planStates, seedBoardStates } from '../lib/boardStates.ts';
+import { insertBoardFields, planFields } from '../lib/boardFields.ts';
 import { WALLPAPERS } from '../../shared/wallpaper.ts';
 
 // Opt-in per-board guardrails (AUDIT_IMPLEMENTATION_PLAN §F4). Admin-only to change.
@@ -38,6 +39,19 @@ const createBody = z.object({
   position: z.number().int().nonnegative(),
   starred: z.boolean().optional(),
   type: z.enum(['normal']).optional(),
+  // A template (CUSTOM_FIELDS_PLAN P3): the board's starting states, in place of the six defaults,
+  // and its custom fields. Checked in full before anything is written, so a bad one creates nothing.
+  // The only time a token can set either: afterwards they are board settings (D9).
+  states: z
+    .array(z.object({
+      key: z.string().optional(),
+      label: z.string(),
+      category: z.string(),
+      color: z.string().optional(),
+      description: z.string().nullable().optional(),
+    }))
+    .optional(),
+  fields: z.array(z.object({ key: z.string().optional(), label: z.string(), type: z.string() })).optional(),
 });
 
 const patchBody = z.object({
@@ -88,6 +102,10 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     if (!b.success) return reply.code(400).send({ error: 'invalid tab' });
     const userId = req.user!.id;
     const starred = b.data.starred ?? false;
+    const states = b.data.states ? planStates(b.data.states) : null;
+    if (states && !states.ok) return reply.code(400).send(states.body);
+    const fields = b.data.fields ? planFields([], b.data.fields) : null;
+    if (fields && !fields.ok) return reply.code(400).send(fields.body);
     dlog('tabs', `POST /api/tabs board=${sid(b.data.id)} user=${sid(userId)} → inserting tab + admin membership`);
     await db.transaction(async (tx) => {
       // Shared content only; created_by is attribution. Per-user view state
@@ -110,8 +128,11 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
       // SPRINTS_PLAN: a new board starts with its current-week sprint already seeded, so
       // tasks have somewhere to land without waiting for the next daily rollout tick.
       await ensureCurrentSprint(tx, b.data.id, new Date());
-      // BOARD_STATES_PLAN D4: every board has its own states from the start.
-      await seedBoardStates(tx, b.data.id);
+      // BOARD_STATES_PLAN D4: every board has its own states from the start — the template's, or
+      // the six defaults.
+      if (states) await insertBoardStates(tx, b.data.id, states.states);
+      else await seedBoardStates(tx, b.data.id);
+      if (fields) await insertBoardFields(tx, b.data.id, fields.fields);
     });
     // A board a token creates joins that token's list, so it can keep working on what it made.
     await patAddBoard(req, b.data.id);

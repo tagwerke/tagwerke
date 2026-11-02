@@ -46,6 +46,9 @@ import type { Wallpaper } from '../shared/wallpaper';
 // Each board's states, and what each category means, live in shared/status.ts with the server.
 import type { BoardState } from '../shared/status';
 export type { BoardState };
+// Each board's custom fields, and the rules for their values, live in shared/fields.ts with the server.
+import type { BoardField, FieldValues } from '../shared/fields';
+export type { BoardField, FieldValues };
 
 export interface Task {
   id: ID;
@@ -70,6 +73,9 @@ export interface Task {
   // Sprints (SPRINTS_PLAN.md): the sprint this task is scoped to. Absent = backlog.
   sprintId?: ID;
   owner?: string; // legacy display fallback; superseded by assigneeId
+  // Custom field values by the home board's field keys (fieldsByBoard). Only set values; absent =
+  // none. A peer's write arrives as the whole object, so it is always replaced, never merged.
+  fields?: FieldValues;
   createdAt?: number; // DB-managed; read-only on the client
   updatedAt?: number; // DB-managed; read-only on the client
 }
@@ -202,11 +208,11 @@ export function asBoardView(v: unknown): BoardView {
  *  its work lives in one of these; the board itself only links into them. */
 export type BoardSettingsSection =
   | 'general' | 'wallpaper' | 'people' | 'permissions'
-  | 'states' | 'sprints'
+  | 'states' | 'fields' | 'sprints'
   | 'history' | 'trash'
   | 'secrets' | 'danger';
 export const BOARD_SETTINGS_SECTIONS: BoardSettingsSection[] = [
-  'general', 'wallpaper', 'people', 'permissions', 'states', 'sprints', 'history', 'trash', 'secrets', 'danger',
+  'general', 'wallpaper', 'people', 'permissions', 'states', 'fields', 'sprints', 'history', 'trash', 'secrets', 'danger',
 ];
 
 // ── Sprints (SPRINTS_PLAN.md) ───────────────────────────────────────────────
@@ -237,6 +243,9 @@ export interface RootState {
    *  Loaded with /api/state; replaced whole by a `board-states` frame. Read through
    *  src/tasks/states.ts, which falls back to the defaults for a board not loaded yet. */
   statesByBoard: Record<ID, BoardState[]>;
+  /** Per-board custom fields (CUSTOM_FIELDS_PLAN), live ones in position order, hidden included.
+   *  Loaded with /api/state; replaced whole by a `board-fields` frame. A board with none is absent. */
+  fieldsByBoard: Record<ID, BoardField[]>;
   /**
    * Live comment count per task, for the badge on a task row (COMMENTS_PLAN.md D9). Server-owned:
    * it arrives with /api/state and is nudged locally as comments are posted/deleted. Tombstones

@@ -63,6 +63,8 @@ export interface FieldChange {
   /** For `status`: the state's label when the change happened (BOARD_STATES_PLAN D10). */
   fromLabel?: string;
   toLabel?: string;
+  /** For `fields.<key>`: the field's label when the change happened (CUSTOM_FIELDS_PLAN D8). */
+  label?: string;
 }
 
 /**

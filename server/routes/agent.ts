@@ -25,6 +25,7 @@ import { boardChannel, publish } from '../lib/bus.ts';
 import { taskDTO } from '../lib/assembleState.ts';
 import { categoryOf, startKey } from '../../shared/status.ts';
 import { liveStates, resolveStatus, statesOf, unknownStatusBody, withStatusLabels } from '../lib/boardStates.ts';
+import { fieldChanges, liveFields, mergeFieldsSql, resolveFieldWrite, valuesOf } from '../lib/boardFields.ts';
 import {
   AUDITED_FIELDS, PARENT_REFUSAL_MESSAGE, assigneeAllowed, nextSiblingRank, notifyAssigneeChange, parentRefusal, sprintAllowed,
 } from './tasks.ts';
@@ -79,7 +80,7 @@ const SCOPE_TEXT: Record<AgentScope, string> = {
   'board:read': "read this board's notes, tasks, sprints and comments",
   'task:comment': "post comments on this board's tasks",
   'task:write':
-    "create tasks and edit their title, description, status (never to done), assignee, priority, due date, sprint and parent",
+    "create tasks and edit their title, description, status (never to done), assignee, priority, due date, sprint, parent, and text or number fields",
 };
 const CANNOT_ALWAYS: string[] = [
   'mark a task done',
@@ -113,7 +114,26 @@ const taskFields = {
   sprintId: z.string().min(1).nullable().optional(),
   sprint: z.literal('current').optional(),
   parentTaskId: z.string().min(1).nullable().optional(),
+  fields: z.record(z.string(), z.unknown()).optional(),
 };
+
+/**
+ * A field write an agent may make (CUSTOM_FIELDS_PLAN D11): `text` and `number` fields only. Links,
+ * emails and phones all render as something clickable, which is exactly the channel
+ * neutralizeAgentText closes everywhere else; a text value is neutralized the same way.
+ */
+async function agentFieldWrite(tabId: string, patch: Record<string, unknown>) {
+  const live = await liveFields(tabId);
+  const clean: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(patch)) {
+    const field = live.find((f) => f.key === key);
+    if (field && field.type !== 'text' && field.type !== 'number') {
+      return { ok: false as const, body: { error: 'field_not_writable_by_agent', key, type: field.type } };
+    }
+    clean[key] = field?.type === 'text' && typeof raw === 'string' ? neutralizeAgentText(raw) : raw;
+  }
+  return resolveFieldWrite(tabId, clean);
+}
 const createTaskBody = z.object({ id: z.string().min(1).max(64).optional(), title: z.string().min(1).max(MAX_TITLE), ...taskFields });
 const patchTaskBody = z.object({ title: z.string().min(1).max(MAX_TITLE).optional(), ...taskFields });
 
@@ -248,6 +268,8 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
         // What each `status` key means on this board. Send only a key from here; decide what a
         // state means by its category, not its label. Hidden states are valid but not offered.
         states: (await liveStates(tabId)).map((s) => ({ key: s.key, label: s.label, description: s.description, category: s.category, hidden: s.hidden })),
+        // The board's custom fields. An agent writes only the `text` and `number` ones.
+        fields: (await liveFields(tabId)).map((f) => ({ key: f.key, label: f.label, type: f.type })),
         tasks: taskRows.map(({ t, sprint }) => ({
           id: t.id,
           parentTaskId: t.parentTaskId,
@@ -259,6 +281,7 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
           // Provenance for a task's text is its creator; later edits by others are in the history.
           title: { text: t.text || t.lastTitle || '', author: who(t.createdBy) },
           description: { text: t.description ?? '', author: who(t.createdBy) },
+          fields: Object.fromEntries(Object.entries(valuesOf(t.fields)).map(([k, v]) => [k, { text: String(v), author: who(t.createdBy) }])),
           comments: byTask.get(t.id) ?? [],
         })),
       };
@@ -352,11 +375,13 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
       const st = await agentStatusFor(tabId, b.data.status ?? startKey(await statesOf(tabId)));
       if ('body' in st) return reply.code(400).send(st.body);
       const status = st.key;
+      const fieldWrite = b.data.fields ? await agentFieldWrite(tabId, b.data.fields) : null;
+      if (fieldWrite && !fieldWrite.ok) return reply.code(400).send(fieldWrite.body);
       const inserted = await db
         .insert(schema.tasks)
         .values({
           id, createdBy: agent.userId, homeTabId: tabId, text: title, lastTitle: title, description,
-          status,
+          status, fields: fieldWrite?.set ?? {},
           assigneeId: b.data.assigneeId ?? null,
           date: b.data.dueDate ?? null, priority: b.data.priority ?? null,
           rank: await nextSiblingRank(tabId, parentTaskId), parentTaskId, sprintId: sprintId ?? null,
@@ -431,13 +456,22 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
         // The old rank was ordered against a different set of siblings.
         if (b.data.parentTaskId !== before.parentTaskId) set.rank = await nextSiblingRank(tabId, b.data.parentTaskId);
       }
+      const columns = { ...set };
+      if (b.data.fields) {
+        const write = await agentFieldWrite(tabId, b.data.fields);
+        if (!write.ok) return reply.code(400).send(write.body);
+        set.fields = mergeFieldsSql(write);
+      }
       if (!Object.keys(set).length) return reply.send({ ok: true });
       set.updatedAt = new Date();
       await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
       const after = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0] ?? before;
 
       req.auditHandled = true;
-      const changes = await withStatusLabels(tabId, diffChanges(before as Record<string, unknown>, set, AUDITED_FIELDS));
+      const changes = [
+        ...(await withStatusLabels(tabId, diffChanges(before as Record<string, unknown>, columns, AUDITED_FIELDS))),
+        ...(b.data.fields ? await fieldChanges(tabId, valuesOf(before.fields), valuesOf(after.fields)) : []),
+      ];
       if (changes.length) {
         recordAudit({
           actorId: agent.userId, action: 'PATCH /api/agent/tasks/:id', targetType: 'task', targetId: id,

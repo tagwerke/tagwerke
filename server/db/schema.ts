@@ -250,6 +250,31 @@ export const boardStates = pgTable(
   (t) => [uniqueIndex('board_states_tab_key_uniq').on(t.tabId, t.key)],
 );
 
+// A board's custom fields (CUSTOM_FIELDS_PLAN.md), defined the way states are: an immutable `key`
+// (a readable slug; what tasks.fields is keyed by and what an API writer sends), an editable
+// `label`, and a `type` fixed at creation (shared/fields.ts FIELD_TYPES). Admins edit them; a token
+// only ever sets them when it creates the board. A deleted field stays as a tombstone so history
+// still resolves its label and its key is never reused on the board.
+export const boardFields = pgTable(
+  'board_fields',
+  {
+    id: text('id').primaryKey(),
+    tabId: text('tab_id')
+      .notNull()
+      .references(() => tabs.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    label: text('label').notNull(),
+    // url | email | phone | number | text
+    type: text('type').notNull(),
+    position: integer('position').notNull(),
+    hidden: boolean('hidden').notNull().default(false),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('board_fields_tab_key_uniq').on(t.tabId, t.key)],
+);
+
 export const tasks = pgTable(
   'tasks',
   {
@@ -302,6 +327,9 @@ export const tasks = pgTable(
     // recognizable label in Trash. Set on any write with non-empty text; never cleared by
     // emptying — makes a soft-deleted row self-describing at rest. See AUDIT_IMPLEMENTATION_PLAN §G.
     lastTitle: text('last_title'),
+    // Custom field values, keyed by the home board's field keys (board_fields). Only set values are
+    // stored; an absent key is an empty field. Writes merge per key (routes/tasks.ts).
+    fields: jsonb('fields').$type<Record<string, string | number>>().notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     // Auto-bumped by a BEFORE UPDATE trigger (see migration) so every write path is covered.
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

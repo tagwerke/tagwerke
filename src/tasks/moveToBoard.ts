@@ -43,6 +43,8 @@ export function describeMove(result: MoveResult, boardName: string): string {
   }
   const changed = (result.stateChanges ?? []).reduce((n, c) => n + c.count, 0);
   if (changed) parts.push(`— ${changed} task${changed === 1 ? '' : 's'} changed state`);
+  const dropped = result.droppedFields;
+  if (dropped) parts.push(`— ${dropped} field value${dropped === 1 ? '' : 's'} dropped (no matching field there)`);
   return parts.join(' ');
 }
 

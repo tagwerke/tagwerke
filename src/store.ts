@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
-import type { BlockFilter, BoardSettings, BoardSettingsSection, BoardState, BoardView, CalendarEvent, DocumentDTO, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task } from './types';
+import type { BlockFilter, BoardField, BoardSettings, BoardSettingsSection, BoardState, BoardView, CalendarEvent, DocumentDTO, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task } from './types';
+import type { FieldValue } from '../shared/fields';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { dlog, sid } from './util/dlog';
@@ -166,6 +167,8 @@ interface Actions {
   deleteTab(id: ID): void;
   /** Replace a board's state list (a `board-states` frame, or an admin's own edit). */
   setBoardStates(tabId: ID, states: BoardState[]): void;
+  /** Replace a board's custom fields (a `board-fields` frame, or an admin's own edit). */
+  setBoardFields(tabId: ID, fields: BoardField[]): void;
   setActiveTab(id: ID | null): void;
   setBoardView(view: BoardView): void;
   /** Open the open board's settings at a section, or close them with null. */
@@ -189,6 +192,8 @@ interface Actions {
   upsertTask(t: Partial<Task> & { id: ID; homeTabId: ID; text: string }): Task;
   setTaskMeta(id: ID, meta: Partial<Pick<Task, 'date' | 'priority' | 'owner' | 'status' | 'assigneeId' | 'rank' | 'sprintId' | 'description'>>): void;
   setTaskText(id: ID, text: string): void;
+  /** Set one custom field value, or clear it with null. persist.ts sends only the keys that changed. */
+  setTaskField(id: ID, key: string, value: FieldValue | null): void;
   /** Re-parent a task. Always assigns a rank in the new sibling group (append unless given). */
   setTaskParent(id: ID, parentTaskId: ID | undefined, rank?: string): void;
   /**
@@ -322,6 +327,7 @@ function makeInitial(): RootState {
     membersByBoard: {},
     sprintsByBoard: {},
     statesByBoard: {},
+    fieldsByBoard: {},
     commentCounts: {},
     projectOrder: [defaultProjectId, personalProjectId],
     tabOrder: [sampleTabId, personalTabId],
@@ -505,11 +511,14 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
           delete sprintsByBoard[id];
           const statesByBoard = { ...s.statesByBoard };
           delete statesByBoard[id];
+          const fieldsByBoard = { ...s.fieldsByBoard };
+          delete fieldsByBoard[id];
           return {
             tabs,
             tasks,
             sprintsByBoard,
             statesByBoard,
+            fieldsByBoard,
             openTaskId,
             tabOrder: s.tabOrder.filter((tid) => tid !== id),
             starredRowOrder: s.starredRowOrder.filter((tid) => tid !== id),
@@ -520,6 +529,9 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       },
       setBoardStates(tabId, states) {
         set((s) => ({ statesByBoard: { ...s.statesByBoard, [tabId]: states } }));
+      },
+      setBoardFields(tabId, fields) {
+        set((s) => ({ fieldsByBoard: { ...s.fieldsByBoard, [tabId]: fields } }));
       },
       setActiveTab(id) {
         // Opening a board lands on the doc view; leaving resets too (harmless). Any board /
@@ -656,6 +668,14 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       },
       setTaskText(id, text) {
         patchTask(id, { text });
+      },
+      setTaskField(id, key, value) {
+        const t = get().tasks[id];
+        if (!t) return;
+        const fields = { ...t.fields };
+        if (value === null) delete fields[key];
+        else fields[key] = value;
+        patchTask(id, { fields });
       },
       setTaskParent(id, parentTaskId, rank) {
         // Both fields move together: a rank is only meaningful against ONE set of siblings, so
@@ -990,6 +1010,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
           events: state.events ?? {},
           commentCounts: state.commentCounts ?? {},
           statesByBoard: state.statesByBoard ?? {},
+          fieldsByBoard: state.fieldsByBoard ?? {},
           plannerOpen: false,
           plannerDate: state.plannerDate ?? todayISO(),
           plannerMode: state.plannerMode ?? 'day',

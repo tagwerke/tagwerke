@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { and, desc, eq, inArray, isNotNull, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, notInArray, or, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { requireAuth } from '../auth/guard.ts';
 import { patReaches, tokenStamp } from '../auth/pat.ts';
@@ -15,6 +15,9 @@ import { isValidRank, rankAfter } from '../../shared/rank.ts';
 import { MAX_TASK_DEPTH } from '../../shared/tree.ts';
 import { categoryOf, startKey, visible } from '../../shared/status.ts';
 import { labelOf, liveStates, resolveStatus, statesOf, unknownStatusBody, withStatusLabels } from '../lib/boardStates.ts';
+import { carryFields, fieldChanges, liveFields, mergeFieldsSql, resolveFieldWrite, valuesOf } from '../lib/boardFields.ts';
+import { normalizeValue, type FieldValues } from '../../shared/fields.ts';
+import type { FieldChange } from '../lib/audit.ts';
 
 /** Sibling order key. Validated on the way in — a malformed rank would corrupt every view's order
  *  silently, and it costs nothing to reject it at the edge. See shared/rank.ts. */
@@ -71,6 +74,9 @@ async function taskBoard(req: FastifyRequest): Promise<string | undefined> {
 export const priority = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 /** A state key. Which keys a board has is checked by resolveStatus, not here. */
 export const statusEnum = z.string().min(1).max(64);
+/** Custom field values by key; null removes one. Which keys and values a board takes is checked by
+ *  resolveFieldWrite, not here. */
+const fieldsBody = z.record(z.string(), z.unknown()).optional();
 
 const upsertBody = z.object({
   homeTabId: z.string().min(1),
@@ -84,7 +90,11 @@ const upsertBody = z.object({
   parentTaskId: z.string().nullable().optional(),
   sprintId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
+  fields: fieldsBody,
 });
+
+/** A create-only write (P1): the upsert body plus the id, which the caller chooses. */
+const createBody = upsertBody.extend({ id: z.string().min(1).max(64) });
 
 const patchBody = z.object({
   text: z.string().optional(),
@@ -97,6 +107,7 @@ const patchBody = z.object({
   parentTaskId: z.string().nullable().optional(),
   sprintId: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
+  fields: fieldsBody,
 });
 
 /** Shape-check for a value coming back out of the audit trail (JSON, so nothing is guaranteed). */
@@ -199,6 +210,41 @@ async function coDeletedDescendantIds(id: string, deletedAt: Date): Promise<stri
     SELECT id FROM descn WHERE d > 0
   `);
   return ((res.rows ?? res) as { id: string }[]).map((r) => r.id);
+}
+
+/**
+ * Every TRASHED descendant of `id`, whichever delete put it there. Delete forever takes these with
+ * the task: once the parent is gone they would sit in the Trash as orphans of a task nobody can
+ * restore.
+ */
+async function trashedDescendantIds(id: string): Promise<string[]> {
+  const res = await db.execute(sql`
+    WITH RECURSIVE descn AS (
+      SELECT id, 0 AS d FROM tasks WHERE id = ${id}
+      UNION ALL
+      SELECT t.id, descn.d + 1
+        FROM tasks t JOIN descn ON t.parent_task_id = descn.id
+       WHERE descn.d < ${MAX_TASK_DEPTH + 1} AND t.deleted_at IS NOT NULL
+    )
+    SELECT id FROM descn WHERE d > 0
+  `);
+  return ((res.rows ?? res) as { id: string }[]).map((r) => r.id);
+}
+
+// What survives of an audit payload once its task is deleted forever (D18). Kept: which fields
+// changed, by name and label, and the bookkeeping that says nothing about the task's content (where
+// it moved, how many sub-tasks, which token wrote it). Everything else — titles, values, comment
+// text — goes.
+const SCRUB_KEEP = ['fromTabId', 'toTabId', 'subtaskCount', 'via', 'tokenId', 'tokenLabel', 'taskId'] as const;
+
+function scrubPayload(payload: unknown): Record<string, unknown> {
+  const p = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+  const out: Record<string, unknown> = { purged: true };
+  for (const k of SCRUB_KEEP) if (p[k] !== undefined) out[k] = p[k];
+  if (Array.isArray(p.changes)) {
+    out.changes = (p.changes as FieldChange[]).map((c) => ({ field: c.field, ...(c.label ? { label: c.label } : {}) }));
+  }
+  return out;
 }
 
 /** Why a proposed re-parent was refused — turned into a specific 400 so the client can say which. */
@@ -314,6 +360,20 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       if (before && before.homeTabId !== b.data.homeTabId
           && (!patReaches(req, before.homeTabId) || !(await hasBoardRole(userId, before.homeTabId, 'editor'))))
         return reply.code(404).send({ error: 'not found' });
+      // Fields (D6). Omitted PRESERVES — PUT is also the doc-sync write path, which knows nothing
+      // about fields — except that a re-homing PUT keeps only what the new board can hold (D7). An
+      // explicit object replaces them whole.
+      let fields: FieldValues;
+      if (b.data.fields !== undefined) {
+        const write = await resolveFieldWrite(b.data.homeTabId, b.data.fields);
+        if (!write.ok) return reply.code(400).send(write.body);
+        fields = write.set;
+        (req.body as { fields?: unknown }).fields = fields; // peers see what was stored
+      } else if (before && before.homeTabId !== b.data.homeTabId) {
+        fields = carryFields(valuesOf(before.fields), await liveFields(before.homeTabId), await liveFields(b.data.homeTabId)).kept;
+      } else {
+        fields = valuesOf(before?.fields);
+      }
       const hasTitle = b.data.text.trim().length > 0;
       // Sibling order: an explicit rank wins; otherwise KEEP the existing one (a PUT that omits it
       // must never wipe the ordering — the resurrect path and older clients both do that); and only
@@ -341,6 +401,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           ? b.data.sprintId
           : before && before.homeTabId === b.data.homeTabId ? before.sprintId : null,
         owner: b.data.owner ?? null,
+        fields,
         // Retain a recognizable Trash label; null only when genuinely never titled (§G).
         lastTitle: hasTitle ? b.data.text : null,
       };
@@ -356,6 +417,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         parentTaskId: values.parentTaskId,
         sprintId: values.sprintId,
         owner: values.owner,
+        fields: values.fields,
         // Resurrect: re-adding a task (e.g. editor undo / re-typing a line) clears any
         // soft-delete, so Ctrl+Z restores it in place. See AUDIT_IMPLEMENTATION_PLAN §H.
         deletedAt: null,
@@ -366,7 +428,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       await db.insert(schema.tasks).values(values).onConflictDoUpdate({ target: schema.tasks.id, set: onConflictSet });
       // Attribution: diff a replace; record a create when the task is new.
       if (before) {
-        const changes = await withStatusLabels(values.homeTabId, diffChanges(before as Record<string, unknown>, values, [...AUDITED_FIELDS, 'homeTabId']));
+        const changes = [
+          ...(await withStatusLabels(values.homeTabId, diffChanges(before as Record<string, unknown>, values, [...AUDITED_FIELDS, 'homeTabId']))),
+          ...(await fieldChanges(values.homeTabId, valuesOf(before.fields), fields)),
+        ];
         auditEdit(req, { action: 'PUT /api/tasks/:id', targetType: 'task', targetId: id, scopeId: values.homeTabId, changes });
       } else {
         req.auditHandled = true;
@@ -380,6 +445,95 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // lands here, not on PATCH) and a full-replace that changes the assignee.
       notifyAssigneeChange(values.assigneeId, before?.assigneeId, userId, values.homeTabId, id, values.text);
       return reply.send({ ok: true, ...(resolved.remapped ? { status } : {}) });
+    },
+  );
+
+  /**
+   * Create a task, or do nothing (P1). For a writer outside the app — an importer, a lead feed —
+   * that may send the same task again: PUT would overwrite what a person has done to it since and
+   * bring it back out of the Trash. This never does either (D13):
+   *   - the id is new                       → 201, created
+   *   - the id is on this board, live or not → 200 `{ created: false, deleted }`, nothing written
+   *   - the id is on another board          → 409 `id_taken`
+   * A task trashed or set to a "don't contact" state therefore stays that way however often it is
+   * sent. Once it is deleted forever its id is free, and sending it again creates it anew.
+   */
+  app.post(
+    '/api/tasks',
+    {
+      preHandler: requireBoardRole('editor', (req) => (req.body as { homeTabId?: string })?.homeTabId),
+      config: { pat: 'tasks', rateLimit: { max: 60, timeWindow: '1 minute' } },
+    },
+    async (req, reply) => {
+      const b = createBody.safeParse(req.body);
+      if (!b.success) return reply.code(400).send({ error: 'invalid task' });
+      const { id, homeTabId } = b.data;
+      const userId = req.user!.id;
+
+      const answerExisting = async () => {
+        const existing = (await db
+          .select({ homeTabId: schema.tasks.homeTabId, deletedAt: schema.tasks.deletedAt })
+          .from(schema.tasks)
+          .where(eq(schema.tasks.id, id))
+          .limit(1))[0];
+        if (!existing) return null;
+        req.auditHandled = true;
+        if (existing.homeTabId !== homeTabId) return reply.code(409).send({ error: 'id_taken' });
+        return reply.send({ ok: true, created: false, deleted: existing.deletedAt != null });
+      };
+      const answered = await answerExisting();
+      if (answered) return answered;
+
+      if (!(await assigneeAllowed(homeTabId, b.data.assigneeId)))
+        return reply.code(400).send({ error: 'assignee is not a member of the home board' });
+      if (!(await sprintAllowed(homeTabId, b.data.sprintId)))
+        return reply.code(400).send({ error: 'sprint is not on the home board' });
+      const refusal = await parentRefusal(homeTabId, id, b.data.parentTaskId);
+      if (refusal) return reply.code(400).send({ error: PARENT_REFUSAL_MESSAGE[refusal] });
+      const resolved = await resolveStatus(homeTabId, b.data.status ?? startKey(await statesOf(homeTabId)));
+      if (!resolved) return reply.code(400).send(await unknownStatusBody(homeTabId));
+      let fields: FieldValues = {};
+      if (b.data.fields !== undefined) {
+        const write = await resolveFieldWrite(homeTabId, b.data.fields);
+        if (!write.ok) return reply.code(400).send(write.body);
+        fields = write.set;
+      }
+
+      const hasTitle = b.data.text.trim().length > 0;
+      const row = (await db
+        .insert(schema.tasks)
+        .values({
+          id,
+          createdBy: userId,
+          homeTabId,
+          text: b.data.text,
+          description: b.data.description ?? null,
+          status: resolved.key,
+          assigneeId: b.data.assigneeId ?? null,
+          date: b.data.date ?? null,
+          priority: b.data.priority ?? null,
+          rank: b.data.rank ?? (await nextSiblingRank(homeTabId, b.data.parentTaskId ?? null)),
+          parentTaskId: b.data.parentTaskId ?? null,
+          sprintId: b.data.sprintId ?? null,
+          owner: b.data.owner ?? null,
+          fields,
+          lastTitle: hasTitle ? b.data.text : null,
+        })
+        .onConflictDoNothing({ target: schema.tasks.id })
+        .returning())[0];
+      // Lost a race with another create of the same id: answer as if it had been there first.
+      if (!row) return (await answerExisting()) ?? reply.code(409).send({ error: 'id_taken' });
+
+      req.auditHandled = true;
+      recordAudit({
+        actorId: userId, action: 'POST /api/tasks', targetType: 'task', targetId: id,
+        scopeId: homeTabId, method: 'POST', status: 201,
+        payload: { created: { text: row.text, status: row.status }, ...tokenStamp(req) },
+      });
+      // The generic broadcast hook can't carry this one: the route has no :id for peers to key on.
+      publish(boardChannel(homeTabId), { v: 1, type: 'entity', entity: 'task', id, action: 'PUT', patch: taskDTO(row), actorId: userId });
+      notifyAssigneeChange(row.assigneeId, null, userId, homeTabId, id, row.text);
+      return reply.code(201).send({ ok: true, created: true, ...(resolved.remapped ? { status: row.status } : {}) });
     },
   );
 
@@ -412,7 +566,16 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         // The generic broadcast hook (ws.ts) fans out req.body, so peers must see the stored key.
         if (remapped) (req.body as { status?: string }).status = resolved.key;
       }
-      const set = { ...b.data } as Record<string, unknown>;
+      let fieldWrite: { set: FieldValues; removed: string[] } | null = null;
+      if (b.data.fields !== undefined) {
+        const write = await resolveFieldWrite(homeTabId, b.data.fields);
+        if (!write.ok) return reply.code(400).send(write.body);
+        fieldWrite = write;
+      }
+      const columns: Record<string, unknown> = { ...b.data };
+      delete columns.fields; // written below, as one merge expression
+      const set = { ...columns };
+      if (fieldWrite) set.fields = mergeFieldsSql(fieldWrite);
       // Retain the last non-empty title for Trash; emptying the text never clears it (§G).
       if (typeof b.data.text === 'string' && b.data.text.trim().length > 0) set.lastTitle = b.data.text;
       // Re-parented without a new rank: the old key was ordered against a DIFFERENT set of
@@ -420,10 +583,16 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       if (b.data.parentTaskId !== undefined && b.data.rank === undefined && b.data.parentTaskId !== before.parentTaskId) {
         set.rank = await nextSiblingRank(homeTabId, b.data.parentTaskId ?? null);
       }
-      await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id));
+      const after = (await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, id)).returning({ fields: schema.tasks.fields }))[0];
+      // D12: peers get the whole merged object, not the patch, so a client always replaces `fields`
+      // wholesale and never has to repeat the server's merge.
+      if (fieldWrite && after) (req.body as { fields?: unknown }).fields = after.fields;
 
-      // Enriched audit: field diffs.
-      const changes = await withStatusLabels(homeTabId, diffChanges(before as Record<string, unknown>, b.data as Record<string, unknown>, AUDITED_FIELDS));
+      // Enriched audit: field diffs, custom fields one change per key.
+      const changes = [
+        ...(await withStatusLabels(homeTabId, diffChanges(before as Record<string, unknown>, columns as Record<string, unknown>, AUDITED_FIELDS))),
+        ...(fieldWrite && after ? await fieldChanges(homeTabId, valuesOf(before.fields), valuesOf(after.fields)) : []),
+      ];
       auditEdit(req, { action: 'PATCH /api/tasks/:id', targetType: 'task', targetId: id, scopeId: homeTabId, changes });
 
       // Notifications (NOTIFICATIONS.md §2). All key off before/after we already have in hand.
@@ -465,6 +634,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
    *      Without one the move is refused with 409 `states_unmapped`, listing what needs a choice
    *      and the options, so the client can ask and retry.
    *
+   *   5. FIELD VALUES CARRY WHERE THEY FIT (CUSTOM_FIELDS_PLAN D7). A value stays when the
+   *      destination has a field with the same key and type; the rest are dropped and counted. No
+   *      mapping step, unlike states: a status is mandatory, a field value isn't.
+   *
    * The task lands as a ROOT on the destination, appended: its old rank was ordered against a
    * different set of siblings and means nothing here.
    */
@@ -484,7 +657,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // Already there: succeed without touching anything, so a retried op (the network dropped the
       // response) is not an error the client has to distinguish from a real failure.
       if (toTabId === fromTabId) {
-        return reply.send({ ok: true, moved: [], subtaskCount: 0, clearedAssignees: 0, stateChanges: [] });
+        return reply.send({ ok: true, moved: [], subtaskCount: 0, clearedAssignees: 0, stateChanges: [], droppedFields: 0 });
       }
       // Editor on the destination too — the preHandler only proved it on the board being left.
       // 404 (not 403) keeps a board the caller can't see non-probeable, matching auth/boards.ts.
@@ -502,7 +675,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // Which assignments survive the move: everything pointing at a non-member of the destination
       // is cleared. Computed here (rather than in the UPDATE) so the counts below are exact.
       const rows = await db
-        .select({ id: schema.tasks.id, assigneeId: schema.tasks.assigneeId, status: schema.tasks.status })
+        .select({ id: schema.tasks.id, assigneeId: schema.tasks.assigneeId, status: schema.tasks.status, fields: schema.tasks.fields })
         .from(schema.tasks)
         .where(and(inArray(schema.tasks.id, ids), isNull(schema.tasks.deletedAt)));
       const roster = new Set(
@@ -543,6 +716,19 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         from, fromLabel: await labelOf(fromTabId, from), to, toLabel: await labelOf(toTabId, to), count: counts.get(from)!,
       })));
 
+      // (5) Field values carry over where the destination has a field with the same key and type
+      // (D7); the rest are dropped, and the response and the audit row say which.
+      const fromFields = await liveFields(fromTabId);
+      const destFields = await liveFields(toTabId);
+      const keptFields = new Map<string, FieldValues>();
+      const droppedFields: { id: string; keys: string[] }[] = [];
+      for (const r of rows) {
+        const { kept, dropped } = carryFields(valuesOf(r.fields), fromFields, destFields);
+        if (!dropped.length) continue;
+        keptFields.set(r.id, kept);
+        droppedFields.push({ id: r.id, keys: dropped });
+      }
+
       const rank = await nextSiblingRank(toTabId, null);
       // ONE statement — see (1) above. Only the moved ROOT is re-parented and re-ranked; the
       // descendants keep the shape they had, they just live somewhere else now.
@@ -559,6 +745,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
             : {}),
           ...(remap.length
             ? { status: sql`CASE ${schema.tasks.status} ${sql.join(remap.map(([from, to]) => sql`WHEN ${from} THEN ${to}`), sql` `)} ELSE ${schema.tasks.status} END` }
+            : {}),
+          ...(keptFields.size
+            ? { fields: sql`CASE ${schema.tasks.id} ${sql.join([...keptFields].map(([taskId, kept]) => sql`WHEN ${taskId} THEN ${JSON.stringify(kept)}::jsonb`), sql` `)} ELSE ${schema.tasks.fields} END` }
             : {}),
           updatedAt: new Date(),
         })
@@ -592,6 +781,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           // Named, not just counted: "who lost this task" is the question the trail has to answer.
           ...(clearAssignee.length ? { clearedAssignees: rows.filter((r) => clearAssignee.includes(r.id)).map((r) => r.assigneeId) } : {}),
           ...(stateChanges.length ? { stateChanges } : {}),
+          ...(droppedFields.length ? { droppedFields } : {}),
         },
       });
 
@@ -601,6 +791,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         subtaskCount: kids.length,
         clearedAssignees: clearAssignee.length,
         stateChanges,
+        // How many field values the destination couldn't hold.
+        droppedFields: droppedFields.reduce((n, d) => n + d.keys.length, 0),
       });
     },
   );
@@ -640,6 +832,63 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         payload: { snapshot: { text: t.text, status: t.status }, ...(kids.length ? { subtaskCount: kids.length } : {}), ...tokenStamp(req) },
       });
       return reply.send({ ok: true, subtaskCount: kids.length });
+    },
+  );
+
+  /**
+   * Delete forever (P5): the one way a task's content leaves the database for good, for when someone
+   * asks to be erased. Admin-only and only from the Trash (D17) — delete first, then this — and never
+   * a token's to do, so no `config.pat`. Takes the task's trashed subtree with it.
+   *
+   * One transaction:
+   *   1. every audit row about those tasks or their comments is cut to WHAT changed, not what it
+   *      said (D18): history keeps "edited title, phone", without the title or the number;
+   *   2. the notifications that quote the task go;
+   *   3. the rows go — comments by cascade. Files attached to it are left as board documents by the
+   *      existing set-null and listed in the response, so the admin can delete those too.
+   * Then one `task_purge` row says it happened, with no title: the title may be what is being erased.
+   */
+  app.delete(
+    '/api/tasks/:id/forever',
+    { preHandler: requireBoardRole('admin', taskBoard) },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const t = (await db
+        .select({ homeTabId: schema.tasks.homeTabId, deletedAt: schema.tasks.deletedAt })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, id))
+        .limit(1))[0];
+      if (!t) return reply.code(404).send({ error: 'not found' });
+      if (!t.deletedAt) return reply.code(409).send({ error: 'not_in_trash' });
+
+      const ids = [id, ...(await trashedDescendantIds(id))];
+      const documents = await db.transaction(async (tx) => {
+        const trail = await tx
+          .select({ id: schema.auditLog.id, payload: schema.auditLog.payload })
+          .from(schema.auditLog)
+          .where(or(
+            and(eq(schema.auditLog.targetType, 'task'), inArray(schema.auditLog.targetId, ids)),
+            inArray(sql`${schema.auditLog.payload}->>'taskId'`, ids),
+          ));
+        for (const row of trail) {
+          await tx.update(schema.auditLog).set({ payload: scrubPayload(row.payload) }).where(eq(schema.auditLog.id, row.id));
+        }
+        await tx.delete(schema.notifications).where(inArray(schema.notifications.taskId, ids));
+        const attached = await tx
+          .select({ id: schema.documents.id, name: schema.documents.filename })
+          .from(schema.documents)
+          .where(and(inArray(schema.documents.taskId, ids), isNull(schema.documents.deletedAt)));
+        await tx.delete(schema.tasks).where(inArray(schema.tasks.id, ids));
+        return attached;
+      });
+
+      req.auditHandled = true;
+      recordAudit({
+        actorId: req.user!.id, action: 'task_purge', targetType: 'task', targetId: id,
+        scopeId: t.homeTabId, method: 'DELETE', status: 200,
+        payload: { taskCount: ids.length },
+      });
+      return reply.send({ ok: true, deleted: ids, documents });
     },
   );
 
@@ -787,12 +1036,18 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       const before = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1))[0];
       if (!before) return reply.code(404).send({ error: 'not found' });
 
-      const point = await stateAsOf(id, b.data.entryId, before as Record<string, unknown>, REVERTABLE_FIELDS);
+      const homeTabId = before.homeTabId;
+      // Custom fields rewind per key, under the names their changes are recorded with (D8). Only the
+      // board's live fields: a deleted field is not something a restore can write to.
+      const liveDefs = await liveFields(homeTabId);
+      const beforeFields = valuesOf(before.fields);
+      const current: Record<string, unknown> = { ...before };
+      for (const f of liveDefs) current[`fields.${f.key}`] = beforeFields[f.key] ?? null;
+      const point = await stateAsOf(id, b.data.entryId, current, [...REVERTABLE_FIELDS, ...liveDefs.map((f) => `fields.${f.key}`)]);
       // The entry named isn't in this task's trail — a stale drawer, or the retention prune took it
       // while it was open. Either way the moment it pointed at is no longer reconstructible.
       if (!point) return reply.code(404).send({ error: 'that history entry is no longer available' });
 
-      const homeTabId = before.homeTabId;
       const set: Record<string, unknown> = {};
       const skipped: { field: string; reason: string }[] = [];
       for (const field of REVERTABLE_FIELDS) {
@@ -824,8 +1079,23 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         }
         set[field] = value;
       }
+      const restoredFields: FieldValues = { ...beforeFields };
+      for (const f of liveDefs) {
+        const value = normalizeValue(f.type, point.values[`fields.${f.key}`]);
+        if (value === undefined) {
+          skipped.push({ field: `fields.${f.key}`, reason: 'that value is no longer valid' });
+          continue;
+        }
+        if (value === null) delete restoredFields[f.key];
+        else restoredFields[f.key] = value;
+      }
+      const fieldDiff = await fieldChanges(homeTabId, beforeFields, restoredFields);
+      if (fieldDiff.length) set.fields = restoredFields;
 
-      const changes = await withStatusLabels(homeTabId, diffChanges(before as Record<string, unknown>, set, REVERTABLE_FIELDS));
+      const changes = [
+        ...(await withStatusLabels(homeTabId, diffChanges(before as Record<string, unknown>, set, REVERTABLE_FIELDS))),
+        ...fieldDiff,
+      ];
       if (!changes.length) {
         // Already in that state (or everything that differed was skipped). Not an error, and not
         // worth an audit row — say so and let the UI report it.

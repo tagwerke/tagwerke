@@ -7,7 +7,11 @@
 import { nanoid } from 'nanoid';
 import { asc, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
-import { DEFAULT_LABEL, DEFAULT_STATES, nextSameCategory, visible, type BoardState, type StatusCategory } from '../../shared/status.ts';
+import {
+  CATEGORY_DEFAULT_COLOR, DEFAULT_LABEL, DEFAULT_STATES, MAX_STATES, REQUIRED_CATEGORIES, STATE_COLORS, STATUS_CATEGORIES,
+  nextSameCategory, visible, type BoardState, type StatusCategory,
+} from '../../shared/status.ts';
+import { slugKey } from '../../shared/fields.ts';
 import type { FieldChange } from './audit.ts';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -64,6 +68,55 @@ export async function seedBoardStates(tx: Tx | typeof db, tabId: string): Promis
       position: s.position,
     })),
   );
+  invalidate(tabId);
+}
+
+/** A state as a board template gives it (CUSTOM_FIELDS_PLAN P3), before validation. */
+export interface StateInput {
+  key?: string;
+  label: string;
+  category: string;
+  color?: string;
+  description?: string | null;
+}
+
+const STATE_KEY = /^[a-z][a-z0-9_]{0,39}$/;
+
+/**
+ * A board template's states, checked by the rules the states panel enforces (a visible `open` and
+ * `done` state, at most MAX_STATES, unique names), or the reason they can't be. Keys come from the
+ * input or the label, so boards made from one template share keys and a move between them needs no
+ * mapping.
+ */
+export function planStates(inputs: readonly StateInput[]): { ok: true; states: BoardState[] } | { ok: false; body: unknown } {
+  if (!inputs.length || inputs.length > MAX_STATES) return { ok: false, body: { error: 'too_many_states', max: MAX_STATES } };
+  const keys = new Set<string>();
+  const labels = new Set<string>();
+  const states: BoardState[] = [];
+  for (const [position, input] of inputs.entries()) {
+    const label = input.label.trim();
+    if (!label || label.length > 40) return { ok: false, body: { error: 'invalid_label' } };
+    if (labels.has(label.toLowerCase())) return { ok: false, body: { error: 'label_taken', label } };
+    if (!(STATUS_CATEGORIES as readonly string[]).includes(input.category)) return { ok: false, body: { error: 'invalid_category', valid: STATUS_CATEGORIES } };
+    const category = input.category as StatusCategory;
+    if (input.color !== undefined && !(STATE_COLORS as readonly string[]).includes(input.color)) return { ok: false, body: { error: 'invalid_color', valid: STATE_COLORS } };
+    const description = input.description?.trim() || null;
+    if (description && description.length > 200) return { ok: false, body: { error: 'invalid_description' } };
+    const key = input.key ?? slugKey(label);
+    if (!STATE_KEY.test(key)) return { ok: false, body: { error: 'invalid_key', key } };
+    if (keys.has(key)) return { ok: false, body: { error: 'key_taken', key } };
+    keys.add(key);
+    labels.add(label.toLowerCase());
+    states.push({ key, label, description, category, color: input.color ?? CATEGORY_DEFAULT_COLOR[category], position, hidden: false });
+  }
+  const missing = REQUIRED_CATEGORIES.find((c) => !states.some((s) => s.category === c));
+  if (missing) return { ok: false, body: { error: 'required_category', category: missing } };
+  return { ok: true, states };
+}
+
+/** Give a new board the states a template planned. Call inside the transaction that creates it. */
+export async function insertBoardStates(tx: Tx | typeof db, tabId: string, states: readonly BoardState[]): Promise<void> {
+  await tx.insert(schema.boardStates).values(states.map((s) => ({ id: nanoid(), tabId, ...s })));
   invalidate(tabId);
 }
 

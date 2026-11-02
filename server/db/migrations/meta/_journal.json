@@ -288,6 +288,13 @@
       "when": 1793584537581,
       "tag": "0040_board_member_wallpaper",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793625607728,
+      "tag": "0041_custom_fields",
+      "breakpoints": true
     }
   ]
 }

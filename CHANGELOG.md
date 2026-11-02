@@ -10,6 +10,24 @@ automatically on boot — always take a backup before upgrading.
 
 ### Added
 
+- **Custom fields** — each board can define up to 20 fields of its own (Board settings → Fields): a
+  link, email, phone, number or short text. They show on every task's page, links and emails as
+  something you can click, and a field can be renamed, hidden, reordered or deleted (its values stay
+  in each task's history). A field's type is fixed when it's made. Edits change one field at a time,
+  so two people filling in different fields of the same task both land. History records each change
+  under the field's name at the time, and a task restored to an earlier point gets its field values
+  back. Moving a task keeps the values the new board has a matching field for and says how many it
+  dropped. API writers use `fields` on task writes and read `fieldsByBoard` from `/api/state`; agents
+  can read every field but write only text and number fields.
+- **Create-only task writes** — `POST /api/tasks` creates a task, or does nothing if the id already
+  exists, for importers and other scripts that may send the same task twice: a task someone has since
+  worked on, trashed or set to a "do not contact" state is never overwritten or brought back.
+- **Board templates** — a new board created through the API can bring its own states and fields
+  (`POST /api/tabs` with `states` and `fields`), checked whole before anything is created.
+- **Delete forever** — board admins can delete a task from the Trash for good, with its trashed
+  sub-tasks, comments and the notifications that quote it, for when someone asks to be erased. Its
+  history keeps that it happened and which fields changed, but not the title or any value. Files
+  attached to it stay on the board and are listed so they can be deleted too.
 - **Per-board task states** — each board can name, color, order, describe and hide its own task
   states (Board settings → Task states; admins edit, everyone can read what each one means). Every state
   picks a category — Not started, In progress, Waiting, Done or Closed — and the app goes by the

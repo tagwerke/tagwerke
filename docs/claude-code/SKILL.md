@@ -46,18 +46,19 @@ jq -r '.tabs | to_entries[] | "\(.key)\t\(.value.name)\t\(.value.role)"' /tmp/tg
 jq -r '.sprintsByBoard["BOARD_ID"][] | "\(.id)\t\(.label)\t\(.isCurrent)"' /tmp/tgw-state.json  # sprints
 jq -r '.membersByBoard["BOARD_ID"][] | "\(.id)\t\(.email)"' /tmp/tgw-state.json                 # people
 jq -r '.statesByBoard["BOARD_ID"][] | "\(.key)\t\(.category)\t\(.label)\t\(.description // "")"' /tmp/tgw-state.json  # task states
+jq -r '(.fieldsByBoard["BOARD_ID"] // [])[] | "\(.key)\t\(.type)\t\(.label)"' /tmp/tgw-state.json  # custom fields
 jq -r '.tasks[] | select(.homeTabId=="BOARD_ID") | "\(.id)\t\(.status)\t\(.parentTaskId // "-")\t\(.text)"' /tmp/tgw-state.json
 ```
 
 `/api/state` returns: `tabs` (boards, with your `role`), `tasks` (every task, keyed by id),
-`membersByBoard`, `sprintsByBoard`, `statesByBoard`, `commentCounts`, and `projects` (your own categories). Only boards
+`membersByBoard`, `sprintsByBoard`, `statesByBoard`, `fieldsByBoard`, `commentCounts`, and `projects` (your own categories). Only boards
 the token reaches appear. If a board you expect is missing, the token wasn't ticked for it — ask the
 user for a new token; don't guess ids.
 
 ## Tasks
 
 A task has: `text` (the title), `description`, `status`, `assigneeId`, `date`
-(due, `YYYY-MM-DD`), `priority`, `parentTaskId`, `sprintId`, and a board (`homeTabId`).
+(due, `YYYY-MM-DD`), `priority`, `parentTaskId`, `sprintId`, `fields`, and a board (`homeTabId`).
 
 - **status**: statuses are per board; read `statesByBoard[BOARD_ID]` (key, label, description,
   category) and only send a `key` from it. Use the category, not the label, to decide what a state
@@ -74,6 +75,13 @@ A task has: `text` (the title), `description`, `status`, `assigneeId`, `date`
   parent before its children. Children do not inherit sprint or due date, and a parent's status does
   not follow its children.
 - **sprint**: `sprintId` from `sprintsByBoard`, or omit/`null` for the backlog.
+- **fields**: a board's own fields, from `fieldsByBoard[BOARD_ID]` (key, label, type). Send
+  `"fields": {"KEY": value}` with keys from that list only. Types: `url` (absolute `http(s)://`),
+  `email`, `phone` (digits, spaces, `+()-.`), `number` (a JSON number, not a string) and `text`
+  (≤500 characters). A write changes only the keys you send; `null` or `""` clears one. A board with no
+  fields has no entry. An unknown key is 400 `unknown_field` (with the valid list), a bad value 400
+  `invalid_field` (naming the key and type). Put a link, email, phone or score in a field when the board
+  has one for it, not in the description.
 
 ### Use sub-tasks to keep structure where possible
 
@@ -108,10 +116,31 @@ split; a table grouped by area or owner; a task whose description lists steps.
 - **Show the tree in your plan.** Present the plan as an indented outline (parent → children), not a
   flat table, so the user can see the structure before you write it.
 
-### Create — `PUT /api/tasks/{id}`
+### Create — `POST /api/tasks`
 
 You choose the id: any unique string (e.g. `t_` + 8 random characters, or a stable key like
-`ih-V07` — handy so a re-run finds the same task).
+`ih-V07` — handy so a re-run finds the same task). Creating is **create or do nothing**: sending an
+id that already exists changes nothing, so a re-run never overwrites what people did to a task since,
+and never brings a deleted one back.
+
+```sh
+tgw -X POST $TAGWERKE_URL/api/tasks -d '{
+  "id": "t_ab12cd34",
+  "homeTabId": "BOARD_ID",
+  "text": "Rotate the SES keys",
+  "status": "todo",
+  "fields": {"runbook": "https://wiki.example/ses"}
+}'
+```
+
+| Answer | Meaning |
+|---|---|
+| `201 {"created": true}` | Created. |
+| `200 {"created": false, "deleted": false}` | Already on this board. Nothing was written; PATCH it if you meant to change it. |
+| `200 {"created": false, "deleted": true}` | Already on this board, in the Trash. It stays there; don't recreate it under a new id. |
+| `409 id_taken` | That id belongs to a task on another board. Pick another id. |
+
+### Create or replace — `PUT /api/tasks/{id}`
 
 ```sh
 tgw -X PUT $TAGWERKE_URL/api/tasks/t_ab12cd34 -d '{
@@ -128,8 +157,8 @@ tgw -X PUT $TAGWERKE_URL/api/tasks/t_ab12cd34 -d '{
 ```
 
 ⚠️ `PUT` is create-or-**replace**. Re-sending an existing id rewrites it: assignee, due
-date and priority you leave out are **cleared**. **Never use PUT to edit.** Never reuse an id that
-belongs to another board.
+date and priority you leave out are **cleared**, and a task in the Trash comes back. **Never use PUT to
+edit**, and prefer `POST` to create. Never reuse an id that belongs to another board.
 
 ### Edit — `PATCH /api/tasks/{id}` (partial; only the fields you send)
 
@@ -137,6 +166,7 @@ belongs to another board.
 tgw -X PATCH $TAGWERKE_URL/api/tasks/t_ab12cd34 -d '{"status":"in_progress","assigneeId":"USER_ID"}'
 tgw -X PATCH $TAGWERKE_URL/api/tasks/t_ab12cd34 -d '{"parentTaskId":"PARENT_ID"}'   # re-parent
 tgw -X PATCH $TAGWERKE_URL/api/tasks/t_ab12cd34 -d '{"date":null}'                  # null clears a field
+tgw -X PATCH $TAGWERKE_URL/api/tasks/t_ab12cd34 -d '{"fields":{"email":"a@b.example","phone":null}}'  # sets one, clears one, leaves the rest
 ```
 
 ### Other task actions
@@ -145,7 +175,8 @@ tgw -X PATCH $TAGWERKE_URL/api/tasks/t_ab12cd34 -d '{"date":null}'              
   sprint and any assignee who isn't on the new board are cleared — the response says how many).
   A status the destination doesn't have needs a mapping: `"states": {"FROM_KEY": "TO_KEY"}`. Without
   one the move answers 409 `states_unmapped`, listing the states that need one and the destination's
-  `options`.
+  `options`. Field values move only where the destination has a field with the same key and type; the
+  rest are dropped, and `droppedFields` in the answer counts them.
 - Delete: `DELETE /api/tasks/{id}` (soft delete, with its sub-tasks, recoverable). Restore:
   `POST /api/tasks/{id}/restore`. Trash list: `GET /api/tabs/{boardId}/trash`.
 - History: `GET /api/tasks/{id}/history`, `GET /api/tabs/{boardId}/history`.
@@ -226,9 +257,33 @@ tgw -X PATCH $TAGWERKE_URL/api/sprints/SPRINT_ID -d '{"isCurrent":true}'        
 A board you create through the token is added to the token automatically. Sprints are weekly and
 created for you; there is no create-sprint call.
 
+A new board can bring its own **states** and **fields**. This is the only time a token can set them;
+afterwards they are board settings, which only the board's admins change in the app. Leave `states`
+out for the six defaults. The template is checked whole: a bad one (no `open` or `done` state, more
+than 12 states or 20 fields, a repeated key) is refused and no board is created. Give keys when boards
+made from the same template should line up, so a task moves between them without losing its values.
+
+```sh
+tgw -X POST $TAGWERKE_URL/api/tabs -d '{
+  "id": "b_1a2b3c4d", "projectId": "PROJECT_ID", "name": "Leads · Dentists Bristol", "position": 0,
+  "states": [
+    {"key": "new", "label": "New", "category": "open"},
+    {"key": "contacted", "label": "Contacted", "category": "active"},
+    {"key": "won", "label": "Won", "category": "done"},
+    {"key": "do_not_contact", "label": "Do not contact", "category": "closed"}
+  ],
+  "fields": [
+    {"key": "place_id", "label": "Place ID", "type": "text"},
+    {"key": "website", "label": "Website", "type": "url"},
+    {"key": "fit", "label": "Fit", "type": "number"}
+  ]
+}'
+```
+
 ## What you cannot do (don't try)
 
-Members, sharing or roles; board settings; secrets; documents; the board's Notes (readable with
+Members, sharing or roles; board settings, including a board's states and fields once it exists;
+deleting a task forever (only a board admin can, from the Trash in the app); secrets; documents; the board's Notes (readable with
 `GET /api/tabs/{id}/doc`, but edited only in the app); calendar events; CSV import; deleting boards
 or sprints; reordering boards; token management. Those return 403/404 by design — tell the user to do
 them in the app.
@@ -262,4 +317,7 @@ them in the app.
 | `404 not found` | The token doesn't reach that board (not ticked), or the id is wrong. Check `/api/state`. |
 | `400 unknown_status` | That status key isn't one of this board's states. `valid` lists them (key, label, category). |
 | `409 states_unmapped` | A move needs a `states` mapping for the statuses the destination lacks (see *Other task actions*). |
+| `400 unknown_field` | That key isn't one of this board's fields. `valid` lists them (key, label, type). |
+| `400 invalid_field` | The value doesn't fit the field's type. `key` and `type` say which. |
+| `409 id_taken` | `POST /api/tasks` with an id that belongs to a task on another board. |
 | `400 …` | The body was invalid (e.g. assignee not on the board, parent on another board, nesting too deep). |

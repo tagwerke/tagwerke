@@ -18,7 +18,7 @@ import { pendingTaskIds } from '../offline/outbox';
 import { useNotifications } from '../notifications/useNotifications';
 import { useComments } from '../comments/useComments';
 import { dlog, sid } from '../util/dlog';
-import type { BoardState, Comment, DocumentDTO, ID, Notification, Task } from '../types';
+import type { BoardField, BoardState, Comment, DocumentDTO, ID, Notification, Task } from '../types';
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
@@ -133,7 +133,9 @@ function syncSubscription(): void {
 /** Apply a remote store mutation without it echoing back to the server. See applyServerState. */
 const applyRemote = applyServerState;
 
-const TASK_FIELDS = ['text', 'status', 'assigneeId', 'date', 'priority', 'rank', 'parentTaskId', 'homeTabId', 'owner'] as const;
+// `fields` always arrives as the task's whole stored object (CUSTOM_FIELDS_PLAN D12), so merging the
+// patch replaces it wholesale, which is what we want.
+const TASK_FIELDS = ['text', 'status', 'assigneeId', 'date', 'priority', 'rank', 'parentTaskId', 'homeTabId', 'owner', 'fields'] as const;
 
 /** Pick known Task fields from a wire patch; null → undefined (a cleared optional field). */
 function normalizeTaskPatch(raw: unknown): Partial<Task> | null {
@@ -240,6 +242,12 @@ function handleMessage(raw: string): void {
       // An admin edited this board's states (server/routes/boardStates.ts): the whole new list.
       const m = msg as { tabId?: ID; states?: BoardState[] };
       if (m.tabId && Array.isArray(m.states)) useStore.getState().setBoardStates(m.tabId, m.states);
+      return;
+    }
+    case 'board-fields': {
+      // An admin edited this board's custom fields (server/routes/boardFields.ts): the whole new list.
+      const m = msg as { tabId?: ID; fields?: BoardField[] };
+      if (m.tabId && Array.isArray(m.fields)) useStore.getState().setBoardFields(m.tabId, m.fields);
       return;
     }
     case 'comment': {

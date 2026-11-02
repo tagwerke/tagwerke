@@ -13,6 +13,7 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 import { commentCountsForTabs } from '../routes/comments.ts';
 import type { BoardState, StatusCategory } from '../../shared/status.ts';
+import type { BoardField, FieldType } from '../../shared/fields.ts';
 
 /**
  * One task row in the shape src/types.ts `Task` expects: absent rather than null for the optional
@@ -36,6 +37,7 @@ export function taskDTO(t: typeof schema.tasks.$inferSelect): Record<string, unk
     ...(t.parentTaskId != null ? { parentTaskId: t.parentTaskId } : {}),
     ...(t.sprintId != null ? { sprintId: t.sprintId } : {}),
     ...(t.owner != null ? { owner: t.owner } : {}),
+    ...(Object.keys(t.fields ?? {}).length ? { fields: t.fields } : {}),
   };
 }
 
@@ -180,6 +182,21 @@ export async function assembleState(userId: string, reaches: (tabId: string) => 
     }
   }
 
+  // Each board's custom fields (CUSTOM_FIELDS_PLAN), live ones only, in position order. Hidden
+  // fields are included: they keep their values, just off the task page.
+  const fieldsByBoard: Record<string, BoardField[]> = {};
+  if (tabIds.length) {
+    const fieldRows = await db
+      .select()
+      .from(schema.boardFields)
+      .where(and(inArray(schema.boardFields.tabId, tabIds), isNull(schema.boardFields.deletedAt)))
+      .orderBy(asc(schema.boardFields.position));
+    for (const f of fieldRows) {
+      const list = fieldsByBoard[f.tabId] ?? (fieldsByBoard[f.tabId] = []);
+      list.push({ key: f.key, label: f.label, type: f.type as FieldType, position: f.position, hidden: f.hidden });
+    }
+  }
+
   return {
     projects,
     tabs,
@@ -188,6 +205,7 @@ export async function assembleState(userId: string, reaches: (tabId: string) => 
     commentCounts,
     sprintsByBoard,
     statesByBoard,
+    fieldsByBoard,
     projectOrder,
     tabOrder,
     starredRowOrder,

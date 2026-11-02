@@ -28,6 +28,9 @@ import { EmptyState } from './common/EmptyState';
 import { Dropdown } from './Dropdown';
 import { DatePicker } from './common/DatePicker';
 import { MAX_TASK_DEPTH } from '../../shared/tree';
+import { normalizeValue, phoneHref, urlLabel, type BoardField, type FieldType, type FieldValue } from '../../shared/fields';
+import { FIELD_TYPE_LABEL, useBoardFields } from '../tasks/fields';
+import { showToast } from '../toast/useToast';
 
 /** One row of the property rail: label left, a control that reads as plain text until hovered.
  *  A <label>, so a click on the word opens the control beside it. */
@@ -42,6 +45,92 @@ function Prop({ label, children }: { label: string; children: ReactNode }) {
 
 const iso = (ms: number | undefined) => (ms ? new Date(ms).toISOString() : '');
 
+/** Where a value of a link-like field goes, and how it reads; null for a plain value. */
+function linkFor(type: FieldType, raw: string): { href: string; text: string } | null {
+  if (!raw) return null;
+  if (type === 'url') return { href: raw, text: urlLabel(raw) };
+  if (type === 'email') return { href: `mailto:${raw}`, text: raw };
+  if (type === 'phone') return { href: phoneHref(raw), text: raw };
+  return null;
+}
+
+const INPUT_TYPE: Record<FieldType, string> = { url: 'url', email: 'email', phone: 'tel', number: 'text', text: 'text' };
+
+/**
+ * One custom field on the rail (CUSTOM_FIELDS_PLAN P2.3). A link, email or phone reads as the link
+ * itself, with an edit button beside it; everything else is an input that reads as plain text. The
+ * value is held locally while typing and committed on blur, like the description, and checked by the
+ * server's own rules first, so a bad value never reaches the outbox.
+ */
+function FieldProp({ field, value, editable, onCommit }: {
+  field: BoardField;
+  value: FieldValue | undefined;
+  editable: boolean;
+  onCommit: (value: FieldValue | null) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const cancelled = useRef(false);
+  const raw = value == null ? '' : String(value);
+  const link = linkFor(field.type, raw);
+  const editing = draft !== null;
+
+  const commit = (text: string) => {
+    setDraft(null);
+    if (cancelled.current) {
+      cancelled.current = false;
+      return;
+    }
+    const input = field.type === 'number' ? (text.trim() ? Number(text.replace(',', '.')) : null) : text;
+    const next = normalizeValue(field.type, input);
+    if (next === undefined) {
+      showToast(`That isn’t a valid ${FIELD_TYPE_LABEL[field.type].toLowerCase()}, so “${field.label}” wasn’t changed.`);
+      return;
+    }
+    if (next !== (value ?? null)) onCommit(next);
+  };
+
+  return (
+    <div className="task-prop">
+      <span className="task-prop-label">{field.label}</span>
+      <span className="task-prop-value task-field">
+        {link && !editing ? (
+          <>
+            <a className="task-field-link" href={link.href} target="_blank" rel="noopener noreferrer" title={raw}>{link.text}</a>
+            {editable && (
+              <button type="button" className="icon-btn task-field-edit" aria-label={`Edit ${field.label}`} title={`Edit ${field.label}`} onClick={() => setDraft(raw)}>
+                <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
+                  <path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+          </>
+        ) : (
+          <input
+            className="task-field-input"
+            type={INPUT_TYPE[field.type]}
+            inputMode={field.type === 'number' ? 'decimal' : undefined}
+            value={editing ? draft : raw}
+            disabled={!editable}
+            placeholder={editable ? 'Add…' : '—'}
+            aria-label={field.label}
+            autoFocus={editing}
+            onFocus={() => { if (!editing) setDraft(raw); }}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={(e) => commit(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') {
+                cancelled.current = true;
+                e.currentTarget.blur();
+              }
+            }}
+          />
+        )}
+      </span>
+    </div>
+  );
+}
+
 export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
   const task = useStore((s) => s.tasks[taskId]);
   const tasks = useStore((s) => s.tasks);
@@ -52,6 +141,8 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
   const setTaskText = useStore((s) => s.setTaskText);
   const setTaskStatus = useStore((s) => s.setTaskStatus);
   const toggleTaskDone = useStore((s) => s.toggleTaskDone);
+  const setTaskField = useStore((s) => s.setTaskField);
+  const fields = useBoardFields(boardId);
   const editable = tab?.role === 'editor' || tab?.role === 'admin';
   const titleOnFocus = useRef('');
   const descRef = useRef<HTMLTextAreaElement>(null);
@@ -235,6 +326,18 @@ export function TaskPage({ taskId, boardId }: { taskId: ID; boardId: ID }) {
               onChange={(v) => setTaskMeta(task.id, { sprintId: v || undefined })}
             />
           </Prop>
+
+          {/* The board's own fields, in the order its admins set. Keyed by task too, so a value
+              half-typed on one task doesn't follow a navigation to its sub-task. */}
+          {fields.filter((f) => !f.hidden).map((f) => (
+            <FieldProp
+              key={`${task.id}:${f.key}`}
+              field={f}
+              value={task.fields?.[f.key]}
+              editable={editable}
+              onCommit={(v) => setTaskField(task.id, f.key, v)}
+            />
+          ))}
 
           {/* Created only. An "Updated" line was tried and read wrong: `updatedAt` is server-stamped
               and only arrives with the next state pull, so right after an edit it still showed the

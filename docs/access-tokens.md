@@ -24,9 +24,16 @@ You choose what the token may **write**; reading the boards you tick is always a
 
 | Permission | Lets it |
 |---|---|
-| `tasks` | Create, edit, delete, restore and move tasks (assignee, sprint, status, priority, parent) |
+| `tasks` | Create, edit, delete, restore and move tasks (assignee, sprint, status, priority, parent, custom field values) |
 | `comments` | Post comments, and edit or delete **its own** |
-| `boards` | Create boards, rename them, rename sprints and set the current one |
+| `boards` | Create boards (optionally with their own states and fields), rename them, rename sprints and set the current one |
+
+For a script that feeds tasks in from elsewhere (an importer, a lead finder), create with
+`POST /api/tasks`: it creates the task or, if the id already exists, does nothing. A task someone has
+since worked on, trashed or moved to a "do not contact" state is never overwritten or brought back,
+however often the script sends it. A board's states and fields can be set by a token only when it
+creates the board; after that they are admin settings in the app. Deleting a task forever is never a
+token's to do.
 
 Nothing is ticked by default, and a new token reaches **no boards** until you tick some. A board the
 token creates is added to its list automatically. Your own role on each board is checked on every

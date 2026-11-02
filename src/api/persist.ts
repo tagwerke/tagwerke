@@ -11,7 +11,8 @@
 import { useStore } from '../store';
 import { api, enqueue } from './client';
 import { saveSnapshot } from '../offline/snapshot';
-import type { ID, RootState, Task } from '../types';
+import type { FieldValues, ID, RootState, Task } from '../types';
+import type { FieldValue } from '../../shared/fields';
 
 // Trailing debounce on the whole diff pass — raised from 400ms to 2s (2026-09-12) to stop a typed
 // field emitting a PATCH and an audit row at every pause for thought. This governs EVERY write that
@@ -86,7 +87,19 @@ type TaskPatch = {
   rank?: string;
   parentTaskId?: ID | null;
   sprintId?: ID | null;
+  fields?: Record<string, FieldValue | null>;
 };
+
+/** The custom field keys that differ, each with its new value or null for a cleared one. The server
+ *  merges per key (CUSTOM_FIELDS_PLAN D5), so a replayed or concurrent write never clobbers a key
+ *  this one didn't touch. */
+function changedValues(p: FieldValues | undefined, t: FieldValues | undefined): Record<string, FieldValue | null> | null {
+  const out: Record<string, FieldValue | null> = {};
+  for (const key of new Set([...Object.keys(p ?? {}), ...Object.keys(t ?? {})])) {
+    if ((p?.[key] ?? null) !== (t?.[key] ?? null)) out[key] = t?.[key] ?? null;
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 function changedFields(p: Task, t: Task): TaskPatch | null {
   const patch: TaskPatch = {};
@@ -103,6 +116,8 @@ function changedFields(p: Task, t: Task): TaskPatch | null {
   // Missing from this diff since sprints shipped, so a sprint was only ever set locally and every
   // refresh put the task back in the backlog. An explicit null is what moves it to the backlog.
   if ((p.sprintId ?? null) !== (t.sprintId ?? null)) patch.sprintId = t.sprintId ?? null;
+  const values = changedValues(p.fields, t.fields);
+  if (values) patch.fields = values;
   return Object.keys(patch).length ? patch : null;
 }
 
@@ -124,6 +139,9 @@ function fullBody(t: Task) {
     // client that never saw the assignment cannot knock the task back into the backlog.
     ...(t.sprintId ? { sprintId: t.sprintId } : {}),
     owner: t.owner ?? null,
+    // Present-only, like description: an omitted `fields` is preserved server-side (D6). Sent when
+    // set, so a value typed into a task created in the same debounce window isn't lost.
+    ...(t.fields && Object.keys(t.fields).length ? { fields: t.fields } : {}),
   };
 }
 
