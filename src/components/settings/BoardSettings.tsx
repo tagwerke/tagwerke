@@ -17,6 +17,7 @@ import { TrashPanel } from '../TrashPanel';
 import { BoardStatesPanel } from '../states/BoardStatesPanel';
 import { Section } from '../common/Section';
 import { GeneralSection } from './GeneralSection';
+import { WallpaperSection } from './WallpaperSection';
 import { PermissionsSection } from './PermissionsSection';
 import { SecretsAccessSection } from './SecretsAccessSection';
 import { DangerSection } from './DangerSection';
@@ -109,6 +110,7 @@ export function BoardSettings({ tabId, onOpenSprint }: {
           {showSection && (
             <div className="board-settings-section">
               {section === 'general' && <GeneralSection tabId={tabId} />}
+              {section === 'wallpaper' && <WallpaperSection tabId={tabId} />}
               {section === 'people' && <MembersPanel tabId={tabId} tabName={tab.name} />}
               {section === 'permissions' && <PermissionsSection tabId={tabId} />}
               {section === 'states' && (

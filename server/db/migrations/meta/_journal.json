@@ -281,6 +281,13 @@
       "when": 1792882952936,
       "tag": "0039_board_states",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793584537581,
+      "tag": "0040_board_member_wallpaper",
+      "breakpoints": true
     }
   ]
 }

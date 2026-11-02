@@ -1,0 +1,78 @@
+/* ── Board wallpapers (shared/wallpaper.ts) ─────────────────────────────────
+   The same classes dress the open board and the picker's tiles: `.wallpaper` plus one `.wp-<name>`.
+   Every wallpaper is a tint MIXED INTO --bg-paper rather than a color of its own, so it follows the
+   theme by itself — pale in light, a dim cast in dark — and the board's ink stays readable on it.
+   Patterns are drawn on top of a tint, faint enough to sit behind text. Every painting rule is two
+   classes deep on purpose: it must beat `.tab-view`'s (and the tile's) own paper background whatever
+   order the stylesheets load in. */
+
+.wallpaper {
+  --wp-tint: var(--bg-paper);
+  --wp-strength: 16%;
+}
+.wallpaper[class*='wp-'] {
+  background-color: color-mix(in srgb, var(--wp-tint) var(--wp-strength), var(--bg-paper));
+}
+@media (prefers-color-scheme: dark) {
+  .wallpaper { --wp-strength: 13%; }
+}
+
+/* Colors */
+.wallpaper.wp-sage     { --wp-tint: #7fa37f; }
+.wallpaper.wp-mint     { --wp-tint: #5fbfa0; }
+.wallpaper.wp-sky      { --wp-tint: #5aa7e0; }
+.wallpaper.wp-lavender { --wp-tint: #9b8ce0; }
+.wallpaper.wp-rose     { --wp-tint: #e07a9a; }
+.wallpaper.wp-peach    { --wp-tint: #f0956a; }
+.wallpaper.wp-butter   { --wp-tint: #e8c34a; }
+.wallpaper.wp-stone    { --wp-tint: #9a9184; }
+
+/* Patterns */
+.wallpaper.wp-dots {
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--ink) 16%, transparent) 1.2px, transparent 1.7px);
+  background-size: 18px 18px;
+}
+.wallpaper.wp-waves {
+  --wp-tint: #4fb3b0;
+  --wp-strength: 10%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='28' viewBox='0 0 80 28'%3E%3Cpath d='M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 M0 21 Q10 15 20 21 T40 21 T60 21 T80 21' fill='none' stroke='%232a9d99' stroke-opacity='.28' stroke-width='1.4'/%3E%3C/svg%3E");
+  background-size: 80px 28px;
+}
+.wallpaper.wp-blueprint {
+  --wp-tint: #3b6fd8;
+  --wp-strength: 12%;
+  --wp-line: color-mix(in srgb, #3b6fd8 26%, transparent);
+  --wp-line-soft: color-mix(in srgb, #3b6fd8 12%, transparent);
+  background-image:
+    linear-gradient(var(--wp-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--wp-line) 1px, transparent 1px),
+    linear-gradient(var(--wp-line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--wp-line-soft) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+}
+.wallpaper.wp-blossom {
+  --wp-tint: #e07a9a;
+  --wp-strength: 11%;
+  /* Two five-petal flowers per tile, the second smaller and turned, so the repeat doesn't read as a
+     grid. Group opacity (not fill-opacity) so overlapping petals don't darken where they meet. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cdefs%3E%3Cg id='f'%3E%3Cg opacity='.26' fill='%23e0679a'%3E%3Ccircle cx='0' cy='-4.2' r='3.4'/%3E%3Ccircle cx='4' cy='-1.3' r='3.4'/%3E%3Ccircle cx='2.5' cy='3.4' r='3.4'/%3E%3Ccircle cx='-2.5' cy='3.4' r='3.4'/%3E%3Ccircle cx='-4' cy='-1.3' r='3.4'/%3E%3C/g%3E%3Ccircle r='1.7' fill='%23f2b544' fill-opacity='.55'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23f' transform='translate(16 16)'/%3E%3Cuse href='%23f' transform='translate(48 46) scale(.7) rotate(36)'/%3E%3C/svg%3E");
+  background-size: 64px 64px;
+}
+
+/* The picker (Board settings › Wallpaper) */
+.wallpaper-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; }
+.wallpaper-tile {
+  display: flex; flex-direction: column; gap: 5px; align-items: stretch;
+  padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
+}
+.wallpaper-tile-face {
+  display: block; height: 48px; border-radius: var(--r-sm);
+  background-color: var(--bg-paper); border: 1px solid var(--line-strong);
+  box-shadow: 0 0 0 2px transparent;
+}
+.wallpaper-tile:hover .wallpaper-tile-face { border-color: var(--ink-mute); }
+.wallpaper-tile.is-selected .wallpaper-tile-face { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.wallpaper-tile:focus-visible { outline: none; }
+.wallpaper-tile:focus-visible .wallpaper-tile-face { box-shadow: 0 0 0 2px var(--pop); }
+.wallpaper-tile-label { font-size: var(--fs-sm); color: var(--ink-soft); }
+.wallpaper-tile.is-selected .wallpaper-tile-label { color: var(--ink); font-weight: 600; }

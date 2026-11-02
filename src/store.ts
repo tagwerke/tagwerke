@@ -9,6 +9,7 @@ import { api, ApiError, enqueue } from './api/client';
 import { compareRank, rankAfter, rankBetween } from '../shared/rank';
 import { MAX_TASK_DEPTH } from '../shared/tree';
 import { DEFAULT_STATES, firstDoneKey, isDone, isTerminal, startKey } from '../shared/status';
+import type { Wallpaper } from '../shared/wallpaper';
 
 export function nextPosition(orders: number[]): number {
   return orders.length ? Math.max(...orders) + 1 : 0;
@@ -159,6 +160,8 @@ interface Actions {
   setTabProject(id: ID, projectId: ID): void;
   setTabSettings(id: ID, settings: BoardSettings): void;
   setTabStarred(id: ID, starred: boolean): void;
+  /** Set (or with null, clear) the caller's own wallpaper for a board. */
+  setTabWallpaper(id: ID, wallpaper: Wallpaper | null): void;
   setTabDoc(id: ID, doc: unknown): void;
   deleteTab(id: ID): void;
   /** Replace a board's state list (a `board-states` frame, or an admin's own edit). */
@@ -477,6 +480,10 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         });
         const starredPosition = starred ? get().starredRowOrder.indexOf(id) : null;
         enqueue(() => api.tabs.update(id, { starred, starredPosition }));
+      },
+      setTabWallpaper(id, wallpaper) {
+        set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], wallpaper: wallpaper ?? undefined } } }));
+        enqueue(() => api.tabs.update(id, { wallpaper }));
       },
       setTabDoc(id, doc) {
         // docJSON is persisted by the subscription differ in src/api/persist.ts.

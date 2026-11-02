@@ -13,6 +13,7 @@ import { applyBoardAccessChange } from '../realtime/connections.ts';
 import { destroyRoom } from '../realtime/ydoc.ts';
 import { ensureCurrentSprint } from '../lib/sprints.ts';
 import { seedBoardStates } from '../lib/boardStates.ts';
+import { WALLPAPERS } from '../../shared/wallpaper.ts';
 
 // Opt-in per-board guardrails (AUDIT_IMPLEMENTATION_PLAN §F4). Admin-only to change.
 const settingsBody = z.object({
@@ -51,6 +52,7 @@ const patchBody = z.object({
   projectId: z.string().min(1).optional(), // = the caller's category
   starred: z.boolean().optional(),
   starredPosition: z.number().int().nonnegative().nullable().optional(),
+  wallpaper: z.enum(WALLPAPERS).nullable().optional(),
 });
 
 const reorderBody = z.object({ order: z.array(z.string().min(1)) });
@@ -131,8 +133,8 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     if (req.pat && b.data.settings !== undefined) return reply.code(403).send({ error: 'not available to tokens' });
 
     // Split three ways: shared content (name/dateKey/location), admin guardrails (settings), and
-    // this caller's personal view state (category/starred). The document is NOT handled here.
-    const { projectId, starred, starredPosition, settings, ...contentRest } = b.data;
+    // this caller's personal view state (category/starred/wallpaper). The document is NOT handled here.
+    const { projectId, starred, starredPosition, wallpaper, settings, ...contentRest } = b.data;
     const editingContent = Object.keys(contentRest).length > 0;
 
     // Authorize: must be a member; content requires editor+; settings require admin.
@@ -155,6 +157,7 @@ export async function tabRoutes(app: FastifyInstance): Promise<void> {
     if (projectId !== undefined) memberPatch.categoryId = projectId;
     if (starred !== undefined) memberPatch.starred = starred;
     if (starredPosition !== undefined) memberPatch.starredPosition = starredPosition;
+    if (wallpaper !== undefined) memberPatch.wallpaper = wallpaper;
 
     await db.transaction(async (tx) => {
       if (Object.keys(contentToWrite).length) {

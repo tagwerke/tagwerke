@@ -58,6 +58,7 @@ export async function assembleState(userId: string, reaches: (tabId: string) => 
       position: schema.boardMembers.position,
       starred: schema.boardMembers.starred,
       starredPosition: schema.boardMembers.starredPosition,
+      wallpaper: schema.boardMembers.wallpaper,
     })
     .from(schema.boardMembers)
     .innerJoin(schema.tabs, eq(schema.boardMembers.tabId, schema.tabs.id))
@@ -98,6 +99,7 @@ export async function assembleState(userId: string, reaches: (tabId: string) => 
       docVersion: t.docVersion,
       settings: t.settings ?? {},
       ...(t.location != null ? { location: t.location } : {}),
+      ...(t.wallpaper != null ? { wallpaper: t.wallpaper } : {}), // the caller's own, not the board's
     };
     tabOrder.push(t.id);
     if (t.starred) starred.push({ id: t.id, pos: t.starredPosition ?? Number.MAX_SAFE_INTEGER });

@@ -37,7 +37,11 @@ export interface Tab {
   docVersion?: number;
   location?: string; // board's place facet (v2)
   settings?: BoardSettings;
+  /** The caller's OWN wallpaper for this board (shared/wallpaper.ts); absent = plain paper. */
+  wallpaper?: Wallpaper;
 }
+
+import type { Wallpaper } from '../shared/wallpaper';
 
 // Each board's states, and what each category means, live in shared/status.ts with the server.
 import type { BoardState } from '../shared/status';
@@ -197,12 +201,12 @@ export function asBoardView(v: unknown): BoardView {
 /** The sections of a board's settings modal, in nav order. Everything about a board that is not
  *  its work lives in one of these; the board itself only links into them. */
 export type BoardSettingsSection =
-  | 'general' | 'people' | 'permissions'
+  | 'general' | 'wallpaper' | 'people' | 'permissions'
   | 'states' | 'sprints'
   | 'history' | 'trash'
   | 'secrets' | 'danger';
 export const BOARD_SETTINGS_SECTIONS: BoardSettingsSection[] = [
-  'general', 'people', 'permissions', 'states', 'sprints', 'history', 'trash', 'secrets', 'danger',
+  'general', 'wallpaper', 'people', 'permissions', 'states', 'sprints', 'history', 'trash', 'secrets', 'danger',
 ];
 
 // ── Sprints (SPRINTS_PLAN.md) ───────────────────────────────────────────────

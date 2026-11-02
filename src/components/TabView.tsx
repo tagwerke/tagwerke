@@ -59,7 +59,7 @@ export function TabView({ tabId }: { tabId: string }) {
   const view: BoardView = normalized === 'secrets' && tab.role !== 'admin' ? 'table' : normalized;
 
   return (
-    <main className="tab-view tab-open" style={style}>
+    <main className={`tab-view tab-open ${tab.wallpaper ? `wallpaper wp-${tab.wallpaper}` : ''}`} style={style}>
       <div className="board-canvas no-panel">
         <div className="board-content">
           {view === 'notes' ? (

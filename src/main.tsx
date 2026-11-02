@@ -6,6 +6,7 @@ import './index.css';
 import './styles/documents.css';
 import './styles/document-panel.css';
 import './styles/secrets.css';
+import './styles/wallpaper.css';
 import App from './App.tsx';
 import { SecretRevealPage } from './secrets/SecretRevealPage';
 import { parseSecretLinkPath } from './secrets/linkCrypto';

@@ -406,6 +406,8 @@ export const boardMembers = pgTable(
     position: integer('position').notNull().default(0),
     starred: boolean('starred').notNull().default(false),
     starredPosition: integer('starred_position'),
+    // This member's own wallpaper for the board (shared/wallpaper.ts). Null = plain paper.
+    wallpaper: text('wallpaper'),
   },
   (t) => [
     primaryKey({ columns: [t.tabId, t.userId] }),

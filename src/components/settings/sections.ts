@@ -5,6 +5,7 @@ import type { BoardSettingsSection } from '../../types';
 
 export const SECTION_LABEL: Record<BoardSettingsSection, string> = {
   general: 'General',
+  wallpaper: 'Wallpaper',
   people: 'People',
   permissions: 'Permissions',
   states: 'Task states',
@@ -17,7 +18,7 @@ export const SECTION_LABEL: Record<BoardSettingsSection, string> = {
 
 /** The nav, in order. Secrets access is board-admin only, like the Secrets view it guards. */
 export const SECTION_GROUPS: { label: string; sections: BoardSettingsSection[] }[] = [
-  { label: 'Board', sections: ['general', 'people', 'permissions'] },
+  { label: 'Board', sections: ['general', 'wallpaper', 'people', 'permissions'] },
   { label: 'Work', sections: ['states', 'sprints'] },
   { label: 'Records', sections: ['history', 'trash'] },
   { label: 'Admin', sections: ['secrets', 'danger'] },
@@ -42,6 +43,7 @@ export const SETTINGS_SEARCH: { label: string; section: BoardSettingsSection; te
   { label: 'Rename the board', section: 'general', terms: 'rename name title' },
   { label: 'Move to another space', section: 'general', terms: 'project space move folder' },
   { label: 'Copy the board link', section: 'general', terms: 'link url copy' },
+  { label: 'Wallpaper', section: 'wallpaper', terms: 'wallpaper background color colour pattern theme look appearance' },
   { label: 'Networks that can open secrets', section: 'secrets', terms: 'secret network ip allowlist vpn password credential vault', adminOnly: true },
   { label: 'Leave the board', section: 'danger', terms: 'leave exit quit' },
   { label: 'Delete the board', section: 'danger', terms: 'delete remove destroy board', adminOnly: true },

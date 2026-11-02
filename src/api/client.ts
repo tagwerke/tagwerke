@@ -9,6 +9,7 @@
 
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import type { BoardState, StatusCategory } from '../../shared/status';
+import type { Wallpaper } from '../../shared/wallpaper';
 import type { BlockFilter, CalendarEvent, Comment as CommentDTO, DocumentDTO, DocumentItem, ExtractionRun, ID, Notification as NotificationDTO, RsvpStatus, SecretEntryDTO, SecretLinkDTO, Sprint, Task } from '../types';
 import { submitMutation, outboxIdle, setConflictHandler, type Handlers, type Mutation } from '../offline/outbox';
 import { offline } from '../offline/status';
@@ -180,7 +181,7 @@ export const api = {
     // for board metadata (name/category/star/date/settings) only.
     update: (
       id: ID,
-      patch: { name?: string; projectId?: ID; starred?: boolean; starredPosition?: number | null; dateKey?: string | null; location?: string | null; settings?: { restrictDelete?: 'admin' | null } },
+      patch: { name?: string; projectId?: ID; starred?: boolean; starredPosition?: number | null; wallpaper?: Wallpaper | null; dateKey?: string | null; location?: string | null; settings?: { restrictDelete?: 'admin' | null } },
     ) => submitMutation(M('PATCH', `/api/tabs/${id}`, patch)),
     remove: (id: ID) => submitMutation(M('DELETE', `/api/tabs/${id}`)),
     reorder: (order: ID[]) => submitMutation(M('POST', '/api/tabs/reorder', { order })),
