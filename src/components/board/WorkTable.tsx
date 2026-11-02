@@ -1,8 +1,10 @@
 // The table layout of the work view (NOTES_SPLIT_PLAN §N2, §I.3).
 //
 // Its columns are the board's (`tableColumns`, CUSTOM_FIELDS_PLAN P4), passed in as `columns`. A
-// custom field's column shows the value, as a link where it is one; board admins rename, hide or
-// delete it from its header and add a new one from the + at the end of the header.
+// custom field's column shows the value, as a link where it is one, and an editor edits it in place:
+// a click on the cell (not on the link), or Enter on it, opens an input; Enter or leaving it saves,
+// Escape drops the change. Board admins rename, hide or delete a field's column from its header and
+// add a new one from the + at the end of the header.
 //
 // Cells are display-only. Clicking one opens the shared TaskActionMenu scoped to that field, which
 // is how a table can be edited without there being a bespoke editor per column. Clicking the TITLE
@@ -19,7 +21,9 @@ import type { FocusField } from '../../tasks/actions';
 import { COL, columnAt, gridOf, openCol, type ColumnDef } from './workColumns';
 import { AddColumn, FieldColumnMenu } from './ColumnPopovers';
 import { descriptionMatch } from './workFilters';
-import { phoneHref, urlLabel, type BoardField } from '../../../shared/fields';
+import type { BoardField, FieldValue } from '../../../shared/fields';
+import { FIELD_INPUT_TYPE, fieldLink, invalidFieldMessage, parseFieldInput } from '../../tasks/fields';
+import { showToast } from '../../toast/useToast';
 import type { Group, Sort, SortKey } from './workView';
 import type { DraftFields } from '../../tasks/createTask';
 import type { ID, Member, Sprint, Task } from '../../types';
@@ -85,6 +89,8 @@ export function WorkTable({
   const rootRef = useRef<HTMLDivElement>(null);
   const [dragId, setDragId] = useState<ID | null>(null);
   const [renaming, setRenaming] = useState<{ id: ID; text: string } | null>(null);
+  /** The custom field being edited in place, if any. */
+  const [fieldEdit, setFieldEdit] = useState<{ id: ID; key: string } | null>(null);
   const endingRef = useRef(false);
   const flatIds = useMemo(() => groups.flatMap((g) => g.tasks.map((t) => t.id)), [groups]);
 
@@ -139,13 +145,33 @@ export function WorkTable({
    */
   const openCellByIndex = (taskId: ID, col: number, ids: ID[] = [taskId]): void => {
     const box = cellEl(taskId, col)?.getBoundingClientRect();
-    const field = columnAt(columns, col)?.field;
-    if (!field) return; // Parent and custom fields are read here; `↗` opens the task to edit them
+    const column = columnAt(columns, col);
+    if (column?.boardField) {
+      if (editable) setFieldEdit({ id: taskId, key: column.boardField.key });
+      return;
+    }
+    const field = column?.field;
+    if (!field) return; // Parent is text: `↗` is the only way out of a row
     onOpenMenu(ids, box?.left ?? 0, (box?.bottom ?? 0) + 4, field, (dir) => {
       const next = stepCol(taskId, col, dir);
       putCursor(taskId, next);
       if (next !== col && columnAt(columns, next)?.field && editable) openCellByIndex(taskId, next, ids);
     });
+  };
+
+  /**
+   * End an in-place field edit: `text` is what was typed, or null for Escape. A value the field's
+   * type refuses is not saved, and says so. Enter and Escape give the keyboard back to the table;
+   * leaving by a click does not, because the click went somewhere on purpose.
+   */
+  const endFieldEdit = (t: Task, field: BoardField, text: string | null, refocus: boolean): void => {
+    setFieldEdit(null);
+    if (text !== null) {
+      const next = parseFieldInput(field.type, text);
+      if (next === undefined) showToast(invalidFieldMessage(field));
+      else if (next !== (t.fields?.[field.key] ?? null)) useStore.getState().setTaskField(t.id, field.key, next);
+    }
+    if (refocus) rootRef.current?.focus({ preventScroll: true });
   };
 
   /** The open header popover: a field column's menu, or the + that adds a column. */
@@ -458,6 +484,29 @@ export function WorkTable({
                     const focused = cursor?.row === t.id && cursor.col === col ? 'is-focused' : '';
                     // Parent and custom fields are text, not a menu: the arrow is the only way out
                     // of a row, a parent included, and a field is edited on the task's page.
+                    const bf = c.boardField;
+                    if (bf) {
+                      const value = t.fields?.[bf.key];
+                      const editing = fieldEdit?.id === t.id && fieldEdit.key === bf.key;
+                      return (
+                        <span
+                          key={c.id}
+                          data-col={col}
+                          className={`wt-cell wt-field-cell ${editable ? 'is-editable' : ''} ${editing ? 'is-editing' : ''} ${focused}`}
+                          title={editable && !editing ? `Click to edit ${bf.label}` : undefined}
+                          onClick={(e) => {
+                            // The link itself is followed, not edited.
+                            if (editing || (e.target as Element).closest('a')) return;
+                            putCursor(t.id, col);
+                            if (editable) setFieldEdit({ id: t.id, key: bf.key });
+                          }}
+                        >
+                          {editing
+                            ? <FieldCellInput field={bf} value={value} onDone={(text, refocus) => endFieldEdit(t, bf, text, refocus)} />
+                            : <FieldValueCell field={bf} value={value} />}
+                        </span>
+                      );
+                    }
                     if (!c.field) {
                       return (
                         <span key={c.id} data-col={col} className={`wt-cell is-static ${c.id === 'parent' ? 'wt-parent' : ''} ${focused}`}>
@@ -518,16 +567,61 @@ export function WorkTable({
 }
 
 /** A custom field's value in its column: a link for a link, email or phone, the text otherwise. */
-function FieldValueCell({ field, value }: { field: BoardField; value: string | number | undefined }) {
+function FieldValueCell({ field, value }: { field: BoardField; value: FieldValue | undefined }) {
   if (value == null) return <span className="wt-mono muted">—</span>;
   const text = String(value);
-  // A click on the link follows it; it must not also put the cursor on the row underneath.
-  const stop = (e: React.MouseEvent) => e.stopPropagation();
-  if (field.type === 'url') return <a className="wt-field-link" href={text} target="_blank" rel="noreferrer noopener" onMouseDown={stop} title={text}>{urlLabel(text)}</a>;
-  if (field.type === 'email') return <a className="wt-field-link" href={`mailto:${text}`} onMouseDown={stop} title={text}>{text}</a>;
-  if (field.type === 'phone') return <a className="wt-field-link" href={phoneHref(text)} onMouseDown={stop}>{text}</a>;
+  const link = fieldLink(field.type, text);
+  if (link) {
+    return (
+      <a
+        className="wt-field-link"
+        href={link.href}
+        target={field.type === 'url' ? '_blank' : undefined}
+        rel="noreferrer noopener"
+        title={text}
+        // Following the link must not also put the cursor on the row or drag it.
+        onMouseDown={(e) => e.stopPropagation()}
+        draggable={false}
+      >
+        {link.text}
+      </a>
+    );
+  }
   if (field.type === 'number') return <span className="wt-mono">{typeof value === 'number' ? value.toLocaleString() : text}</span>;
   return <span className="wt-field-text" title={text}>{text}</span>;
+}
+
+/** The input a field cell becomes while it is edited. It reports once, however it is left. */
+function FieldCellInput({ field, value, onDone }: {
+  field: BoardField;
+  value: FieldValue | undefined;
+  onDone: (text: string | null, refocus: boolean) => void;
+}) {
+  const [draft, setDraft] = useState(value == null ? '' : String(value));
+  const done = useRef(false);
+  const finish = (text: string | null, refocus: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(text, refocus);
+  };
+  return (
+    <input
+      className="wt-field-input"
+      autoFocus
+      type={FIELD_INPUT_TYPE[field.type]}
+      inputMode={field.type === 'number' ? 'decimal' : undefined}
+      aria-label={field.label}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onMouseDown={(e) => e.stopPropagation()}
+      onBlur={() => finish(draft, false)}
+      onKeyDown={(e) => {
+        e.stopPropagation(); // the table's own keys must not fire while typing
+        if (e.key === 'Enter') { e.preventDefault(); finish(draft, true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(null, true); }
+      }}
+    />
+  );
 }
 
 /** Columns whose header click groups the rows as well as sorting them (BOARD_FILTERS_PLAN D5). */

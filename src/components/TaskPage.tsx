@@ -28,8 +28,8 @@ import { EmptyState } from './common/EmptyState';
 import { Dropdown } from './Dropdown';
 import { DatePicker } from './common/DatePicker';
 import { MAX_TASK_DEPTH } from '../../shared/tree';
-import { normalizeValue, phoneHref, urlLabel, type BoardField, type FieldType, type FieldValue } from '../../shared/fields';
-import { FIELD_TYPE_LABEL, useBoardFields } from '../tasks/fields';
+import type { BoardField, FieldValue } from '../../shared/fields';
+import { FIELD_INPUT_TYPE, fieldLink, invalidFieldMessage, parseFieldInput, useBoardFields } from '../tasks/fields';
 import { showToast } from '../toast/useToast';
 
 /** One row of the property rail: label left, a control that reads as plain text until hovered.
@@ -44,17 +44,6 @@ function Prop({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const iso = (ms: number | undefined) => (ms ? new Date(ms).toISOString() : '');
-
-/** Where a value of a link-like field goes, and how it reads; null for a plain value. */
-function linkFor(type: FieldType, raw: string): { href: string; text: string } | null {
-  if (!raw) return null;
-  if (type === 'url') return { href: raw, text: urlLabel(raw) };
-  if (type === 'email') return { href: `mailto:${raw}`, text: raw };
-  if (type === 'phone') return { href: phoneHref(raw), text: raw };
-  return null;
-}
-
-const INPUT_TYPE: Record<FieldType, string> = { url: 'url', email: 'email', phone: 'tel', number: 'text', text: 'text' };
 
 /**
  * One custom field on the rail (CUSTOM_FIELDS_PLAN P2.3). A link, email or phone reads as the link
@@ -71,7 +60,7 @@ function FieldProp({ field, value, editable, onCommit }: {
   const [draft, setDraft] = useState<string | null>(null);
   const cancelled = useRef(false);
   const raw = value == null ? '' : String(value);
-  const link = linkFor(field.type, raw);
+  const link = fieldLink(field.type, raw);
   const editing = draft !== null;
 
   const commit = (text: string) => {
@@ -80,10 +69,9 @@ function FieldProp({ field, value, editable, onCommit }: {
       cancelled.current = false;
       return;
     }
-    const input = field.type === 'number' ? (text.trim() ? Number(text.replace(',', '.')) : null) : text;
-    const next = normalizeValue(field.type, input);
+    const next = parseFieldInput(field.type, text);
     if (next === undefined) {
-      showToast(`That isn’t a valid ${FIELD_TYPE_LABEL[field.type].toLowerCase()}, so “${field.label}” wasn’t changed.`);
+      showToast(invalidFieldMessage(field));
       return;
     }
     if (next !== (value ?? null)) onCommit(next);
@@ -95,7 +83,7 @@ function FieldProp({ field, value, editable, onCommit }: {
       <span className="task-prop-value task-field">
         {link && !editing ? (
           <>
-            <a className="task-field-link" href={link.href} target="_blank" rel="noopener noreferrer" title={raw}>{link.text}</a>
+            <a className="task-field-link" href={link.href} target={field.type === 'url' ? '_blank' : undefined} rel="noopener noreferrer" title={raw}>{link.text}</a>
             {editable && (
               <button type="button" className="icon-btn task-field-edit" aria-label={`Edit ${field.label}`} title={`Edit ${field.label}`} onClick={() => setDraft(raw)}>
                 <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
@@ -107,7 +95,7 @@ function FieldProp({ field, value, editable, onCommit }: {
         ) : (
           <input
             className="task-field-input"
-            type={INPUT_TYPE[field.type]}
+            type={FIELD_INPUT_TYPE[field.type]}
             inputMode={field.type === 'number' ? 'decimal' : undefined}
             value={editing ? draft : raw}
             disabled={!editable}

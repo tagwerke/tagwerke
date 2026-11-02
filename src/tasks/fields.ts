@@ -3,7 +3,7 @@
 
 import { useStore } from '../store';
 import { ApiError } from '../api/client';
-import { MAX_FIELDS, type BoardField } from '../../shared/fields';
+import { MAX_FIELDS, normalizeValue, phoneHref, urlLabel, type BoardField, type FieldType, type FieldValue } from '../../shared/fields';
 import type { ID } from '../types';
 
 const NONE: readonly BoardField[] = [];
@@ -38,3 +38,29 @@ export function fieldRefusal(e: unknown): string {
   if (e instanceof ApiError && e.status === 403) return 'Only board admins can change fields and columns.';
   return 'Could not save the change.';
 }
+
+/** Where a value of a link-like field goes, and how it reads; null for a plain value. */
+export function fieldLink(type: FieldType, raw: string): { href: string; text: string } | null {
+  if (!raw) return null;
+  if (type === 'url') return { href: raw, text: urlLabel(raw) };
+  if (type === 'email') return { href: `mailto:${raw}`, text: raw };
+  if (type === 'phone') return { href: phoneHref(raw), text: raw };
+  return null;
+}
+
+/** The input type that brings up the right keyboard on a phone. */
+export const FIELD_INPUT_TYPE: Record<FieldType, string> = { url: 'url', email: 'email', phone: 'tel', number: 'text', text: 'text' };
+
+/**
+ * What typed text sets a field to, by the server's own rules: the value, null to clear it, or
+ * undefined when the text is not a valid value of the field's type. A number takes a comma as the
+ * decimal point too.
+ */
+export function parseFieldInput(type: FieldType, text: string): FieldValue | null | undefined {
+  const input = type === 'number' ? (text.trim() ? Number(text.replace(',', '.')) : null) : text;
+  return normalizeValue(type, input);
+}
+
+/** The toast for a value the field's type refuses. */
+export const invalidFieldMessage = (field: BoardField): string =>
+  `That isn’t a valid ${FIELD_TYPE_LABEL[field.type].toLowerCase()}, so “${field.label}” wasn’t changed.`;
