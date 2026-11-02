@@ -59,6 +59,7 @@ function actionVerb(action: string, payload: unknown): string {
     if (p.op === 'create') return `added the field${name}`;
     if (p.op === 'delete') return `deleted the field${name}`;
     if (p.op === 'reorder') return 'reordered the fields';
+    if (p.op === 'columns') return 'changed the table columns';
     return `changed the field${name}`;
   }
   if (action === 'board_state_change') {

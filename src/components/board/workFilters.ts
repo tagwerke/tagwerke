@@ -25,7 +25,7 @@ export interface WorkFilters {
   statuses: string[];
   /** Priorities: '1' | '2' | '3' (the Low/Medium/High pills). Empty means every priority. */
   priorities: string[];
-  /** Title search. Never persisted: a leftover query on reopen reads as an empty board. */
+  /** Search over titles and descriptions. Never persisted: a leftover query on reopen reads as an empty board. */
   query: string;
 }
 
@@ -46,8 +46,22 @@ export function matchesFilters(t: Task, f: WorkFilters): boolean {
   if (f.statuses.length && !f.statuses.includes(t.status)) return false;
   if (f.priorities.length && !f.priorities.includes(t.priority ? String(t.priority) : NO_PRIORITY)) return false;
   const q = fold(f.query.trim());
-  if (q && !fold(t.text).includes(q)) return false;
+  if (q && !fold(t.text).includes(q) && !fold(t.description ?? '').includes(q)) return false;
   return true;
+}
+
+/**
+ * The part of a task's description that a search matched, when its title did not — so a row that
+ * matched on text you cannot see says why it is there. Null when the title matched, or nothing did.
+ */
+export function descriptionMatch(t: Task, query: string): string | null {
+  const q = fold(query.trim());
+  if (!q || fold(t.text).includes(q) || !t.description) return null;
+  const at = fold(t.description).indexOf(q);
+  if (at < 0) return null;
+  const start = Math.max(0, at - 30);
+  const text = t.description.slice(start, at + q.length + 50).replace(/\s+/g, ' ').trim();
+  return `${start > 0 ? '…' : ''}${text}${at + q.length + 50 < t.description.length ? '…' : ''}`;
 }
 
 /**

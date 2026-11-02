@@ -28,7 +28,7 @@
 // a trap, it just has a mode.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { COL, COL_LAST } from './workColumns';
+import { COL } from './workColumns';
 import type { ID } from '../../types';
 
 /** `'add'` is the quick-add line: a real stop on the same track, not a special case bolted on. */
@@ -68,6 +68,8 @@ export function useTableCursor(
   handlers: TableCursorHandlers,
   enabled: boolean,
   containerRef: React.RefObject<HTMLDivElement | null>,
+  /** The open button's index: the last column, which depends on how many the board shows. */
+  lastCol: number,
   /** False when the add line is not drawn (filters that name no single value hide it). */
   hasAdd = true,
 ) {
@@ -123,11 +125,11 @@ export function useTableCursor(
 
   /** The next column in `dir` that is actually on screen, or `col` itself at the edge. */
   const stepCol = useCallback((row: ID, col: number, dir: -1 | 1): number => {
-    for (let c = col + dir; c >= 0 && c <= COL_LAST; c += dir) {
+    for (let c = col + dir; c >= 0 && c <= lastCol; c += dir) {
       if (h.current.colVisible(row, c)) return c;
     }
     return col;
-  }, []);
+  }, [lastCol]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent): boolean => {
     if (!enabled) return false;
@@ -172,9 +174,9 @@ export function useTableCursor(
       e.preventDefault();
       if (cur.col === COL.select) h.current.toggleSelect(cur.row);
       else if (cur.col === COL.title) h.current.renameStart(cur.row);
-      else if (cur.col === COL.open) h.current.openTask(cur.row);
-      else if (cur.col < COL.parent) h.current.openCell(cur.row, cur.col);
-      // Parent has nothing to open: it is text, and `↗` is the only way out of a row.
+      else if (cur.col === lastCol) h.current.openTask(cur.row);
+      // A cell with no menu (Parent, a custom field) does nothing: `↗` is the only way out of a row.
+      else h.current.openCell(cur.row, cur.col);
       return true;
     }
 
@@ -185,7 +187,7 @@ export function useTableCursor(
       return true;
     }
     return false;
-  }, [cursor, enabled, move, stepCol]);
+  }, [cursor, enabled, move, stepCol, lastCol]);
 
   return { cursor, setCursor, onKeyDown, moveRow: move, stepCol };
 }

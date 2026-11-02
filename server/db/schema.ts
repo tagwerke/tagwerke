@@ -188,6 +188,10 @@ export const tabs = pgTable(
     // Migration-free growth: a jsonb bag, e.g. { restrictDelete?: 'admin' }.
     // Default {} = flat/fast (today's behavior). A stored legacy `requireReview` key is ignored.
     settings: jsonb('settings').notNull().default({}),
+    // The table's columns, in order, the same for everyone on the board (shared/fields.ts):
+    // built-in ids and `f:<field key>`. The default is DEFAULT_COLUMNS there.
+    tableColumns: jsonb('table_columns').$type<string[]>().notNull()
+      .default(['status', 'assignee', 'due', 'priority', 'sprint', 'parent']),
   },
 );
 

@@ -1,5 +1,9 @@
 // The table layout of the work view (NOTES_SPLIT_PLAN §N2, §I.3).
 //
+// Its columns are the board's (`tableColumns`, CUSTOM_FIELDS_PLAN P4), passed in as `columns`. A
+// custom field's column shows the value, as a link where it is one; board admins rename, hide or
+// delete it from its header and add a new one from the + at the end of the header.
+//
 // Cells are display-only. Clicking one opens the shared TaskActionMenu scoped to that field, which
 // is how a table can be edited without there being a bespoke editor per column. Clicking the TITLE
 // opens the task instead — that asymmetry is what keeps "a row is a label plus one destination"
@@ -12,7 +16,10 @@ import { useStore } from '../../store';
 import { focusQuickAdd } from '../../tasks/quickAddFocus';
 import { formatDateChip, todayISO } from '../../util/dates';
 import type { FocusField } from '../../tasks/actions';
-import { COL, COLUMNS, columnAt, type ColumnDef } from './workColumns';
+import { COL, columnAt, gridOf, openCol, type ColumnDef } from './workColumns';
+import { AddColumn, FieldColumnMenu } from './ColumnPopovers';
+import { descriptionMatch } from './workFilters';
+import { phoneHref, urlLabel, type BoardField } from '../../../shared/fields';
 import type { Group, Sort, SortKey } from './workView';
 import type { DraftFields } from '../../tasks/createTask';
 import type { ID, Member, Sprint, Task } from '../../types';
@@ -22,8 +29,19 @@ import { isTerminal } from '../../../shared/status';
 export function WorkTable({
   tabId, groups, sort, onSort, selection, onSelect, onSelectAll, onOpenMenu, onOpenTask, canReorder, onReorder,
   onShift, onNest, onUnnest, onDelete, members, sprints, tasksById, editable, nesting, contextIds, addFields, onCreated,
+  columns, columnIds, fieldCount, isAdmin, query,
 }: {
   tabId: ID;
+  /** The board's columns, in its order (workColumns.buildColumns). */
+  columns: ColumnDef[];
+  /** The same, as the ids the board stores: what a column write sends back. */
+  columnIds: readonly string[];
+  /** Live fields on the board, shown or not: the + refuses past MAX_FIELDS. */
+  fieldCount: number;
+  /** Admins manage columns from the header. */
+  isAdmin: boolean;
+  /** The search, so a row that matched on its description can say so. */
+  query: string;
   groups: Group[];
   sort: Sort;
   onSort: (key: SortKey) => void;
@@ -98,6 +116,7 @@ export function WorkTable({
     },
     editable,
     rootRef,
+    openCol(columns),
     addFields !== null,
   );
 
@@ -120,12 +139,20 @@ export function WorkTable({
    */
   const openCellByIndex = (taskId: ID, col: number, ids: ID[] = [taskId]): void => {
     const box = cellEl(taskId, col)?.getBoundingClientRect();
-    onOpenMenu(ids, box?.left ?? 0, (box?.bottom ?? 0) + 4, columnAt(col)?.field, (dir) => {
+    const field = columnAt(columns, col)?.field;
+    if (!field) return; // Parent and custom fields are read here; `↗` opens the task to edit them
+    onOpenMenu(ids, box?.left ?? 0, (box?.bottom ?? 0) + 4, field, (dir) => {
       const next = stepCol(taskId, col, dir);
       putCursor(taskId, next);
-      if (next !== col && columnAt(next)?.field && editable) openCellByIndex(taskId, next, ids);
+      if (next !== col && columnAt(columns, next)?.field && editable) openCellByIndex(taskId, next, ids);
     });
   };
+
+  /** The open header popover: a field column's menu, or the + that adds a column. */
+  const [pop, setPop] = useState<{ kind: 'add'; anchor: DOMRect } | { kind: 'field'; field: BoardField; anchor: DOMRect } | null>(null);
+  const closePop = useCallback(() => setPop(null), []);
+  const grid = useMemo(() => gridOf(columns), [columns]);
+  const last = openCol(columns);
 
   const selectable = useMemo(() => flatIds.filter((id) => !contextIds.has(id)), [flatIds, contextIds]);
   const allOnScreen = selectable.length > 0 && selectable.every((id) => selection.has(id));
@@ -160,7 +187,8 @@ export function WorkTable({
   const states = useBoardStates(tabId);
 
   const cell = (t: Task, col: ColumnDef): React.ReactNode => {
-    switch (col.key) {
+    if (col.boardField) return <FieldValueCell field={col.boardField} value={t.fields?.[col.boardField.key]} />;
+    switch (col.id) {
       case 'status': {
         const state = stateIn(states, t.status);
         return (
@@ -178,6 +206,10 @@ export function WorkTable({
       }
       case 'priority': return <span className="wt-mono">{t.priority ? '!'.repeat(t.priority) : '—'}</span>;
       case 'sprint': return <span className="wt-mono">{t.sprintId ? sprintName.get(t.sprintId) ?? '—' : 'Backlog'}</span>;
+      case 'parent': {
+        const parent = t.parentTaskId ? tasksById[t.parentTaskId] : undefined;
+        return <span className={`wt-mono ${parent ? '' : 'muted'}`}>{parent ? parent.text || '(untitled)' : '—'}</span>;
+      }
       default: return null;
     }
   };
@@ -190,6 +222,7 @@ export function WorkTable({
       ref={rootRef}
       tabIndex={0}
       onKeyDown={(e) => { if (!renaming) onKeyDown(e); }}
+      style={{ '--wt-cols': grid.wide, '--wt-cols-narrow': grid.narrow, '--wt-min': `${grid.min}px` } as React.CSSProperties}
     >
       <div className="wt-head" role="row">
         {/* A header of its own for column one. Without it `TITLE` was the leftmost label and read
@@ -209,27 +242,63 @@ export function WorkTable({
         <button type="button" className={`wt-th ${sort.key === 'title' ? 'is-sorted' : ''}`} onClick={() => onSort('title')} title={headTitle('Title', sort.key === 'title')}>
           Title{sort.key === 'title' && (sort.dir === 'asc' ? ' ↑' : ' ↓')}
         </button>
-        {COLUMNS.map((c) => (
-          <button
-            key={c.key}
-            type="button"
-            className={`wt-th ${sort.key === c.key ? 'is-sorted' : ''}`}
-            onClick={() => onSort(c.key)}
-            title={headTitle(c.label, sort.key === c.key, GROUPABLE.has(c.key))}
-          >
-            {c.label}{sort.key === c.key && (sort.dir === 'asc' ? ' ↑' : ' ↓')}
-          </button>
-        ))}
-        <span className="wt-th">Parent</span>
-        <span className="wt-th wt-open-th" aria-hidden />
+        {columns.map((c) => {
+          if (!c.sortKey) return <span key={c.id} className={`wt-th ${c.id === 'parent' ? 'wt-parent' : ''}`}>{c.label}</span>;
+          const key = c.sortKey;
+          const sortButton = (
+            <button
+              type="button"
+              className={`wt-th ${sort.key === key ? 'is-sorted' : ''}`}
+              onClick={() => onSort(key)}
+              title={headTitle(c.label, sort.key === key, GROUPABLE.has(key))}
+            >
+              {c.label}{sort.key === key && (sort.dir === 'asc' ? ' ↑' : ' ↓')}
+            </button>
+          );
+          const field = c.boardField;
+          if (!field || !isAdmin) return <span key={c.id} className="wt-th-cell">{sortButton}</span>;
+          return (
+            <span key={c.id} className="wt-th-cell">
+              {sortButton}
+              <button
+                type="button"
+                className="wt-th-more"
+                aria-label={`${c.label} column options`}
+                aria-expanded={pop?.kind === 'field' && pop.field.key === field.key}
+                onClick={(e) => setPop({ kind: 'field', field, anchor: e.currentTarget.getBoundingClientRect() })}
+              >
+                <svg viewBox="0 0 12 12" width="9" height="9" aria-hidden><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              </button>
+            </span>
+          );
+        })}
+        <span className="wt-th wt-open-th">
+          {isAdmin && (
+            <button
+              type="button"
+              className="wt-add-col"
+              aria-label="Add a column"
+              title="Add a column"
+              aria-expanded={pop?.kind === 'add'}
+              onClick={(e) => setPop({ kind: 'add', anchor: e.currentTarget.getBoundingClientRect() })}
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+            </button>
+          )}
+        </span>
       </div>
+
+      {pop?.kind === 'add' && <AddColumn tabId={tabId} fieldCount={fieldCount} anchor={pop.anchor} onClose={closePop} />}
+      {pop?.kind === 'field' && (
+        <FieldColumnMenu key={pop.field.key} tabId={tabId} field={pop.field} columns={columnIds} anchor={pop.anchor} onClose={closePop} />
+      )}
 
       {groups.map((g) => {
         if (!g.tasks.length) return null; // an empty group is a column in the board layout, not a row here
         return (
           <div key={g.key} className="wt-group">
             {g.tasks.map((t) => {
-              const parent = t.parentTaskId ? tasksById[t.parentTaskId] : undefined;
+              const descHit = descriptionMatch(t, query);
               const done = isTerminal(states, t.status);
               const depth = nesting ? nesting.depthOf(t.id) : 0;
               const kids = nesting ? nesting.hasChildren(t.id) : false;
@@ -357,6 +426,13 @@ export function WorkTable({
                           e.stopPropagation(); // the table's own keys must not fire while typing
                         }}
                       />
+                    ) : descHit ? (
+                      <span className="wt-title-stack">
+                        <button type="button" className="wt-title" title="Click to edit" onClick={() => putCursor(t.id, COL.title)} onDoubleClick={() => startRename(t.id)}>
+                          {t.text || <em className="muted">(empty)</em>}
+                        </button>
+                        <span className="wt-desc-hit" title={t.description}>In description: {descHit}</span>
+                      </span>
                     ) : (
                       /* Not a link any more. A click parks the cursor here; a second click, a
                          double-click, Enter, or simply typing starts the rename. Opening the task
@@ -377,37 +453,42 @@ export function WorkTable({
                     )}
                   </span>
 
-                  {COLUMNS.map((c, ci) => (
-                    <button
-                      key={c.key}
-                      type="button"
-                      data-col={COL.fieldFirst + ci}
-                      className={`wt-cell ${cursor?.row === t.id && cursor.col === COL.fieldFirst + ci ? 'is-focused' : ''}`}
-                      disabled={!editable || !c.field}
-                      onClick={() => {
-                        putCursor(t.id, COL.fieldFirst + ci);
-                        openCellByIndex(t.id, COL.fieldFirst + ci, selection.has(t.id) ? [...selection] : [t.id]);
-                      }}
-                    >
-                      {cell(t, c)}
-                    </button>
-                  ))}
-
-                  {/* Text, not a link: the arrow is the only way out of a row, a parent included. */}
-                  <span
-                    className={`wt-cell is-static ${cursor?.row === t.id && cursor.col === COL.parent ? 'is-focused' : ''}`}
-                    data-col={COL.parent}
-                  >
-                    <span className={`wt-mono ${parent ? '' : 'muted'}`}>{parent ? parent.text || '(untitled)' : '—'}</span>
-                  </span>
+                  {columns.map((c, ci) => {
+                    const col = COL.first + ci;
+                    const focused = cursor?.row === t.id && cursor.col === col ? 'is-focused' : '';
+                    // Parent and custom fields are text, not a menu: the arrow is the only way out
+                    // of a row, a parent included, and a field is edited on the task's page.
+                    if (!c.field) {
+                      return (
+                        <span key={c.id} data-col={col} className={`wt-cell is-static ${c.id === 'parent' ? 'wt-parent' : ''} ${focused}`}>
+                          {cell(t, c)}
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        data-col={col}
+                        className={`wt-cell ${focused}`}
+                        disabled={!editable}
+                        onClick={() => {
+                          putCursor(t.id, col);
+                          openCellByIndex(t.id, col, selection.has(t.id) ? [...selection] : [t.id]);
+                        }}
+                      >
+                        {cell(t, c)}
+                      </button>
+                    );
+                  })}
 
                   <button
                     type="button"
-                    data-col={COL.open}
-                    className={`wt-cell wt-open ${cursor?.row === t.id && cursor.col === COL.open ? 'is-focused' : ''}`}
+                    data-col={last}
+                    className={`wt-cell wt-open ${cursor?.row === t.id && cursor.col === last ? 'is-focused' : ''}`}
                     aria-label="Open task"
                     title="Open task"
-                    onClick={() => { putCursor(t.id, COL.open); onOpenTask(t.id); }}
+                    onClick={() => { putCursor(t.id, last); onOpenTask(t.id); }}
                   >
                     <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
                       <path d="M6 3h7v7M13 3L4 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -434,6 +515,19 @@ export function WorkTable({
       )}
     </div>
   );
+}
+
+/** A custom field's value in its column: a link for a link, email or phone, the text otherwise. */
+function FieldValueCell({ field, value }: { field: BoardField; value: string | number | undefined }) {
+  if (value == null) return <span className="wt-mono muted">—</span>;
+  const text = String(value);
+  // A click on the link follows it; it must not also put the cursor on the row underneath.
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+  if (field.type === 'url') return <a className="wt-field-link" href={text} target="_blank" rel="noreferrer noopener" onMouseDown={stop} title={text}>{urlLabel(text)}</a>;
+  if (field.type === 'email') return <a className="wt-field-link" href={`mailto:${text}`} onMouseDown={stop} title={text}>{text}</a>;
+  if (field.type === 'phone') return <a className="wt-field-link" href={phoneHref(text)} onMouseDown={stop}>{text}</a>;
+  if (field.type === 'number') return <span className="wt-mono">{typeof value === 'number' ? value.toLocaleString() : text}</span>;
+  return <span className="wt-field-text" title={text}>{text}</span>;
 }
 
 /** Columns whose header click groups the rows as well as sorting them (BOARD_FILTERS_PLAN D5). */

@@ -7,32 +7,15 @@
 
 import { useState } from 'react';
 import { useStore } from '../../store';
-import { api, ApiError } from '../../api/client';
+import { api, type BoardTable } from '../../api/client';
 import { useOffline } from '../../offline/status';
 import { showToast } from '../../toast/useToast';
 import { askConfirm } from '../../confirm/useConfirm';
 import { Dropdown, type DropdownOption } from '../Dropdown';
-import { FIELD_TYPE_LABEL, useBoardFields } from '../../tasks/fields';
+import { FIELD_TYPE_HINT, FIELD_TYPE_LABEL, fieldRefusal, useBoardFields } from '../../tasks/fields';
 import { FIELD_TYPES, MAX_FIELDS, type BoardField, type FieldType } from '../../../shared/fields';
 
-const TYPE_HINT: Record<FieldType, string> = {
-  url: 'a web address; shows as a link.',
-  email: 'an email address; opens your mail app.',
-  phone: 'a phone number; tap to call.',
-  number: 'a number, like a score or an amount.',
-  text: 'a short line of text.',
-};
-
-const TYPE_OPTIONS: DropdownOption[] = FIELD_TYPES.map((t) => ({ value: t, label: FIELD_TYPE_LABEL[t], hint: TYPE_HINT[t] }));
-
-/** What a refused write means, in a sentence. */
-function refusal(e: unknown): string {
-  const data = e instanceof ApiError ? e.data : undefined;
-  if (data?.error === 'label_taken') return 'Another field already has that name.';
-  if (data?.error === 'too_many_fields') return `A board can have at most ${MAX_FIELDS} fields.`;
-  if (e instanceof ApiError && e.status === 403) return 'Only board admins can change fields.';
-  return 'Could not save the change.';
-}
+const TYPE_OPTIONS: DropdownOption[] = FIELD_TYPES.map((t) => ({ value: t, label: FIELD_TYPE_LABEL[t], hint: FIELD_TYPE_HINT[t] }));
 
 export function BoardFieldsPanel({ tabId }: { tabId: string }) {
   const fields = useBoardFields(tabId);
@@ -47,17 +30,18 @@ export function BoardFieldsPanel({ tabId }: { tabId: string }) {
   const countFor = (key: string) => Object.values(tasks).filter((t) => t.homeTabId === tabId && t.fields?.[key] != null).length;
 
   /** Run one write and apply the list it answers with. False when it didn't happen. */
-  async function write(run: () => Promise<{ fields: BoardField[] }>): Promise<boolean> {
+  async function write(run: () => Promise<BoardTable>): Promise<boolean> {
     if (!online) {
       showToast('You’re offline. Fields can only be changed online.');
       return false;
     }
     setBusy(true);
     try {
-      setBoardFields(tabId, (await run()).fields);
+      const r = await run();
+      setBoardFields(tabId, r.fields, r.columns);
       return true;
     } catch (e) {
-      showToast(refusal(e));
+      showToast(fieldRefusal(e));
       return false;
     } finally {
       setBusy(false);
@@ -90,7 +74,7 @@ export function BoardFieldsPanel({ tabId }: { tabId: string }) {
                 <div className="sprints-row-main">
                   <span className="sprints-row-label states-row-label" title={`Key: ${f.key}`}>{f.label}</span>
                   {f.hidden && <span className="states-row-tag">hidden</span>}
-                  <span className="states-row-cat" title={`${FIELD_TYPE_LABEL[f.type]}: ${TYPE_HINT[f.type]}`}>{FIELD_TYPE_LABEL[f.type]}</span>
+                  <span className="states-row-cat" title={`${FIELD_TYPE_LABEL[f.type]}: ${FIELD_TYPE_HINT[f.type]}`}>{FIELD_TYPE_LABEL[f.type]}</span>
                   <span className="sprints-row-count" title={`${n} task${n === 1 ? '' : 's'} with a value`}>{n}</span>
                   {isAdmin && (
                     <>
@@ -131,7 +115,7 @@ export function BoardFieldsPanel({ tabId }: { tabId: string }) {
   );
 }
 
-type Write = (run: () => Promise<{ fields: BoardField[] }>) => Promise<boolean>;
+type Write = (run: () => Promise<BoardTable>) => Promise<boolean>;
 
 function FieldEditor({ tabId, field, taskCount, busy, write, onDeleted }: {
   tabId: string;
@@ -179,7 +163,7 @@ function FieldEditor({ tabId, field, taskCount, busy, write, onDeleted }: {
       </label>
       <div className="states-editor-field">
         <span>Type</span>
-        <span className="states-editor-note">{FIELD_TYPE_LABEL[field.type]} — {TYPE_HINT[field.type]}</span>
+        <span className="states-editor-note">{FIELD_TYPE_LABEL[field.type]} — {FIELD_TYPE_HINT[field.type]}</span>
       </div>
       <div className="sprints-row-actions states-editor-actions">
         <button type="button" className="btn ghost tiny" disabled={busy} onClick={() => void update({ hidden: !field.hidden })}>

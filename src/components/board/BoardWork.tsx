@@ -3,6 +3,11 @@
 // Everything that decides what you are looking at — which tasks (filters), grouped how, sorted how,
 // what is selected — lives here. The active column header is both the sort and the grouping
 // (BOARD_FILTERS_PLAN D5).
+//
+// The toolbar is built around the search box. It searches titles and descriptions; the button at
+// its right edge opens every other filter (sprint, assignee, priority) in one menu, and only the
+// status pills stay in the bar. The button shows how many of the menu's filters are on, so a filter
+// you cannot see still says it is there.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { childrenOf, descendantsOf, siblingsOf, taskDepth, useBoardOutline, useStore } from '../../store';
@@ -19,16 +24,19 @@ import { SecretsView } from '../secrets/SecretsView';
 import { MultiSelect } from '../common/MultiSelect';
 import { PRIORITY_LABELS } from '../../util/filter';
 import {
-  applyFilters, BACKLOG, hasActiveFilters, NO_FILTERS, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
+  applyFilters, BACKLOG, hasActiveFilters, matchesFilters, NO_FILTERS, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
 } from './workFilters';
 import type { BoardSettingsSection, BoardView, ID, Member, Sprint } from '../../types';
-import { useBoardStates } from '../../tasks/states';
+import { stateStyle, useBoardStates } from '../../tasks/states';
+import { useBoardFields } from '../../tasks/fields';
+import { buildColumns, type ColumnDef } from './workColumns';
 import { isDone, visible as visibleStates } from '../../../shared/status';
 import { EmptyState } from '../common/EmptyState';
 
 /** Shared empties. `?? []` would mint a new array each render and churn every memo below. */
 const NO_MEMBERS: Member[] = [];
 const NO_SPRINTS: Sprint[] = [];
+const NO_COLUMNS: string[] = [];
 
 const SORT_KEY = (tabId: ID) => `tw:work-sort:${tabId}`;
 const PRIORITIES = [1, 2, 3] as const;
@@ -44,13 +52,20 @@ const SEARCH_DEBOUNCE_MS = 200;
  */
 function readSort(tabId: ID): Sort {
   try {
-    const [key, dir] = (localStorage.getItem(SORT_KEY(tabId)) ?? '').split(':');
-    if (SORT_KEYS.includes(key as SortKey) && key !== 'rank' && (dir === 'asc' || dir === 'desc')) {
+    const raw = localStorage.getItem(SORT_KEY(tabId)) ?? '';
+    const cut = raw.lastIndexOf(':'); // a field's key is `f:<key>`, so the direction is after the LAST colon
+    const key = raw.slice(0, cut);
+    const dir = raw.slice(cut + 1);
+    if ((SORT_KEYS.includes(key as SortKey) || key.startsWith('f:')) && key !== 'rank' && (dir === 'asc' || dir === 'desc')) {
       return { key: key as SortKey, dir };
     }
   } catch { /* fall through */ }
   return RANK_SORT;
 }
+
+/** A sort is only kept while its column is on the table: there would be no header to undo it. */
+const sortShown = (sort: Sort, columns: readonly ColumnDef[]): Sort =>
+  sort.key === 'rank' || sort.key === 'title' || columns.some((c) => c.sortKey === sort.key) ? sort : RANK_SORT;
 
 export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewChange }: {
   tabId: ID;
@@ -75,7 +90,12 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
     onSelect: () => openBoardSettings(tabId, section),
   });
 
-  const [sort, setSort] = useState<Sort>(() => readSort(tabId));
+  const fields = useBoardFields(tabId);
+  const columnIds = useStore((s) => s.tabs[tabId]?.tableColumns) ?? NO_COLUMNS;
+  const columns = useMemo(() => buildColumns(columnIds, fields), [columnIds, fields]);
+
+  const [chosenSort, setSort] = useState<Sort>(() => readSort(tabId));
+  const sort = sortShown(chosenSort, columns);
   const grouping = groupingOfSort(sort);
   // §I.3: a column sort makes "between these two rows" a lie, so the handle is not offered.
   const canReorder = sort.key === 'rank';
@@ -88,10 +108,10 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
 
   useEffect(() => {
     try {
-      if (sort.key === 'rank') localStorage.removeItem(SORT_KEY(tabId));
-      else localStorage.setItem(SORT_KEY(tabId), `${sort.key}:${sort.dir}`);
+      if (chosenSort.key === 'rank') localStorage.removeItem(SORT_KEY(tabId));
+      else localStorage.setItem(SORT_KEY(tabId), `${chosenSort.key}:${chosenSort.dir}`);
     } catch { /* storage disabled — the choice just doesn't persist */ }
-  }, [tabId, sort]);
+  }, [tabId, chosenSort]);
 
   /**
    * Nesting is shown only when the rows are a contiguous outline: no grouping, and the board's own
@@ -157,12 +177,14 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
   const selected = useMemo(() => [...selection].filter((id) => visibleIds.has(id)), [selection, visibleIds]);
 
   const onSort = useCallback((key: SortKey) => {
-    setSort((s) => {
-      if (s.key !== key) return { key, dir: 'asc' };
-      if (s.dir === 'asc') return { key, dir: 'desc' };
-      return { key: 'rank', dir: 'asc' }; // third click returns to the board's own order
+    setSort(() => {
+      // From the sort on screen, not the remembered one: a remembered sort on a column that has
+      // since been hidden is not what the header shows.
+      if (sort.key !== key) return { key, dir: 'asc' };
+      if (sort.dir === 'asc') return { key, dir: 'desc' };
+      return RANK_SORT; // third click returns to the board's own order
     });
-  }, []);
+  }, [sort]);
 
   const onSelect = useCallback((id: ID, mode: 'toggle' | 'range' | 'only') => {
     setSelection((prev) => {
@@ -254,14 +276,34 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
     onFilters(() => NO_FILTERS);
   }, [onFilters]);
 
+  // The filter menu behind the search box's button. How many of ITS filters are on shows on the
+  // button, whether the menu is open or not.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => { if (!searchRef.current?.contains(e.target as Node)) setMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [menuOpen]);
+  const menuCount = [filters.sprints, filters.assignees, filters.priorities].filter((l) => l.length > 0).length;
+  const clearMenuFilters = () => onFilters((f) => ({ ...f, sprints: [], assignees: [], priorities: [] }));
+
   const sprintOptions = useMemo(() => [
     { value: BACKLOG, label: 'Backlog' },
     ...newestFirst(sprints).map((s) => ({ value: s.id, label: s.isCurrent ? `${s.label} · now` : s.label })),
   ], [sprints]);
-  const statusOptions = useMemo(
-    () => visibleStates(states).map((st) => ({ value: st.key, label: st.label })),
-    [states],
-  );
+  // Each pill counts what the OTHER filters leave, so it says what pressing it would show.
+  const statusCounts = useMemo(() => {
+    const others = { ...filters, statuses: [] };
+    const counts = new Map<string, number>();
+    for (const t of outline) if (matchesFilters(t, others)) counts.set(t.status, (counts.get(t.status) ?? 0) + 1);
+    return counts;
+  }, [outline, filters]);
+  const toggleStatus = (key: string) => onFilters((f) => ({
+    ...f,
+    statuses: f.statuses.includes(key) ? f.statuses.filter((x) => x !== key) : [...f.statuses, key],
+  }));
   const togglePriority = (p: string) => onFilters((f) => ({
     ...f,
     priorities: f.priorities.includes(p) ? f.priorities.filter((x) => x !== p) : [...f.priorities, p],
@@ -307,71 +349,134 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
 
   return (
     <div className="board-work">
-      {/* The same bar as the boards page's filter strip, in the same order: search, then the
-          dropdowns, then the priority pills, then Clear and the view switcher at the end. */}
+      {/* Search first, with every filter but status behind the button at its right edge; then the
+          status pills; then Clear and the view switcher at the end. */}
       <div className="work-toolbar">
-        <label className="scope-search" title="Search this board's tasks">
-          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          <input
-            type="text"
-            value={text}
-            placeholder="Search tasks…"
-            aria-label="Search tasks"
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key !== 'Escape') return;
-              e.stopPropagation();
-              if (text) {
-                setText('');
-                onFilters((f) => (f.query ? { ...f, query: '' } : f));
-              } else {
-                e.currentTarget.blur();
-              }
-            }}
-          />
-        </label>
-
-        <div className="scope-facets">
-          {/* The sprint filter is always shown once a board has sprints: a filter you cannot see is
-              a bug, and a board whose work is all in the backlog reads as an empty board. */}
-          {sprints.length > 0 && (
-            <MultiSelect
-              label="Filter by sprint"
-              noun="sprints"
-              options={sprintOptions}
-              selected={filters.sprints}
-              onChange={(sprintsSel) => onFilters((f) => ({ ...f, sprints: sprintsSel }))}
-              footer={settingsLink('Manage sprints…', 'sprints')}
-            />
-          )}
-          <MultiSelect
-            label="Filter by status"
-            noun="statuses"
-            options={statusOptions}
-            selected={filters.statuses}
-            onChange={(statuses) => onFilters((f) => ({ ...f, statuses }))}
-            footer={settingsLink(isAdmin ? 'Edit states…' : 'What these states mean…', 'states')}
-          />
-          {members.length > 0 && (
-            <MultiSelect
-              label="Filter by assignee"
-              noun="people"
-              options={assigneeOptions}
-              selected={filters.assignees}
-              onChange={(assignees) => onFilters((f) => ({ ...f, assignees }))}
-              footer={settingsLink(isAdmin ? 'Invite someone…' : 'See who’s on this board…', 'people')}
-            />
-          )}
-          {PRIORITIES.map((p) => (
+        <div className="work-search" ref={searchRef}>
+          <div className="scope-search work-search-box">
+            <label className="work-search-field" title="Search this board's task titles and descriptions">
+              <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <input
+                type="text"
+                value={text}
+                placeholder="Search titles and descriptions…"
+                aria-label="Search titles and descriptions"
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Escape') return;
+                  e.stopPropagation();
+                  if (text) {
+                    setText('');
+                    onFilters((f) => (f.query ? { ...f, query: '' } : f));
+                  } else {
+                    e.currentTarget.blur();
+                  }
+                }}
+              />
+            </label>
+            <span className="work-search-rule" aria-hidden />
             <button
-              key={p}
               type="button"
-              className={`pill pill-priority p${p}`}
-              aria-pressed={filters.priorities.includes(String(p))}
-              onClick={() => togglePriority(String(p))}
-              title={`${PRIORITY_LABELS[p]} priority`}
+              className={`work-filter-btn ${menuOpen ? 'is-open' : ''} ${menuCount ? 'has-value' : ''}`}
+              aria-label={menuCount ? `Filters (${menuCount} on)` : 'Filters'}
+              title="Sprint, assignee and priority filters"
+              aria-haspopup="dialog"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
             >
-              {PRIORITY_LABELS[p]}
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+                <path d="M2 4h7M12 4h2M2 12h3M8 12h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <circle cx="10.5" cy="4" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                <circle cx="6.5" cy="12" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+              {menuCount > 0 && <span className="work-filter-count">{menuCount}</span>}
+            </button>
+          </div>
+
+          {menuOpen && (
+            <div
+              className="work-filter-menu"
+              role="dialog"
+              aria-label="Filters"
+              onKeyDown={(e) => {
+                // A dropdown inside handles its own Escape first and stops it there.
+                if (e.key === 'Escape') { e.stopPropagation(); setMenuOpen(false); }
+              }}
+            >
+              <div className="work-filter-head">
+                <span>Filters</span>
+                {menuCount > 0 && (
+                  <button type="button" className="btn tiny ghost" onClick={clearMenuFilters}>Clear</button>
+                )}
+              </div>
+              {/* The sprint filter is always offered once a board has sprints: a filter you cannot
+                  reach is a bug, and a board whose work is all in the backlog reads as an empty board. */}
+              {sprints.length > 0 && (
+                <div className="work-filter-row">
+                  <span>Sprint</span>
+                  <MultiSelect
+                    label="Filter by sprint"
+                    noun="sprints"
+                    options={sprintOptions}
+                    selected={filters.sprints}
+                    onChange={(sprintsSel) => onFilters((f) => ({ ...f, sprints: sprintsSel }))}
+                    footer={settingsLink('Manage sprints…', 'sprints')}
+                  />
+                </div>
+              )}
+              {members.length > 0 && (
+                <div className="work-filter-row">
+                  <span>Assignee</span>
+                  <MultiSelect
+                    label="Filter by assignee"
+                    noun="people"
+                    options={assigneeOptions}
+                    selected={filters.assignees}
+                    onChange={(assignees) => onFilters((f) => ({ ...f, assignees }))}
+                    footer={settingsLink(isAdmin ? 'Invite someone…' : 'See who’s on this board…', 'people')}
+                  />
+                </div>
+              )}
+              <div className="work-filter-row">
+                <span>Priority</span>
+                <div className="work-filter-pills">
+                  {PRIORITIES.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`pill pill-priority p${p}`}
+                      aria-pressed={filters.priorities.includes(String(p))}
+                      onClick={() => togglePriority(String(p))}
+                      title={`${PRIORITY_LABELS[p]} priority`}
+                    >
+                      {PRIORITY_LABELS[p]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="work-filter-foot">
+                <button type="button" className="btn tiny ghost" onClick={() => { setMenuOpen(false); openBoardSettings(tabId, 'table'); }}>
+                  Table columns…
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="work-status-pills" role="group" aria-label="Filter by status">
+          {visibleStates(states).map((st) => (
+            <button
+              key={st.key}
+              type="button"
+              className="pill md work-status-pill"
+              style={stateStyle(st)}
+              aria-pressed={filters.statuses.includes(st.key)}
+              title={st.description ?? `Show only ${st.label}`}
+              onClick={() => toggleStatus(st.key)}
+            >
+              <span className="list-dot" aria-hidden />
+              {st.label}
+              <span className="work-status-count">{statusCounts.get(st.key) ?? 0}</span>
             </button>
           ))}
         </div>
@@ -426,6 +531,11 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
           contextIds={contextIds}
           addFields={filterPreset}
           onCreated={onCreated}
+          columns={columns}
+          columnIds={columnIds}
+          fieldCount={fields.length}
+          isAdmin={isAdmin}
+          query={filters.query}
         />
       )}
 

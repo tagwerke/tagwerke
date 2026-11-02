@@ -19,6 +19,12 @@ automatically on boot — always take a backup before upgrading.
   back. Moving a task keeps the values the new board has a matching field for and says how many it
   dropped. API writers use `fields` on task writes and read `fieldsByBoard` from `/api/state`; agents
   can read every field but write only text and number fields.
+- **Table columns** — each board picks which columns its table shows and in what order (Board settings →
+  Table), the same for everyone on the board; Status, Assignee, Due, Priority, Sprint and Parent can each be
+  hidden, and any custom field can be shown as a column and sorted by. Board admins can also add a column
+  straight from the table: the + at the end of the header asks for a name and a type and makes it a new
+  field. A field column's header lets admins rename the field, hide the column, or delete the field.
+  Migration `0042` gives every existing board the columns it shows today.
 - **Create-only task writes** — `POST /api/tasks` creates a task, or does nothing if the id already
   exists, for importers and other scripts that may send the same task twice: a task someone has since
   worked on, trashed or set to a "do not contact" state is never overwritten or brought back.
@@ -72,6 +78,11 @@ automatically on boot — always take a backup before upgrading.
 
 ### Changed
 
+- **The board toolbar is built around search.** The search box now searches task descriptions as well as
+  titles; a row found by its description shows the matching words under its title. The button at the
+  search box's right edge opens the Sprint, Assignee and Priority filters, and shows how many of them are
+  on. Status is a row of pills next to the search, one per state with a count. The table's rows now run
+  the full width of the board.
 - **Board settings, in one place** — the panel on the right of every board is gone, and the table
   gets its full width. Everything about a board that isn't its work now lives in one Board settings
   modal, grouped as Board (General, People, Permissions), Work (Task states, Sprints), Records

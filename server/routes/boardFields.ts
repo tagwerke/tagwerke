@@ -4,12 +4,16 @@
 //   PATCH  /api/tabs/:id/fields/:key    rename, hide
 //   PUT    /api/tabs/:id/fields/order   reorder
 //   DELETE /api/tabs/:id/fields/:key    delete (a tombstone)
+//   PUT    /api/tabs/:id/columns        the table's columns, in order (P4)
 //
 // Board admins only, and never a token (D1, D9): no route declares `config.pat`, so tokens are
 // refused by default; a token sets fields only when it creates the board (routes/tabs.ts). Fields
 // arrive with /api/state, so there is no GET. After every write the board's clients get the whole
-// list in one `board-fields` frame — paths under /api/tabs are skipped by the generic broadcast
-// hook, so the publish here is the only one.
+// list and the table's columns in one `board-fields` frame — paths under /api/tabs are skipped by
+// the generic broadcast hook, so the publish here is the only one.
+//
+// The columns live here because a column can be a field: adding a field from the table's + button
+// adds its column in the same write (`column: true`), and deleting a field takes its column away.
 //
 // A field's type never changes (D2), and deleting one leaves its values in tasks.fields: history
 // still resolves them, but nothing shows or writes them any more.
@@ -23,13 +27,29 @@ import { requireBoardRole, paramTabId } from '../auth/boards.ts';
 import { recordAudit, diffChanges, type FieldChange } from '../lib/audit.ts';
 import { boardChannel, publish } from '../lib/bus.ts';
 import { fieldsOf, insertBoardFields, invalidate, liveFields, planFields } from '../lib/boardFields.ts';
-import type { BoardField } from '../../shared/fields.ts';
+import { BUILTIN_COLUMNS, columnFieldKey, fieldColumn, type BoardField } from '../../shared/fields.ts';
 
 const label = z.string().transform((s) => s.trim()).pipe(z.string().min(1).max(40));
 
-const createBody = z.object({ label, type: z.string(), key: z.string().optional() });
+const createBody = z.object({
+  label, type: z.string(), key: z.string().optional(),
+  /** Also show the new field as the table's last column (the table's + button). */
+  column: z.boolean().optional(),
+});
 const patchBody = z.object({ label: label.optional(), hidden: z.boolean().optional() });
 const orderBody = z.object({ keys: z.array(z.string().min(1)) });
+const columnsBody = z.object({ columns: z.array(z.string().min(1)) });
+
+async function columnsOf(tabId: string): Promise<string[]> {
+  const [row] = await db.select({ columns: schema.tabs.tableColumns }).from(schema.tabs).where(eq(schema.tabs.id, tabId));
+  return row.columns;
+}
+
+/** What a column id reads as in history: a built-in by its id, a field by its label. */
+const columnName = (fields: BoardField[], id: string): string => {
+  const key = columnFieldKey(id);
+  return key === null ? id : fields.find((f) => f.key === key)?.label ?? key;
+};
 
 const EDITABLE = ['label', 'hidden'] as const;
 
@@ -37,20 +57,20 @@ const EDITABLE = ['label', 'hidden'] as const;
 async function afterWrite(
   req: FastifyRequest,
   tabId: string,
-  op: 'create' | 'update' | 'reorder' | 'delete',
+  op: 'create' | 'update' | 'reorder' | 'delete' | 'columns',
   fieldLabel: string | null,
   extra: Record<string, unknown>,
-): Promise<BoardField[]> {
+): Promise<{ fields: BoardField[]; columns: string[] }> {
   invalidate(tabId);
-  const fields = await liveFields(tabId);
-  publish(boardChannel(tabId), { v: 1, type: 'board-fields', tabId, fields, actorId: req.user!.id });
+  const [fields, columns] = await Promise.all([liveFields(tabId), columnsOf(tabId)]);
+  publish(boardChannel(tabId), { v: 1, type: 'board-fields', tabId, fields, columns, actorId: req.user!.id });
   req.auditHandled = true;
   recordAudit({
     actorId: req.user!.id, action: 'board_field_change', targetType: 'tab', targetId: tabId,
     scopeId: tabId, method: req.method, status: 200,
     payload: { op, ...(fieldLabel != null ? { fieldLabel } : {}), ...extra },
   });
-  return fields;
+  return { fields, columns };
 }
 
 export async function boardFieldRoutes(app: FastifyInstance): Promise<void> {
@@ -64,13 +84,20 @@ export async function boardFieldRoutes(app: FastifyInstance): Promise<void> {
     const plan = planFields(await fieldsOf(tabId), [b.data]);
     if (!plan.ok) return reply.code(400).send(plan.body);
     const field = plan.fields[0];
-    await insertBoardFields(db, tabId, plan.fields);
+    const columns = await columnsOf(tabId);
+    await db.transaction(async (tx) => {
+      await insertBoardFields(tx, tabId, plan.fields);
+      if (b.data.column) {
+        await tx.update(schema.tabs).set({ tableColumns: [...columns, fieldColumn(field.key)] }).where(eq(schema.tabs.id, tabId));
+      }
+    });
     const changes: FieldChange[] = [
       { field: 'label', from: null, to: field.label },
       { field: 'type', from: null, to: field.type },
+      ...(b.data.column ? [{ field: 'column', from: null, to: true }] : []),
     ];
-    const list = await afterWrite(req, tabId, 'create', field.label, { changes });
-    return reply.code(201).send({ ok: true, field, fields: list });
+    const after = await afterWrite(req, tabId, 'create', field.label, { changes });
+    return reply.code(201).send({ ok: true, field, ...after });
   });
 
   // A different method from `/:key`, so a field keyed `order` is never shadowed.
@@ -93,8 +120,7 @@ export async function boardFieldRoutes(app: FastifyInstance): Promise<void> {
     });
     const before = fields.map((f) => f.label);
     const after = keys.map((k) => fields.find((f) => f.key === k)!.label);
-    const list = await afterWrite(req, tabId, 'reorder', null, { changes: [{ field: 'order', from: before, to: after }] });
-    return reply.send({ ok: true, fields: list });
+    return reply.send({ ok: true, ...(await afterWrite(req, tabId, 'reorder', null, { changes: [{ field: 'order', from: before, to: after }] })) });
   });
 
   app.patch('/api/tabs/:id/fields/:key', admin, async (req, reply) => {
@@ -110,15 +136,15 @@ export async function boardFieldRoutes(app: FastifyInstance): Promise<void> {
     const changes = diffChanges(current as unknown as Record<string, unknown>, b.data, EDITABLE);
     if (!changes.length) {
       req.auditHandled = true;
-      return reply.send({ ok: true, field: current, fields });
+      return reply.send({ ok: true, field: current, fields, columns: await columnsOf(tabId) });
     }
     await db
       .update(schema.boardFields)
       .set({ ...b.data, updatedAt: new Date() })
       .where(and(eq(schema.boardFields.tabId, tabId), eq(schema.boardFields.key, key)));
     // Named by the label it had: "renamed Site to Website" reads from the old name.
-    const list = await afterWrite(req, tabId, 'update', current.label, { changes });
-    return reply.send({ ok: true, field: { ...current, ...b.data }, fields: list });
+    const after = await afterWrite(req, tabId, 'update', current.label, { changes });
+    return reply.send({ ok: true, field: { ...current, ...b.data }, ...after });
   });
 
   app.delete('/api/tabs/:id/fields/:key', admin, async (req, reply) => {
@@ -126,11 +152,43 @@ export async function boardFieldRoutes(app: FastifyInstance): Promise<void> {
     const current = (await liveFields(tabId)).find((f) => f.key === key);
     if (!current) return reply.code(404).send({ error: 'not found' });
     const now = new Date();
-    await db
-      .update(schema.boardFields)
-      .set({ deletedAt: now, updatedAt: now })
-      .where(and(eq(schema.boardFields.tabId, tabId), eq(schema.boardFields.key, key)));
-    const list = await afterWrite(req, tabId, 'delete', current.label, {});
-    return reply.send({ ok: true, fields: list });
+    const columns = await columnsOf(tabId);
+    // A deleted field's column goes with it: a column must name something the table can show.
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.boardFields)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(and(eq(schema.boardFields.tabId, tabId), eq(schema.boardFields.key, key)));
+      if (columns.includes(fieldColumn(key))) {
+        await tx.update(schema.tabs).set({ tableColumns: columns.filter((c) => c !== fieldColumn(key)) }).where(eq(schema.tabs.id, tabId));
+      }
+    });
+    return reply.send({ ok: true, ...(await afterWrite(req, tabId, 'delete', current.label, {})) });
+  });
+
+  // The whole list, in order. Every id must be a built-in or a live field's column, once.
+  app.put('/api/tabs/:id/columns', admin, async (req, reply) => {
+    const { id: tabId } = req.params as { id: string };
+    const b = columnsBody.safeParse(req.body);
+    if (!b.success) return reply.code(400).send({ error: 'invalid columns' });
+    const fields = await liveFields(tabId);
+    const valid = new Set<string>([...BUILTIN_COLUMNS, ...fields.map((f) => fieldColumn(f.key))]);
+    const next = b.data.columns;
+    const unknown = next.filter((c) => !valid.has(c));
+    if (unknown.length || new Set(next).size !== next.length) {
+      return reply.code(400).send({ error: 'invalid columns', unknown, valid: [...valid] });
+    }
+    const before = await columnsOf(tabId);
+    if (before.length === next.length && before.every((c, i) => c === next[i])) {
+      req.auditHandled = true;
+      return reply.send({ ok: true, fields, columns: before });
+    }
+    await db.update(schema.tabs).set({ tableColumns: next }).where(eq(schema.tabs.id, tabId));
+    const changes: FieldChange[] = [{
+      field: 'columns',
+      from: before.map((c) => columnName(fields, c)),
+      to: next.map((c) => columnName(fields, c)),
+    }];
+    return reply.send({ ok: true, ...(await afterWrite(req, tabId, 'columns', null, { changes })) });
   });
 }

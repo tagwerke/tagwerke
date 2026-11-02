@@ -8,7 +8,8 @@ import type { BoardState, ID, Member, Sprint, Task } from '../../types';
 import { newestFirst } from '../../util/sprints';
 
 export type Grouping = 'status' | 'assignee' | 'sprint' | 'none';
-export type SortKey = 'rank' | 'title' | 'status' | 'assignee' | 'due' | 'priority' | 'sprint';
+/** A built-in column, or `f:<key>` for a custom field's column (CUSTOM_FIELDS_PLAN P4). */
+export type SortKey = 'rank' | 'title' | 'status' | 'assignee' | 'due' | 'priority' | 'sprint' | `f:${string}`;
 export type SortDir = 'asc' | 'desc';
 export interface Sort { key: SortKey; dir: SortDir }
 
@@ -102,6 +103,11 @@ function sortValue(t: Task, key: SortKey, names: Map<ID, string>, sprintStarts: 
     // them put Aug 31 before Aug 3 and October before September.
     case 'sprint': return t.sprintId ? (sprintStarts.get(t.sprintId) ?? '') : null;
     case 'rank': return null;
+    default: {
+      // A field's values are all of its one type: numbers compare as numbers, the rest as text.
+      const v = t.fields?.[key.slice(2)];
+      return v == null ? null : typeof v === 'number' ? v : v.toLowerCase();
+    }
   }
 }
 

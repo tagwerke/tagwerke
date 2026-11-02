@@ -295,6 +295,13 @@
       "when": 1793625607728,
       "tag": "0041_custom_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793632421052,
+      "tag": "0042_table_columns",
+      "breakpoints": true
     }
   ]
 }

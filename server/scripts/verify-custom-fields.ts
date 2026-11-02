@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- these scripts probe untyped JSON responses */
 // End-to-end check of CUSTOM_FIELDS_PLAN.md: create-only task writes (P1), custom fields (P2), board
-// templates (P3) and delete forever (P5). Runs against the dev DB in throwaway users and boards that
-// it cleans up.
+// templates (P3), table columns (P4) and delete forever (P5). Runs against the dev DB in throwaway
+// users and boards that it cleans up.
 //
 //   npm run verify:custom-fields
 
@@ -22,7 +22,7 @@ const { taskRoutes } = await import('../routes/tasks.ts');
 const { tabRoutes } = await import('../routes/tabs.ts');
 const { boardFieldRoutes } = await import('../routes/boardFields.ts');
 const { seedBoardStates } = await import('../lib/boardStates.ts');
-const { MAX_FIELDS } = await import('../../shared/fields.ts');
+const { MAX_FIELDS, DEFAULT_COLUMNS } = await import('../../shared/fields.ts');
 
 let failures = 0;
 function check(label: string, ok: boolean, detail?: unknown): void {
@@ -132,8 +132,27 @@ try {
   check("a deleted key is never reused (the new field isn't `notes`)", again.field?.key && again.field.key !== 'notes', again);
   await A('DELETE', `${F}/${again.field.key}`);
 
+  console.log('table columns (P4)');
+  const C = `/api/tabs/${board}/columns`;
+  const [tabRow] = await db.select({ columns: schema.tabs.tableColumns }).from(schema.tabs).where(eq(schema.tabs.id, board));
+  check('a board starts with the built-in columns', tabRow.columns.join() === DEFAULT_COLUMNS.join(), tabRow.columns);
+  const source = (await A('POST', F, { label: 'Lead source', type: 'text', column: true })).json() as any;
+  check('a field added with column:true is the last column', source.columns?.at(-1) === `f:${source.field?.key}`, source);
+  check('a field added without it is not a column', !source.columns?.includes('f:website'), source.columns);
+  const order = ['f:website', 'status', 'due', `f:${source.field.key}`];
+  const put = await A('PUT', C, { columns: order });
+  check('PUT columns -> 200 with the new order', put.statusCode === 200 && (put.json() as any).columns.join() === order.join(), put.body);
+  check('an unknown column -> 400', (await A('PUT', C, { columns: ['status', 'f:nope'] })).statusCode === 400);
+  check('a repeated column -> 400', (await A('PUT', C, { columns: ['status', 'status'] })).statusCode === 400);
+  check('an editor cannot set columns -> 403', (await E('PUT', C, { columns: ['status'] })).statusCode === 403);
+  check("a PAT can't set columns", (await T('PUT', C, { columns: ['status'] })).statusCode === 403);
+  const gone = (await A('DELETE', `${F}/${source.field.key}`)).json() as any;
+  check("deleting a field takes its column away", gone.columns?.join() === 'f:website,status,due', gone.columns);
+  await A('PUT', C, { columns: DEFAULT_COLUMNS });
+
   console.log('cap');
-  for (let i = 0; i < MAX_FIELDS - 6; i++) await A('POST', F, { label: `Extra ${i}`, type: 'text' });
+  const liveNow = (gone.fields as unknown[]).length;
+  for (let i = 0; i < MAX_FIELDS - liveNow; i++) await A('POST', F, { label: `Extra ${i}`, type: 'text' });
   check(`the cap of ${MAX_FIELDS}`, (await A('POST', F, { label: 'One too many', type: 'text' })).statusCode === 400);
 
   console.log('create-only POST');

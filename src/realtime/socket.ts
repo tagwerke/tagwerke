@@ -245,9 +245,10 @@ function handleMessage(raw: string): void {
       return;
     }
     case 'board-fields': {
-      // An admin edited this board's custom fields (server/routes/boardFields.ts): the whole new list.
-      const m = msg as { tabId?: ID; fields?: BoardField[] };
-      if (m.tabId && Array.isArray(m.fields)) useStore.getState().setBoardFields(m.tabId, m.fields);
+      // An admin edited this board's custom fields or table columns (server/routes/boardFields.ts):
+      // both whole lists.
+      const m = msg as { tabId?: ID; fields?: BoardField[]; columns?: string[] };
+      if (m.tabId && Array.isArray(m.fields) && Array.isArray(m.columns)) useStore.getState().setBoardFields(m.tabId, m.fields, m.columns);
       return;
     }
     case 'comment': {

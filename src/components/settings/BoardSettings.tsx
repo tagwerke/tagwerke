@@ -16,6 +16,7 @@ import { SprintsPage } from '../SprintsPage';
 import { TrashPanel } from '../TrashPanel';
 import { BoardStatesPanel } from '../states/BoardStatesPanel';
 import { BoardFieldsPanel } from '../fields/BoardFieldsPanel';
+import { BoardTablePanel } from '../fields/BoardTablePanel';
 import { Section } from '../common/Section';
 import { GeneralSection } from './GeneralSection';
 import { WallpaperSection } from './WallpaperSection';
@@ -117,6 +118,11 @@ export function BoardSettings({ tabId, onOpenSprint }: {
               {section === 'states' && (
                 <Section title="Task states">
                   <BoardStatesPanel tabId={tabId} />
+                </Section>
+              )}
+              {section === 'table' && (
+                <Section title="Table">
+                  <BoardTablePanel tabId={tabId} />
                 </Section>
               )}
               {section === 'fields' && (

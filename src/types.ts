@@ -39,6 +39,8 @@ export interface Tab {
   settings?: BoardSettings;
   /** The caller's OWN wallpaper for this board (shared/wallpaper.ts); absent = plain paper. */
   wallpaper?: Wallpaper;
+  /** The table's columns, in order, the same for everyone on the board (shared/fields.ts). */
+  tableColumns: string[];
 }
 
 import type { Wallpaper } from '../shared/wallpaper';
@@ -208,11 +210,11 @@ export function asBoardView(v: unknown): BoardView {
  *  its work lives in one of these; the board itself only links into them. */
 export type BoardSettingsSection =
   | 'general' | 'wallpaper' | 'people' | 'permissions'
-  | 'states' | 'fields' | 'sprints'
+  | 'states' | 'table' | 'fields' | 'sprints'
   | 'history' | 'trash'
   | 'secrets' | 'danger';
 export const BOARD_SETTINGS_SECTIONS: BoardSettingsSection[] = [
-  'general', 'wallpaper', 'people', 'permissions', 'states', 'fields', 'sprints', 'history', 'trash', 'secrets', 'danger',
+  'general', 'wallpaper', 'people', 'permissions', 'states', 'table', 'fields', 'sprints', 'history', 'trash', 'secrets', 'danger',
 ];
 
 // ── Sprints (SPRINTS_PLAN.md) ───────────────────────────────────────────────

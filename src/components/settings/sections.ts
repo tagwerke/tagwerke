@@ -9,6 +9,7 @@ export const SECTION_LABEL: Record<BoardSettingsSection, string> = {
   people: 'People',
   permissions: 'Permissions',
   states: 'Task states',
+  table: 'Table',
   fields: 'Fields',
   sprints: 'Sprints',
   history: 'History',
@@ -20,7 +21,7 @@ export const SECTION_LABEL: Record<BoardSettingsSection, string> = {
 /** The nav, in order. Secrets access is board-admin only, like the Secrets view it guards. */
 export const SECTION_GROUPS: { label: string; sections: BoardSettingsSection[] }[] = [
   { label: 'Board', sections: ['general', 'wallpaper', 'people', 'permissions'] },
-  { label: 'Work', sections: ['states', 'fields', 'sprints'] },
+  { label: 'Work', sections: ['states', 'table', 'fields', 'sprints'] },
   { label: 'Records', sections: ['history', 'trash'] },
   { label: 'Admin', sections: ['secrets', 'danger'] },
 ];
@@ -38,6 +39,7 @@ export const SETTINGS_SEARCH: { label: string; section: BoardSettingsSection; te
   { label: 'Add an agent', section: 'people', terms: 'agent bot api token key integration automation' },
   { label: 'Roles and permissions', section: 'permissions', terms: 'permission role rights access who can delete' },
   { label: 'Task states', section: 'states', terms: 'status state workflow column done category stage pipeline' },
+  { label: 'Table columns', section: 'table', terms: 'table column columns show hide order layout view grid' },
   { label: 'Fields', section: 'fields', terms: 'field custom property column link url email phone number score attribute' },
   { label: 'Sprints', section: 'sprints', terms: 'sprint week backlog current iteration cycle' },
   { label: 'Board history', section: 'history', terms: 'history log changes audit who changed timeline activity' },

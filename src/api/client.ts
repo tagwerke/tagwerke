@@ -266,14 +266,18 @@ export const api = {
   // A board's custom fields (CUSTOM_FIELDS_PLAN P2). Direct calls for the same reasons as `states`:
   // admin configuration, the server's rules decide, and every call answers with the whole list.
   fields: {
-    create: (tabId: ID, b: { label: string; type: FieldType }) =>
-      req<{ field: BoardField; fields: BoardField[] }>(`/api/tabs/${tabId}/fields`, { method: 'POST', body: JSON.stringify(b) }),
+    /** `column` also adds the field as the table's last column (the table's + button). */
+    create: (tabId: ID, b: { label: string; type: FieldType; column?: boolean }) =>
+      req<{ field: BoardField } & BoardTable>(`/api/tabs/${tabId}/fields`, { method: 'POST', body: JSON.stringify(b) }),
     update: (tabId: ID, key: string, b: { label?: string; hidden?: boolean }) =>
-      req<{ field: BoardField; fields: BoardField[] }>(`/api/tabs/${tabId}/fields/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(b) }),
+      req<{ field: BoardField } & BoardTable>(`/api/tabs/${tabId}/fields/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(b) }),
     reorder: (tabId: ID, keys: string[]) =>
-      req<{ fields: BoardField[] }>(`/api/tabs/${tabId}/fields/order`, { method: 'PUT', body: JSON.stringify({ keys }) }),
+      req<BoardTable>(`/api/tabs/${tabId}/fields/order`, { method: 'PUT', body: JSON.stringify({ keys }) }),
     remove: (tabId: ID, key: string) =>
-      req<{ fields: BoardField[] }>(`/api/tabs/${tabId}/fields/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+      req<BoardTable>(`/api/tabs/${tabId}/fields/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+    /** The table's columns, in order. */
+    columns: (tabId: ID, columns: string[]) =>
+      req<BoardTable>(`/api/tabs/${tabId}/columns`, { method: 'PUT', body: JSON.stringify({ columns }) }),
   },
   sprints: {
     list: (tabId: ID) => req<{ sprints: Sprint[] }>(`/api/tabs/${tabId}/sprints`),
@@ -604,6 +608,12 @@ export interface HistoryEntry {
  * assignments that did not survive the destination board's roster; the UI reports them because
  * silently unassigning someone's work is exactly the kind of thing that should be said out loud.
  */
+/** A board's fields and its table columns: what every field or column write answers with. */
+export interface BoardTable {
+  fields: BoardField[];
+  columns: string[];
+}
+
 export interface MoveResult {
   ok: true;
   moved: Task[];

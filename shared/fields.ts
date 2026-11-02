@@ -77,3 +77,22 @@ export function urlLabel(v: string): string {
     return v;
   }
 }
+
+// ── Table columns (CUSTOM_FIELDS_PLAN P4) ──────────────────────────────────────────────────────
+//
+// A board's table shows the columns its `tabs.table_columns` lists, in that order, the same for
+// everyone on the board. Select, Title and the open button are always there and never listed. A
+// field's column is `f:<key>`.
+
+/** The built-in columns a board can show, hide and reorder. */
+export const BUILTIN_COLUMNS = ['status', 'assignee', 'due', 'priority', 'sprint', 'parent'] as const;
+export type BuiltinColumn = (typeof BUILTIN_COLUMNS)[number];
+
+/** What a new board's table shows. */
+export const DEFAULT_COLUMNS: string[] = [...BUILTIN_COLUMNS];
+
+/** The column id of a field. */
+export const fieldColumn = (key: string): string => `f:${key}`;
+
+/** The field key a column id names, or null for a built-in. */
+export const columnFieldKey = (id: string): string | null => (id.startsWith('f:') ? id.slice(2) : null);

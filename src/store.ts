@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { useMemo } from 'react';
 import { nanoid } from 'nanoid';
 import type { BlockFilter, BoardField, BoardSettings, BoardSettingsSection, BoardState, BoardView, CalendarEvent, DocumentDTO, Filter, ID, PlannerMode, Project, RootState, RsvpStatus, Tab, Task } from './types';
-import type { FieldValue } from '../shared/fields';
+import { DEFAULT_COLUMNS, type FieldValue } from '../shared/fields';
 import { nextColor } from './util/color';
 import { todayISO } from './util/dates';
 import { dlog, sid } from './util/dlog';
@@ -167,8 +167,8 @@ interface Actions {
   deleteTab(id: ID): void;
   /** Replace a board's state list (a `board-states` frame, or an admin's own edit). */
   setBoardStates(tabId: ID, states: BoardState[]): void;
-  /** Replace a board's custom fields (a `board-fields` frame, or an admin's own edit). */
-  setBoardFields(tabId: ID, fields: BoardField[]): void;
+  /** Replace a board's custom fields and table columns (a `board-fields` frame, or an admin's own edit). */
+  setBoardFields(tabId: ID, fields: BoardField[], columns: string[]): void;
   setActiveTab(id: ID | null): void;
   setBoardView(view: BoardView): void;
   /** Open the open board's settings at a section, or close them with null. */
@@ -307,6 +307,7 @@ function makeInitial(): RootState {
     starred: true,
     type: 'normal',
     docJSON: undefined,
+    tableColumns: DEFAULT_COLUMNS,
   };
 
   const personal: Tab = {
@@ -317,6 +318,7 @@ function makeInitial(): RootState {
     starred: false,
     type: 'normal',
     docJSON: undefined,
+    tableColumns: DEFAULT_COLUMNS,
   };
 
   return {
@@ -442,6 +444,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
         // read as view-only until the next full state pull — an empty table with no add line.
         const tab: Tab = {
           id, projectId, name, order: position, starred: false, type: 'normal', role: 'admin',
+          tableColumns: DEFAULT_COLUMNS, // the server's default for a new board (migration 0042)
         };
         set((s) => ({
           tabs: { ...s.tabs, [id]: tab },
@@ -530,8 +533,11 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       setBoardStates(tabId, states) {
         set((s) => ({ statesByBoard: { ...s.statesByBoard, [tabId]: states } }));
       },
-      setBoardFields(tabId, fields) {
-        set((s) => ({ fieldsByBoard: { ...s.fieldsByBoard, [tabId]: fields } }));
+      setBoardFields(tabId, fields, columns) {
+        set((s) => ({
+          fieldsByBoard: { ...s.fieldsByBoard, [tabId]: fields },
+          tabs: s.tabs[tabId] ? { ...s.tabs, [tabId]: { ...s.tabs[tabId], tableColumns: columns } } : s.tabs,
+        }));
       },
       setActiveTab(id) {
         // Opening a board lands on the doc view; leaving resets too (harmless). Any board /
