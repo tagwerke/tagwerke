@@ -56,6 +56,7 @@ export async function assembleState(userId: string, reaches: (tabId: string) => 
       location: schema.tabs.location,
       settings: schema.tabs.settings,
       tableColumns: schema.tabs.tableColumns,
+      updatedAt: schema.tabs.updatedAt,
       role: schema.boardMembers.role, // the caller's own role → drives read-only vs editable UI
       categoryId: schema.boardMembers.categoryId,
       position: schema.boardMembers.position,
@@ -102,6 +103,7 @@ export async function assembleState(userId: string, reaches: (tabId: string) => 
       docVersion: t.docVersion,
       settings: t.settings ?? {},
       tableColumns: t.tableColumns,
+      updatedAt: t.updatedAt.getTime(),
       ...(t.location != null ? { location: t.location } : {}),
       ...(t.wallpaper != null ? { wallpaper: t.wallpaper } : {}), // the caller's own, not the board's
     };

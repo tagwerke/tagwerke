@@ -10,14 +10,13 @@ export const PRIORITY_LABELS: Record<1 | 2 | 3, string> = { 1: 'Low', 2: 'Medium
 
 /**
  * The task-level facets shared by {@link Filter} and {@link BlockFilter}:
- * owner / priority / has-date / due-soon. (project/query are handled by callers since
+ * priority / has-date / due-soon. (project/query are handled by callers since
  * they compare against tab-level data, not the task.)
  */
 export function matchesTaskFacets(
   task: Task,
-  f: { owners?: string[]; priorities?: (1 | 2 | 3)[]; hasDate?: boolean; dueSoon?: boolean },
+  f: { priorities?: (1 | 2 | 3)[]; hasDate?: boolean; dueSoon?: boolean },
 ): boolean {
-  if (f.owners?.length && !(task.owner && f.owners.includes(task.owner))) return false;
   if (f.priorities?.length && !(task.priority && f.priorities.includes(task.priority))) return false;
   if (f.hasDate && !task.date) return false;
   if (f.dueSoon && !(task.date && isDueSoon(task.date))) return false;

@@ -210,7 +210,7 @@ async function writeState(room: Room): Promise<boolean> {
   // marking the room persisted and losing the entire first editing session (text + task refs).
   const updated = await db
     .update(schema.tabs)
-    .set({ ydocState, docJSON })
+    .set({ ydocState, docJSON, updatedAt: new Date() })
     .where(eq(schema.tabs.id, room.tabId))
     .returning({ id: schema.tabs.id });
   if (updated.length === 0) {

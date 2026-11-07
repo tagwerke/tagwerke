@@ -1,85 +1,134 @@
-// The scope strip: a full-width row under the top bar in the board grid. Shows the space picker
-// + the filter facets inline (no popover) + a board count. Reuses the exact same
-// `filter` state and setFilter toggles as the old FilterPanel — it's the same filter, surfaced
-// as a persistent strip instead of a dropdown. (The mobile MoreSheet still opens FilterPanel.)
+// The scope strip: a full-width row under the top bar in the board grid. The search box (with the
+// filter menu behind its button, the same component the board uses) and one pill per space.
+// No space picked means every space; picking several shows their boards together.
 
 import { useMemo } from 'react';
 import { useStore } from '../../store';
 import { PRIORITY_LABELS } from '../../util/filter';
-import { Dropdown } from '../Dropdown';
+import { UNASSIGNED } from '../board/workFilters';
+import { DEFAULT_STATES, visible as visibleStates } from '../../../shared/status';
+import { FilterSearch } from '../common/FilterSearch';
+import { MultiSelect } from '../common/MultiSelect';
 
-const ALL = 'all';
+const PRIORITIES = ['1', '2', '3'] as const;
 
 export function ScopeStrip() {
   const projects = useStore((s) => s.projects);
   const projectOrder = useStore((s) => s.projectOrder);
   const tabs = useStore((s) => s.tabs);
+  const statesByBoard = useStore((s) => s.statesByBoard);
+  const membersByBoard = useStore((s) => s.membersByBoard);
   const filter = useStore((s) => s.filter);
   const setFilter = useStore((s) => s.setFilter);
 
-  const scoped = filter.projectIds.length === 1 ? projects[filter.projectIds[0]] : null;
-  const boardCount = Object.values(tabs).filter(
-    (t) => t.type !== 'today' && (filter.projectIds.length ? filter.projectIds.includes(t.projectId) : true),
-  ).length;
+  const boardCount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of Object.values(tabs)) if (t.type !== 'today') counts[t.projectId] = (counts[t.projectId] ?? 0) + 1;
+    return counts;
+  }, [tabs]);
+  const total = Object.values(boardCount).reduce((a, b) => a + b, 0);
 
-  const spaceOptions = useMemo(
-    () => [
-      { value: ALL, label: 'All spaces' },
-      ...projectOrder.filter((id) => projects[id]).map((id) => ({ value: id, label: projects[id].name, accent: projects[id].color })),
-    ],
-    [projectOrder, projects],
-  );
+  const toggleSpace = (id: string) => setFilter({
+    projectIds: filter.projectIds.includes(id) ? filter.projectIds.filter((x) => x !== id) : [...filter.projectIds, id],
+  });
 
-  const togglePriority = (p: 1 | 2 | 3) => {
-    const xs = filter.priorities.includes(p) ? filter.priorities.filter((x) => x !== p) : [...filter.priorities, p];
-    setFilter({ priorities: xs });
-  };
+  // Boards define their own states; a state is offered once, by its key, under the first label seen.
+  const statusOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const t of Object.values(tabs)) {
+      if (t.type === 'today') continue;
+      for (const st of visibleStates(statesByBoard[t.id] ?? DEFAULT_STATES)) if (!byKey.has(st.key)) byKey.set(st.key, st.label);
+    }
+    return [...byKey].map(([value, label]) => ({ value, label }));
+  }, [tabs, statesByBoard]);
 
-  // "Clear" resets the facets but keeps the space scope (which has its own ✕).
-  const facetCount = filter.priorities.length + (filter.hasDate ? 1 : 0) + (filter.dueSoon ? 1 : 0) + filter.owners.length + (filter.query ? 1 : 0);
-  const clearFacets = () => setFilter({ priorities: [], hasDate: false, dueSoon: false, owners: [], query: '' });
+  const assigneeOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const members of Object.values(membersByBoard)) for (const m of members) byId.set(m.id, m.name);
+    return [...byId].map(([value, label]) => ({ value, label })).concat({ value: UNASSIGNED, label: 'Unassigned' });
+  }, [membersByBoard]);
+
+  const togglePriority = (p: string) => setFilter({
+    priorities: filter.priorities.includes(p) ? filter.priorities.filter((x) => x !== p) : [...filter.priorities, p],
+  });
+
+  const menuCount = [filter.statuses, filter.assignees, filter.priorities].filter((l) => l.length > 0).length;
+  const clearMenu = () => setFilter({ statuses: [], assignees: [], priorities: [] });
+  // "Clear" resets the search and filters but keeps the spaces, which are picked right beside it.
+  const clearAll = () => setFilter({ statuses: [], assignees: [], priorities: [], query: '' });
 
   return (
     <div className="scope-strip">
-      <label className="scope-search" title="Filter this list — press Ctrl+K to search everywhere">
-        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-        <input
-          type="text"
-          value={filter.query}
-          onChange={(e) => setFilter({ query: e.target.value })}
-          placeholder="Filter boards & tasks…"
-        />
-      </label>
+      <FilterSearch
+        query={filter.query}
+        onQuery={(query) => setFilter({ query })}
+        label="Search boards and tasks"
+        menuTitle="Status, assignee and priority filters"
+        menuCount={menuCount}
+        onClearMenu={clearMenu}
+      >
+        <div className="work-filter-row">
+          <span>Status</span>
+          <MultiSelect
+            label="Filter by status"
+            noun="statuses"
+            options={statusOptions}
+            selected={filter.statuses}
+            onChange={(statuses) => setFilter({ statuses })}
+          />
+        </div>
+        <div className="work-filter-row">
+          <span>Assignee</span>
+          <MultiSelect
+            label="Filter by assignee"
+            noun="people"
+            options={assigneeOptions}
+            selected={filter.assignees}
+            onChange={(assignees) => setFilter({ assignees })}
+          />
+        </div>
+        <div className="work-filter-row">
+          <span>Priority</span>
+          <div className="work-filter-pills">
+            {PRIORITIES.map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={`pill pill-priority p${p}`}
+                aria-pressed={filter.priorities.includes(p)}
+                onClick={() => togglePriority(p)}
+                title={`${PRIORITY_LABELS[Number(p) as 1 | 2 | 3]} priority`}
+              >
+                {PRIORITY_LABELS[Number(p) as 1 | 2 | 3]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </FilterSearch>
 
-      <div className="scope-facets">
-        {/* The space scope, now that spaces left the sidebar for Settings: one picker, inline with
-            the filter pills. It is the single place the name is shown on the grid (the board group
-            header is suppressed when scoped to one space). */}
-        <Dropdown
-          className="is-compact"
-          value={scoped?.id ?? ALL}
-          options={spaceOptions}
-          onChange={(id) => setFilter({ projectIds: id === ALL ? [] : [id] })}
-        />
-        {([1, 2, 3] as const).map((p) => (
+      <div className="scope-facets" role="group" aria-label="Spaces">
+        <button type="button" className="pill" aria-pressed={filter.projectIds.length === 0} onClick={() => setFilter({ projectIds: [] })}>
+          All <span className="work-status-count">{total}</span>
+        </button>
+        {projectOrder.filter((id) => projects[id]).map((id) => (
           <button
-            key={p}
-            className={`pill pill-priority p${p}`}
-            aria-pressed={filter.priorities.includes(p)}
-            onClick={() => togglePriority(p)}
-            title={`${PRIORITY_LABELS[p]} priority`}
+            key={id}
+            type="button"
+            className="pill pill-project"
+            style={{ '--pill-color': projects[id].color } as React.CSSProperties}
+            aria-pressed={filter.projectIds.includes(id)}
+            onClick={() => toggleSpace(id)}
           >
-            {PRIORITY_LABELS[p]}
+            {projects[id].name} <span className="work-status-count">{boardCount[id] ?? 0}</span>
           </button>
         ))}
-        <button className="pill" aria-pressed={filter.hasDate} onClick={() => setFilter({ hasDate: !filter.hasDate })}>has date</button>
-        <button className="pill" aria-pressed={filter.dueSoon} onClick={() => setFilter({ dueSoon: !filter.dueSoon })}>due soon</button>
       </div>
 
-      <div className="scope-right">
-        <span className="count">{boardCount} board{boardCount === 1 ? '' : 's'}</span>
-        {facetCount > 0 && <button className="scope-clear" onClick={clearFacets}>Clear</button>}
-      </div>
+      {(menuCount > 0 || filter.query) && (
+        <div className="scope-right">
+          <button type="button" className="scope-clear" onClick={clearAll}>Clear</button>
+        </div>
+      )}
     </div>
   );
 }

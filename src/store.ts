@@ -281,10 +281,9 @@ interface DocLike { type: string; text?: string; attrs?: Record<string, unknown>
 
 const initialFilter: Filter = {
   projectIds: [],
-  owners: [],
+  assignees: [],
+  statuses: [],
   priorities: [],
-  hasDate: false,
-  dueSoon: false,
   query: '',
 };
 
@@ -457,7 +456,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       renameTab(id, name) {
         // Local only — the PATCH is emitted by the debounced differ (api/persist.ts). See
         // renameProject above for why.
-        set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], name } } }));
+        set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], name, updatedAt: Date.now() } } }));
       },
       setTabProject(id, projectId) {
         set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], projectId } } }));
@@ -496,7 +495,7 @@ export const useStore = create<RootState & Actions & DocumentsSlice>()((set, get
       },
       setTabDoc(id, doc) {
         // docJSON is persisted by the subscription differ in src/api/persist.ts.
-        set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], docJSON: doc } } }));
+        set((s) => ({ tabs: { ...s.tabs, [id]: { ...s.tabs[id], docJSON: doc, updatedAt: Date.now() } } }));
       },
       deleteTab(id) {
         set((s) => {

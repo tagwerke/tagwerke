@@ -302,6 +302,13 @@
       "when": 1793632421052,
       "tag": "0042_table_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1794075578862,
+      "tag": "0043_tab_updated_at",
+      "breakpoints": true
     }
   ]
 }

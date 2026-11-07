@@ -2,7 +2,7 @@
 // (board, user). Both writes are fire-and-forget upserts: presence is best-effort and
 // must never delay or break the underlying request. See AUTH_IMPLEMENTATION_PLAN.md.
 
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
 
 /** Bump lastSeenAt for (board, user) — called by the "I opened this board" beacon. */
@@ -19,8 +19,15 @@ export function touchSeen(tabId: string, userId: string): void {
     });
 }
 
-/** Bump lastEditedAt for (board, user) — called after a successful board write. */
+/** Bump lastEditedAt for (board, user), and the board's own updatedAt — called after a successful board write. */
 export function touchEdited(tabId: string, userId: string): void {
+  void db
+    .update(schema.tabs)
+    .set({ updatedAt: sql`now()` })
+    .where(eq(schema.tabs.id, tabId))
+    .catch(() => {
+      /* best-effort */
+    });
   void db
     .insert(schema.boardActivity)
     .values({ tabId, userId, lastEditedAt: new Date() })

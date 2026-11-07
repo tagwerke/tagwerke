@@ -41,6 +41,8 @@ export interface Tab {
   wallpaper?: Wallpaper;
   /** The table's columns, in order, the same for everyone on the board (shared/fields.ts). */
   tableColumns: string[];
+  /** When the board last changed, as of the last load (ms). The boards page orders by it. */
+  updatedAt?: number;
 }
 
 import type { Wallpaper } from '../shared/wallpaper';
@@ -280,12 +282,14 @@ export interface RootState {
   filter: Filter;
 }
 
+/** The boards page's filter: which spaces, and what a board's tasks must match to show it. Same
+ *  meaning as the board's own WorkFilters (src/components/board/workFilters.ts), minus sprints,
+ *  which belong to one board. Empty lists mean everything. */
 export interface Filter {
   projectIds: ID[];
-  owners: string[];
-  priorities: (1 | 2 | 3)[];
-  hasDate: boolean;
-  dueSoon: boolean;
+  assignees: string[];
+  statuses: string[];
+  priorities: string[];
   query: string;
 }
 

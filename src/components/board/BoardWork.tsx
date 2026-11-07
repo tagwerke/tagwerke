@@ -22,6 +22,7 @@ import { newestFirst } from '../../util/sprints';
 import { DocumentStrip } from '../documents/DocumentStrip';
 import { SecretsView } from '../secrets/SecretsView';
 import { MultiSelect } from '../common/MultiSelect';
+import { FilterSearch } from '../common/FilterSearch';
 import { PRIORITY_LABELS } from '../../util/filter';
 import {
   applyFilters, BACKLOG, hasActiveFilters, matchesFilters, NO_FILTERS, presetFromFilters, pruneFilters, UNASSIGNED, type WorkFilters,
@@ -43,7 +44,6 @@ const PRIORITIES = [1, 2, 3] as const;
 const SORT_KEYS: readonly SortKey[] = ['rank', 'title', 'status', 'assignee', 'due', 'priority', 'sprint'];
 const RANK_SORT: Sort = { key: 'rank', dir: 'asc' };
 const NO_PINNED: ReadonlySet<ID> = new Set();
-const SEARCH_DEBOUNCE_MS = 200;
 
 /**
  * The table's sort — which is also its grouping (BOARD_FILTERS_PLAN D5). Remembered per board, as
@@ -263,29 +263,13 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
     placeBeside(id, target.id, dir < 0 ? 'before' : 'after');
   }, [canReorder, groups, placeBeside]);
 
-  // The search box keeps its own text and reports it after a pause, so typing does not re-filter
-  // the board on every keystroke. Esc clears it at once.
-  const [text, setText] = useState(rawFilters.query);
-  useEffect(() => {
-    const h = setTimeout(() => onFilters((f) => (f.query === text ? f : { ...f, query: text })), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(h);
-  }, [text, onFilters]);
+  const setQuery = useCallback(
+    (query: string) => onFilters((f) => (f.query === query ? f : { ...f, query })),
+    [onFilters],
+  );
+  const clearFilters = useCallback(() => onFilters(() => NO_FILTERS), [onFilters]);
 
-  const clearFilters = useCallback(() => {
-    setText('');
-    onFilters(() => NO_FILTERS);
-  }, [onFilters]);
-
-  // The filter menu behind the search box's button. How many of ITS filters are on shows on the
-  // button, whether the menu is open or not.
-  const [menuOpen, setMenuOpen] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDown = (e: MouseEvent) => { if (!searchRef.current?.contains(e.target as Node)) setMenuOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [menuOpen]);
+  // How many of the search box's menu filters are on shows on its button, open or not.
   const menuCount = [filters.sprints, filters.assignees, filters.priorities].filter((l) => l.length > 0).length;
   const clearMenuFilters = () => onFilters((f) => ({ ...f, sprints: [], assignees: [], priorities: [] }));
 
@@ -352,116 +336,65 @@ export function BoardWork({ tabId, filters: rawFilters, onFilters, view, onViewC
       {/* Search first, with every filter but status behind the button at its right edge; then the
           status pills; then Clear and the view switcher at the end. */}
       <div className="work-toolbar">
-        <div className="work-search" ref={searchRef}>
-          <div className="scope-search work-search-box">
-            <label className="work-search-field" title="Search this board's task titles and descriptions">
-              <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              <input
-                type="text"
-                value={text}
-                placeholder="Search titles and descriptions…"
-                aria-label="Search titles and descriptions"
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Escape') return;
-                  e.stopPropagation();
-                  if (text) {
-                    setText('');
-                    onFilters((f) => (f.query ? { ...f, query: '' } : f));
-                  } else {
-                    e.currentTarget.blur();
-                  }
-                }}
+        <FilterSearch
+          query={filters.query}
+          onQuery={setQuery}
+          label="Search titles and descriptions"
+          menuTitle="Sprint, assignee and priority filters"
+          menuCount={menuCount}
+          onClearMenu={clearMenuFilters}
+        >
+          {/* The sprint filter is always offered once a board has sprints: a filter you cannot
+              reach is a bug, and a board whose work is all in the backlog reads as an empty board. */}
+          {sprints.length > 0 && (
+            <div className="work-filter-row">
+              <span>Sprint</span>
+              <MultiSelect
+                label="Filter by sprint"
+                noun="sprints"
+                options={sprintOptions}
+                selected={filters.sprints}
+                onChange={(sprintsSel) => onFilters((f) => ({ ...f, sprints: sprintsSel }))}
+                footer={settingsLink('Manage sprints…', 'sprints')}
               />
-            </label>
-            <span className="work-search-rule" aria-hidden />
-            <button
-              type="button"
-              className={`work-filter-btn ${menuOpen ? 'is-open' : ''} ${menuCount ? 'has-value' : ''}`}
-              aria-label={menuCount ? `Filters (${menuCount} on)` : 'Filters'}
-              title="Sprint, assignee and priority filters"
-              aria-haspopup="dialog"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((o) => !o)}
-            >
-              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
-                <path d="M2 4h7M12 4h2M2 12h3M8 12h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                <circle cx="10.5" cy="4" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="6.5" cy="12" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-              {menuCount > 0 && <span className="work-filter-count">{menuCount}</span>}
-            </button>
-          </div>
-
-          {menuOpen && (
-            <div
-              className="work-filter-menu"
-              role="dialog"
-              aria-label="Filters"
-              onKeyDown={(e) => {
-                // A dropdown inside handles its own Escape first and stops it there.
-                if (e.key === 'Escape') { e.stopPropagation(); setMenuOpen(false); }
-              }}
-            >
-              <div className="work-filter-head">
-                <span>Filters</span>
-                {menuCount > 0 && (
-                  <button type="button" className="btn tiny ghost" onClick={clearMenuFilters}>Clear</button>
-                )}
-              </div>
-              {/* The sprint filter is always offered once a board has sprints: a filter you cannot
-                  reach is a bug, and a board whose work is all in the backlog reads as an empty board. */}
-              {sprints.length > 0 && (
-                <div className="work-filter-row">
-                  <span>Sprint</span>
-                  <MultiSelect
-                    label="Filter by sprint"
-                    noun="sprints"
-                    options={sprintOptions}
-                    selected={filters.sprints}
-                    onChange={(sprintsSel) => onFilters((f) => ({ ...f, sprints: sprintsSel }))}
-                    footer={settingsLink('Manage sprints…', 'sprints')}
-                  />
-                </div>
-              )}
-              {members.length > 0 && (
-                <div className="work-filter-row">
-                  <span>Assignee</span>
-                  <MultiSelect
-                    label="Filter by assignee"
-                    noun="people"
-                    options={assigneeOptions}
-                    selected={filters.assignees}
-                    onChange={(assignees) => onFilters((f) => ({ ...f, assignees }))}
-                    footer={settingsLink(isAdmin ? 'Invite someone…' : 'See who’s on this board…', 'people')}
-                  />
-                </div>
-              )}
-              <div className="work-filter-row">
-                <span>Priority</span>
-                <div className="work-filter-pills">
-                  {PRIORITIES.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      className={`pill pill-priority p${p}`}
-                      aria-pressed={filters.priorities.includes(String(p))}
-                      onClick={() => togglePriority(String(p))}
-                      title={`${PRIORITY_LABELS[p]} priority`}
-                    >
-                      {PRIORITY_LABELS[p]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="work-filter-foot">
-                <button type="button" className="btn tiny ghost" onClick={() => { setMenuOpen(false); openBoardSettings(tabId, 'table'); }}>
-                  Table columns…
-                </button>
-              </div>
             </div>
           )}
-        </div>
+          {members.length > 0 && (
+            <div className="work-filter-row">
+              <span>Assignee</span>
+              <MultiSelect
+                label="Filter by assignee"
+                noun="people"
+                options={assigneeOptions}
+                selected={filters.assignees}
+                onChange={(assignees) => onFilters((f) => ({ ...f, assignees }))}
+                footer={settingsLink(isAdmin ? 'Invite someone…' : 'See who’s on this board…', 'people')}
+              />
+            </div>
+          )}
+          <div className="work-filter-row">
+            <span>Priority</span>
+            <div className="work-filter-pills">
+              {PRIORITIES.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={`pill pill-priority p${p}`}
+                  aria-pressed={filters.priorities.includes(String(p))}
+                  onClick={() => togglePriority(String(p))}
+                  title={`${PRIORITY_LABELS[p]} priority`}
+                >
+                  {PRIORITY_LABELS[p]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="work-filter-foot">
+            <button type="button" className="btn tiny ghost" onClick={() => openBoardSettings(tabId, 'table')}>
+              Table columns…
+            </button>
+          </div>
+        </FilterSearch>
 
         <div className="work-status-pills" role="group" aria-label="Filter by status">
           {visibleStates(states).map((st) => (

@@ -13,7 +13,6 @@ import { TabView } from './components/TabView';
 import { CalendarView } from './components/calendar/CalendarView';
 import { NewTabDialog } from './components/NewTabDialog';
 import { ImportCsvSheet } from './components/ImportCsvSheet';
-import { FilterPanel } from './components/FilterPanel';
 import { SearchPalette } from './components/SearchPalette';
 import { AdminPage } from './components/AdminPage';
 import { AppSettings } from './components/settings/AppSettings';
@@ -37,7 +36,7 @@ import {
   parseOpenTaskId,
 } from './util/router';
 
-export type Panel = 'new' | 'import' | 'filter' | 'search' | 'more' | 'notifications';
+export type Panel = 'new' | 'import' | 'search' | 'more' | 'notifications';
 
 export default function App() {
   const status = useSession((s) => s.status);
@@ -184,7 +183,6 @@ function Workspace() {
 
       {panel === 'new' && <NewTabDialog onClose={closePanel} />}
       {panel === 'import' && <ImportCsvSheet onClose={closePanel} />}
-      {panel === 'filter' && <FilterPanel onClose={closePanel} />}
       {panel === 'search' && <SearchPalette onClose={closePanel} />}
       {panel === 'notifications' && <NotificationsPanel onClose={closePanel} />}
       {panel === 'more' && <MoreSheet onClose={closePanel} onOpen={setPanel} />}

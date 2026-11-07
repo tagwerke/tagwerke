@@ -192,6 +192,9 @@ export const tabs = pgTable(
     // built-in ids and `f:<field key>`. The default is DEFAULT_COLUMNS there.
     tableColumns: jsonb('table_columns').$type<string[]>().notNull()
       .default(['status', 'assignee', 'due', 'priority', 'sprint', 'parent']),
+    // When anything on the board last changed (a write to it, or its notes saving). Orders the
+    // boards page, latest first.
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
 );
 

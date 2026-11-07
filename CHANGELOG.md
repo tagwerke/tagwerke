@@ -8,6 +8,15 @@ automatically on boot — always take a backup before upgrading.
 
 ## [Unreleased]
 
+### Changed
+
+- **Boards page** — spaces are now a row of pills (All, then each space with its board count); pick
+  several to see their boards together, or none for all. Boards are ordered by when they last changed,
+  newest first, and notes edits and renames count (migration `0043` adds `tabs.updated_at`; existing
+  boards start from their newest task). The search box is the board's own, with a filter button that
+  opens Status, Assignee and Priority; the old priority, has-date and due-soon pills, the mobile
+  filter sheet and the grouped-by-space view are gone, and the strip now shows on phones too.
+
 ### Added
 
 - **Custom fields** — each board can define up to 20 fields of its own (Board settings → Fields): a
