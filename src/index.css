@@ -1686,13 +1686,16 @@ button.pill:hover { border-color: var(--line-strong); }
   display: flex; align-items: flex-end; gap: 2px;
   margin: -20px calc(-1 * clamp(16px, 3vw, 32px)) 20px;
   padding: 8px clamp(16px, 3vw, 32px) 0;
-  border-bottom: 1px solid var(--line);
-  overflow-x: auto; scrollbar-width: thin;
+  /* The baseline is background, not a border: the tabs used to overlap a real border by 1px so the
+     active one merged into it, and that 1px of overflow is what drew a vertical scrollbar. Painted
+     on the strip's own bottom row, the tabs cover it with no overflow at all. */
+  background: linear-gradient(var(--line), var(--line)) bottom / 100% 1px no-repeat;
+  overflow-x: auto; scrollbar-width: none;
 }
+.navtabs::-webkit-scrollbar { display: none; }
 .navtab {
   display: flex; align-items: center; flex: 0 1 200px; min-width: 96px;
   border: 1px solid transparent; border-bottom: 0; border-radius: var(--r-md) var(--r-md) 0 0;
-  margin-bottom: -1px;
 }
 .navtab.is-fixed { flex: none; min-width: 0; }
 .navtab:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
@@ -2467,8 +2470,12 @@ button.pill:hover { border-color: var(--line-strong); }
 @media (max-width: 720px) {
   /* A table does not fit 390px; the row layout is the honest fallback (§A). */
   .wt-head { display: none; }
-  .wt-row { grid-template-columns: 26px minmax(0, 1fr) 78px; min-height: 52px; min-width: 0; }
-  .wt-row > .wt-cell:nth-of-type(n + 2), .wt-row > .wt-cell.is-static { display: none; }
+  /* `.work-table` in the selector: the narrow-columns rule further down has the same specificity
+     and comes later, so without it this template never applied. */
+  .work-table .wt-row { grid-template-columns: 26px minmax(0, 1fr) 78px 44px; min-height: 52px; min-width: 0; }
+  /* Keep the first field; hide the rest — but never the open button, the only way out of a row. */
+  .wt-row > .wt-cell:not(.wt-open):nth-of-type(n + 2), .wt-row > .wt-cell.is-static { display: none; }
+  .wt-row > .wt-open { grid-column: -2 / -1; min-height: 44px; }
 }
 
 /* The row's two trailing affordances, after the strip (NOTES_SPLIT_PLAN §N3). */

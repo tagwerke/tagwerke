@@ -162,6 +162,16 @@ export interface OrgConfig {
 
 export const getState = () => req('/api/state');
 
+/** Task change feed since an epoch-ms cursor (server/routes/state.ts). `more` = too many to page →
+ *  do a full getState() instead. */
+export interface TaskChanges {
+  tasks: Task[];
+  deleted: ID[];
+  cursor: number;
+  more: boolean;
+}
+export const getTaskChanges = (since: number) => req<TaskChanges>(`/api/state/changes?since=${Math.floor(since)}`);
+
 // ---- mutations (raw; callers usually wrap in enqueue) ---------------------
 
 export const api = {

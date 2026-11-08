@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import { auth, getState, setWriteErrorHandler, type SessionUser } from '../api/client';
 import { startPersistence, setBaseline, suspendPersistence, resumePersistence, flush } from '../api/persist';
 import { startRealtime, stopRealtime } from '../realtime/socket';
+import { startCatchup, stopCatchup } from '../realtime/catchup';
 import { useNotifications } from '../notifications/useNotifications';
 import { useComments } from '../comments/useComments';
 import { startOutbox, clearOutbox, pendingTaskIds, outboxIdle } from '../offline/outbox';
@@ -38,6 +39,8 @@ function hydrateAndPersist(state: RootState, keepTaskIds?: Set<ID>): void {
   // Live updates: connect the realtime socket (idempotent). On a reconnect it re-pulls
   // authoritative state to catch anything missed while disconnected.
   startRealtime({ onResync: () => void repull() });
+  // Catch-up under the socket: re-pull on return to the tab, poll task changes while visible.
+  startCatchup({ repull });
   // Pull the notification feed for this login (live ones then arrive over the socket).
   // hydrateAndPersist runs once per login — repull()/resync does NOT come through here.
   void useNotifications.getState().load();
@@ -90,7 +93,15 @@ function drainForRead(): Promise<void> {
  *  A late edit made DURING the read is still covered: the post-fetch flush + hydrate + baseline run
  *  as one synchronous block (no `await`) so nothing interleaves, and any task with an un-acked write
  *  is preserved rather than reverted — the same belt-and-suspenders `applyRemote` (socket.ts) has. */
-export async function repull(): Promise<void> {
+let repullInFlight: Promise<void> | null = null;
+
+export function repull(): Promise<void> {
+  // Coalesce: a reconnect, a tab refocus and a write error can all ask at once — one pull serves all.
+  if (!repullInFlight) repullInFlight = doRepull().finally(() => (repullInFlight = null));
+  return repullInFlight;
+}
+
+async function doRepull(): Promise<void> {
   flush(); // debounced edits → durable outbox, so the drain below actually waits for them
   await drainForRead(); // read-your-writes: let our own writes commit before we read
 
@@ -194,6 +205,7 @@ export const useSession = create<SessionState>((set) => ({
       /* offline — clear local session anyway */
     }
     stopRealtime();
+    stopCatchup();
     clearSnapshot();
     clearOutbox();
     useNotifications.getState().reset();

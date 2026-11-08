@@ -22,6 +22,14 @@ import type { BoardField, BoardState, Comment, DocumentDTO, ID, Notification, Ta
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
+/** Client heartbeat. The server pings at the protocol level, but those frames are invisible to JS —
+ *  so a socket that died quietly (laptop sleep, a backgrounded PWA, a NAT dropping the flow) looks
+ *  OPEN here forever and simply delivers nothing. We send an app-level `ping` (the server answers
+ *  `pong`); if NO frame of any kind arrives within PONG_TIMEOUT_MS of it, the socket is dead →
+ *  drop it and reconnect now, which resyncs. Judged per ping, not by wall-clock silence, so a
+ *  background tab's throttled timers can't fake a timeout. */
+const HEARTBEAT_MS = 25_000;
+const PONG_TIMEOUT_MS = 10_000;
 
 interface StartOpts {
   /** Re-pull authoritative state after a reconnect, to catch changes missed while down. */
@@ -37,6 +45,10 @@ let reconnectDelay = RECONNECT_MIN_MS;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let subscribedBoard: ID | null = null;
 let unsubStore: (() => void) | null = null;
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let probeTimer: ReturnType<typeof setTimeout> | null = null;
+let lastFrameAt = 0; // any inbound frame proves the socket is alive
+let pingSentAt = 0; // 0 = no ping awaiting a reply
 
 // CRDT co-editing rooms multiplexed over this same socket (see yProvider.ts). The transport
 // lives here; the Yjs protocol lives in the provider. A room registers a client to receive its
@@ -288,6 +300,56 @@ function handleMessage(raw: string): void {
 
 // --- connection lifecycle --------------------------------------------------------------
 
+/** Send a ping and, after PONG_TIMEOUT_MS, reconnect if nothing came back. */
+function probe(): void {
+  if (!socket || socket.readyState !== WebSocket.OPEN || probeTimer) return;
+  pingSentAt = Date.now();
+  sendJSON({ type: 'ping' });
+  probeTimer = setTimeout(() => {
+    probeTimer = null;
+    if (pingSentAt && lastFrameAt < pingSentAt) {
+      dlog('socket', `no reply to ping in ${PONG_TIMEOUT_MS}ms → dead socket, reconnecting`);
+      forceReconnect();
+    }
+    pingSentAt = 0;
+  }, PONG_TIMEOUT_MS);
+}
+
+function stopHeartbeat(): void {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  if (probeTimer) clearTimeout(probeTimer);
+  heartbeatTimer = null;
+  probeTimer = null;
+  pingSentAt = 0;
+}
+
+/** Back on the tab → check the socket at once rather than at the next heartbeat. */
+function onVisible(): void {
+  if (document.visibilityState === 'visible') probe();
+}
+
+/** Abandon the current socket (it may never fire onclose) and connect a fresh one now. */
+function forceReconnect(): void {
+  stopHeartbeat();
+  const dead = socket;
+  socket = null;
+  ready = false;
+  if (dead) {
+    dead.onopen = dead.onmessage = dead.onclose = dead.onerror = null;
+    try {
+      dead.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  reconnectDelay = RECONNECT_MIN_MS;
+  connect(); // onopen sees hadConnection → resync
+}
+
 function connect(): void {
   if (stopped) return;
   try {
@@ -300,13 +362,20 @@ function connect(): void {
   socket.onopen = () => {
     dlog('socket', `WebSocket OPEN (reconnect=${hadConnection}) → awaiting server 'ready'`);
     reconnectDelay = RECONNECT_MIN_MS;
+    lastFrameAt = Date.now();
+    stopHeartbeat();
+    heartbeatTimer = setInterval(probe, HEARTBEAT_MS);
     // A reconnect (not the first connect) means we may have missed writes → resync.
     if (hadConnection) opts?.onResync();
     hadConnection = true;
   };
-  socket.onmessage = (e) => handleMessage(String(e.data));
+  socket.onmessage = (e) => {
+    lastFrameAt = Date.now();
+    handleMessage(String(e.data));
+  };
   socket.onclose = () => {
     dlog('socket', 'WebSocket CLOSED → scheduling reconnect');
+    stopHeartbeat();
     ready = false;
     socket = null;
     scheduleReconnect();
@@ -339,6 +408,7 @@ export function startRealtime(startOpts: StartOpts): void {
   reconnectDelay = RECONNECT_MIN_MS;
   // Follow the open board as it changes.
   unsubStore = useStore.subscribe(syncSubscription);
+  document.addEventListener('visibilitychange', onVisible);
   connect();
 }
 
@@ -347,6 +417,8 @@ export function stopRealtime(): void {
   stopped = true;
   ready = false;
   subscribedBoard = null;
+  stopHeartbeat();
+  document.removeEventListener('visibilitychange', onVisible);
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;

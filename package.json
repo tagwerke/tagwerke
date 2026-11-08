@@ -35,6 +35,7 @@
     "verify:items": "tsx server/scripts/verify-items.ts",
     "verify:agent": "tsx server/scripts/verify-agent.ts",
     "verify:pat": "tsx server/scripts/verify-pat.ts",
+    "verify:changes": "tsx server/scripts/verify-changes.ts",
     "verify:board-states": "tsx server/scripts/verify-board-states.ts",
     "verify:custom-fields": "tsx server/scripts/verify-custom-fields.ts",
     "verify:secrets": "tsx server/scripts/verify-secrets.ts",

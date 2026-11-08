@@ -30,6 +30,9 @@ import type { ID, Member, Sprint, Task } from '../../types';
 import { stateIn, stateStyle, useBoardStates } from '../../tasks/states';
 import { isTerminal } from '../../../shared/status';
 
+/** A touch screen: no hover and no double-click, so a tap on a title has to mean "open". */
+const isTouch = (): boolean => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
+
 export function WorkTable({
   tabId, groups, sort, onSort, selection, onSelect, onSelectAll, onOpenMenu, onOpenTask, canReorder, onReorder,
   onShift, onNest, onUnnest, onDelete, members, sprints, tasksById, editable, nesting, contextIds, addFields, onCreated,
@@ -454,7 +457,7 @@ export function WorkTable({
                       />
                     ) : descHit ? (
                       <span className="wt-title-stack">
-                        <button type="button" className="wt-title" title="Click to edit" onClick={() => putCursor(t.id, COL.title)} onDoubleClick={() => startRename(t.id)}>
+                        <button type="button" className="wt-title" title="Click to edit" onClick={() => { putCursor(t.id, COL.title); if (isTouch()) onOpenTask(t.id); }} onDoubleClick={() => startRename(t.id)}>
                           {t.text || <em className="muted">(empty)</em>}
                         </button>
                         <span className="wt-desc-hit" title={t.description}>In description: {descHit}</span>
@@ -471,7 +474,9 @@ export function WorkTable({
                         // the cursor was already on this cell — but the row's own mousedown had
                         // just put it there, so the FIRST click dropped you into an input you had
                         // not asked for, with left/right moving a caret instead of cells.
-                        onClick={() => putCursor(t.id, COL.title)}
+                        // On a touch screen there is no double-click and no hover, so a tap opens
+                        // the task; renaming lives on the task page there.
+                        onClick={() => { putCursor(t.id, COL.title); if (isTouch()) onOpenTask(t.id); }}
                         onDoubleClick={() => startRename(t.id)}
                       >
                         {t.text || <em className="muted">(empty)</em>}

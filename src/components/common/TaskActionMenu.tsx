@@ -6,7 +6,7 @@
 // separate cell editor. Everything it can do comes from `tasks/actions.ts`; this file knows how to
 // draw a list and drive a keyboard, and nothing about what a task is.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { actionForField, actionsFor, type ChoiceOption, type FocusField, type TaskAction } from '../../tasks/actions';
 import type { ID } from '../../types';
 import { EmptyState } from './EmptyState';
@@ -49,6 +49,22 @@ export function TaskActionMenu({ ids, tabId, focusField, x, y, onClose, onStep }
   const showActions = (): void => { setOpenAction(null); setQuery(''); setHighlight(0); };
   const showChoices = (a: TaskAction): void => { setOpenAction(a); setQuery(''); setHighlight(0); };
   const typeInto = (ch: string): void => { setQuery((q) => q + ch); setHighlight(0); };
+
+  // Keep the menu inside the viewport. `x`/`y` is where it was asked for; the menu grows down from
+  // there, so near the bottom it would run off-screen. Flip it above the anchor if it fits there,
+  // otherwise slide it up — and re-measure whenever what it lists (so its height) changes.
+  const [pos, setPos] = useState({ x, y });
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const m = 8;
+    const h = el.offsetHeight;
+    const w = el.offsetWidth;
+    let ny = y;
+    if (ny + h > window.innerHeight - m) ny = y - h >= m ? y - h : window.innerHeight - h - m;
+    const nx = Math.max(m, Math.min(x, window.innerWidth - w - m));
+    setPos((p) => (p.x === nx && p.y === Math.max(m, ny) ? p : { x: nx, y: Math.max(m, ny) }));
+  }, [x, y, openAction, rows.length]);
 
   // Focus the menu itself so the keyboard reaches it, and hand focus back on the way out — a menu
   // that drops you nowhere is unusable without a mouse (§A).
@@ -122,7 +138,7 @@ export function TaskActionMenu({ ids, tabId, focusField, x, y, onClose, onStep }
       role="menu"
       aria-label={header}
       tabIndex={-1}
-      style={{ position: 'fixed', top: y, left: x, zIndex: 60 }}
+      style={{ position: 'fixed', top: pos.y, left: pos.x, zIndex: 60 }}
       onKeyDown={onKeyDown}
     >
       <div className="task-menu-head">
