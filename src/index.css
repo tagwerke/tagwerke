@@ -1689,9 +1689,14 @@ button.pill:hover { border-color: var(--line-strong); }
   /* The baseline is background, not a border: the tabs used to overlap a real border by 1px so the
      active one merged into it, and that 1px of overflow is what drew a vertical scrollbar. Painted
      on the strip's own bottom row, the tabs cover it with no overflow at all. */
-  background: linear-gradient(var(--line), var(--line)) bottom / 100% 1px no-repeat;
+  background: linear-gradient(var(--line), var(--line)) bottom / 100% 1px no-repeat, var(--bg);
   overflow-x: auto; scrollbar-width: none;
+  /* Sticky: stays reachable on a long board. Slides away on scroll-down, back on scroll-up
+     (is-hidden, set by NavTabs); focus inside it always brings it back. */
+  position: sticky; top: 0; z-index: 30;
+  transition: transform .18s ease;
 }
+.navtabs.is-hidden:not(:focus-within) { transform: translateY(-100%); }
 .navtabs::-webkit-scrollbar { display: none; }
 .navtab {
   display: flex; align-items: center; flex: 0 1 200px; min-width: 96px;

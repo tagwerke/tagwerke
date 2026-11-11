@@ -5,7 +5,7 @@
 //
 // The column reuses the sidebar's row classes; the strip has its own.
 
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useStore } from '../../store';
 import { useShell } from './useShell';
 
@@ -31,7 +31,35 @@ const CALENDAR_ICON = (
   </svg>
 );
 
+// The strip sticks to the top of the window and slides away while you scroll down, back in the
+// moment you scroll up (or reach the top): a long board never costs a trip to the top for the tabs.
+function useHideOnScrollDown(enabled: boolean) {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    if (!enabled) { setHidden(false); return; }
+    let last = window.scrollY;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        const y = window.scrollY;
+        const dy = y - last;
+        if (y < 80) setHidden(false);
+        else if (dy > 6) setHidden(true);
+        else if (dy < -6) setHidden(false);
+        if (Math.abs(dy) > 6 || y < 80) last = y;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [enabled]);
+  return hidden;
+}
+
 export function NavTabs({ orientation }: { orientation: Orientation }) {
+  const hidden = useHideOnScrollDown(orientation === 'row');
   const openIds = useShell((s) => s.openIds);
   const closeTab = useShell((s) => s.closeTab);
   const tabs = useStore((s) => s.tabs);
@@ -78,7 +106,7 @@ export function NavTabs({ orientation }: { orientation: Orientation }) {
 
   if (orientation === 'row') {
     return (
-      <nav className="navtabs" aria-label="Tabs">
+      <nav className={`navtabs ${hidden ? 'is-hidden' : ''}`} aria-label="Tabs">
         {fixed}
         {boards.length > 0 && <span className="navtabs-divider" aria-hidden />}
         {boards}
