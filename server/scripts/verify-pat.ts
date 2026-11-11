@@ -26,6 +26,7 @@ const { commentRoutes } = await import('../routes/comments.ts');
 const { memberRoutes } = await import('../routes/members.ts');
 const { historyRoutes } = await import('../routes/history.ts');
 const { notificationRoutes } = await import('../routes/notifications.ts');
+const { documentRoutes } = await import('../routes/documents.ts');
 const { encodeCursor } = await import('../lib/cursor.ts');
 const { tokenRoutes } = await import('../routes/tokens.ts');
 const { secretRoutes } = await import('../routes/secrets.ts');
@@ -99,7 +100,7 @@ async function cleanup(): Promise<void> {
 const app = Fastify();
 await app.register(cookie, { secret: process.env.SESSION_SECRET! });
 registerAuditHook(app);
-for (const r of [authRoutes, stateRoutes, tabRoutes, taskRoutes, sprintRoutes, commentRoutes, memberRoutes, historyRoutes, notificationRoutes, tokenRoutes, secretRoutes, accountSudoRoutes, adminRoutes]) {
+for (const r of [authRoutes, stateRoutes, tabRoutes, taskRoutes, sprintRoutes, commentRoutes, memberRoutes, historyRoutes, notificationRoutes, documentRoutes, tokenRoutes, secretRoutes, accountSudoRoutes, adminRoutes]) {
   await app.register(r);
 }
 
@@ -325,6 +326,37 @@ try {
   const afterLeave = await feed(NOTE, tokBoards);
   check('...and is gone once the owner leaves that board, though it is still ticked', !ids(afterLeave).includes('n-b1') && ids(afterLeave).includes('n-a1'));
   check('...while the owner’s own session keeps its history',ids(await feed(NOTE, undefined, ownerCookie)).includes('n-b1'));
+
+  console.log('documents (read only)');
+  const [docA, docTask, docGone, docX] = Array.from({ length: 4 }, () => nanoid());
+  const docRow = (id: string, tabId: string, o: Partial<typeof schema.documents.$inferInsert> = {}) => ({
+    id, tabId, storageKey: `verify/${id}`, filename: `${id}.txt`, mime: 'text/plain; charset=utf-8', size: 11,
+    textStatus: 'ok', textContent: 'hello world', uploadedBy: owner, ...o,
+  });
+  await db.insert(schema.documents).values([
+    docRow(docA, boardA),
+    docRow(docTask, boardA, { taskId: taskA }),
+    docRow(docGone, boardA, { deletedAt: new Date() }),
+    docRow(docX, boardX),
+  ]);
+  const DOCS = `/api/boards/${boardA}/documents`;
+  const listed = (await call('GET', DOCS, tokRead)).json() as any;
+  check('a read-only token lists its board’s documents', JSON.stringify((listed.documents ?? []).map((d: any) => d.id).sort()) === JSON.stringify([docA, docTask].sort()), listed);
+  check('...a trashed document is not listed', !(listed.documents ?? []).some((d: any) => d.id === docGone));
+  const byTask = (await call('GET', `${DOCS}?taskId=${taskA}`, tokRead)).json() as any;
+  check('...taskId narrows to one task’s attachments', byTask.documents?.length === 1 && byTask.documents[0].id === docTask);
+  const one = (await call('GET', `/api/documents/${docA}?includeText=1`, tokRead)).json() as any;
+  check('...reads one document with its extracted text', one.document?.id === docA && one.text === 'hello world', one);
+  check('...the content route is open to a token (not 403/404)', ![403, 404].includes(await code(call('GET', `/api/documents/${docA}/content`, tokRead))));
+  check('a trashed document is 404 to a token', (await code(call('GET', `/api/documents/${docGone}`, tokRead))) === 404);
+  check('a board the token does not reach: list -> 404', (await code(call('GET', `/api/boards/${boardB}/documents`, tokA))) === 404);
+  check('a document on a board the owner is not on -> 404', (await code(call('GET', `/api/documents/${docX}?includeText=1`, tokAll))) === 404);
+  check('a document on a board the token does not reach -> 404', (await code(call('GET', `/api/documents/${docX}`, tokA))) === 404);
+  check('a token cannot delete a document -> 403', (await code(call('DELETE', `/api/documents/${docA}`, tokAll))) === 403);
+  check('a token cannot restore a document -> 403', (await code(call('POST', `/api/documents/${docGone}/restore`, tokAll))) === 403);
+  check('a token cannot upload -> 403', (await code(call('POST', DOCS, tokAll))) === 403);
+  const stillThere = await db.select({ id: schema.documents.id, deletedAt: schema.documents.deletedAt }).from(schema.documents).where(eq(schema.documents.id, docA));
+  check('...and the document is untouched', stillThere[0]?.deletedAt === null);
 } finally {
   await cleanup().catch((e) => console.error('cleanup failed', e));
   await app.close();

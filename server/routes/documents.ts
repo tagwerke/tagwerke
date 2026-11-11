@@ -410,7 +410,7 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
   // ---- list ------------------------------------------------------------------
   app.get(
     '/api/boards/:id/documents',
-    { preHandler: requireBoardRole('viewer', paramTabId) },
+    { preHandler: requireBoardRole('viewer', paramTabId), config: { pat: 'read' } },
     async (req) => {
       const tabId = req.boardScope!;
       const { taskId } = req.query as { taskId?: string };
@@ -429,7 +429,7 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
   // ---- one document ----------------------------------------------------------
   app.get(
     '/api/documents/:id',
-    { preHandler: requireBoardRole('viewer', documentBoard) },
+    { preHandler: requireBoardRole('viewer', documentBoard), config: { pat: 'read' } },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const { includeText } = req.query as { includeText?: string };
@@ -448,7 +448,7 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
   // ---- download --------------------------------------------------------------
   app.get(
     '/api/documents/:id/content',
-    { preHandler: requireBoardRole('viewer', documentBoard) },
+    { preHandler: requireBoardRole('viewer', documentBoard), config: { pat: 'read' } },
     async (req, reply) => {
       const store = blobstore();
       if (!store) return reply.code(503).send({ error: 'document storage is not configured' });

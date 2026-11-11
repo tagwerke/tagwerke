@@ -44,6 +44,11 @@ Reading includes your notification feed (`GET /api/notifications`) for the board
 so an agent can ask what's new since it last looked. A token never marks anything read: your bell
 stays yours.
 
+Reading also includes a board's documents (attachments): `GET /api/boards/{id}/documents` lists them
+(`?taskId=` narrows to one task's), `GET /api/documents/{id}?includeText=1` returns the extracted text
+when there is any (`textStatus: "ok"`), and `GET /api/documents/{id}/content` downloads the file. A
+token can't upload, delete or restore documents.
+
 ```sh
 export TAGWERKE_TOKEN=tgw_pat_...
 curl -H "Authorization: Bearer $TAGWERKE_TOKEN" https://your-tagwerke/api/state
