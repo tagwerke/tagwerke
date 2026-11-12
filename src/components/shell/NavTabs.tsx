@@ -58,70 +58,94 @@ function useHideOnScrollDown(enabled: boolean) {
   return hidden;
 }
 
-type Drop = { id: string; place: 'before' | 'after' };
+// A live drag: the tab follows the pointer (dx, px along the bar's axis), the tabs between its old
+// and new slot slide out of the way by `size`, and `to` is the slot it would land in.
+type Drag = { id: string; ids: string[]; from: number; to: number; dx: number; size: number; settling: boolean };
 
-// Reordering with pointer events, not the browser's drag-and-drop: native DnD won't start from a
-// <button> in Firefox and gives no say over the drag image. A press that moves more than a few pixels
-// becomes a drag (a plain click still switches tabs); the tab under the pointer along the bar's axis
-// is the drop target; Escape cancels. Mouse and pen only: on touch the strip scrolls.
+// Reordering like a browser's tab strip, with pointer events rather than the browser's drag-and-drop
+// (native DnD won't start from a <button> in Firefox and gives no say over how the drag looks).
+// Positions are measured once, at press. A press that moves a few pixels lifts the tab: it tracks the
+// pointer along the bar, clamped to the row of tabs; the others shift a slot as it passes their
+// centres. On release the tab glides into its slot and only then is the order committed, so the
+// list never jumps. Escape glides it back. Mouse and pen only: on touch the strip scrolls.
+const SETTLE_MS = 150;
+
 function useTabDrag(orientation: Orientation, moveTab: (id: string, target: string, place: 'before' | 'after') => void) {
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [drop, setDrop] = useState<Drop | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
   const navRef = useRef<HTMLElement>(null);
   const justDragged = useRef(false);
+  const busy = useRef(false); // a release is still gliding in
 
   const begin = (e: ReactPointerEvent, id: string) => {
-    if (e.button !== 0 || e.pointerType === 'touch') return;
+    if (e.button !== 0 || e.pointerType === 'touch' || busy.current) return;
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
-    const x0 = e.clientX, y0 = e.clientY;
-    let active = false;
-    let target: Drop | null = null;
+    const els = Array.from(navRef.current?.querySelectorAll<HTMLElement>('[data-tab-id]') ?? []);
+    const ids = els.map((el) => el.dataset.tabId!);
+    const from = ids.indexOf(id);
+    if (from < 0) return;
 
-    const find = (x: number, y: number): Drop | null => {
-      const els = Array.from(navRef.current?.querySelectorAll<HTMLElement>('[data-tab-id]') ?? []);
-      let best: Drop | null = null, bestDist = Infinity;
-      for (const el of els) {
-        const tid = el.dataset.tabId!;
-        if (tid === id) continue;
-        const r = el.getBoundingClientRect();
-        const mid = orientation === 'row' ? r.left + r.width / 2 : r.top + r.height / 2;
-        const p = orientation === 'row' ? x : y;
-        if (Math.abs(p - mid) < bestDist) { bestDist = Math.abs(p - mid); best = { id: tid, place: p < mid ? 'before' : 'after' }; }
-      }
-      return best;
-    };
-    const finish = (commit: boolean) => {
+    const row = orientation === 'row';
+    const rects = els.map((el) => el.getBoundingClientRect());
+    const start = (r: DOMRect) => (row ? r.left : r.top);
+    const len = (r: DOMRect) => (row ? r.width : r.height);
+    const mine = rects[from];
+    const gap = rects.length > 1 ? Math.max(0, start(rects[1]) - start(rects[0]) - len(rects[0])) : 0;
+    const size = len(mine) + gap;
+    const lo = start(rects[0]) - start(mine);
+    const hi = start(rects[rects.length - 1]) + len(rects[rects.length - 1]) - start(mine) - len(mine);
+    const p0 = row ? e.clientX : e.clientY;
+    let active = false;
+    let cur: Drag = { id, ids, from, to: from, dx: 0, size, settling: false };
+
+    const slotStart = (to: number) =>
+      to > from ? start(rects[to]) + len(rects[to]) - len(mine) : to < from ? start(rects[to]) : start(mine);
+
+    const stop = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
       window.removeEventListener('keydown', key);
       document.body.classList.remove('is-tab-dragging');
-      if (active) {
-        if (commit && target) moveTab(id, target.id, target.place);
-        // The click that follows this release must not also switch tabs.
-        justDragged.current = true;
-        setTimeout(() => { justDragged.current = false; }, 0);
-      }
-      setDragId(null);
-      setDrop(null);
+    };
+    const settle = (commit: boolean) => {
+      stop();
+      if (!active) return;
+      // The click that follows this release must not also switch tabs.
+      justDragged.current = true;
+      setTimeout(() => { justDragged.current = false; }, 0);
+      const to = commit ? cur.to : from;
+      busy.current = true;
+      setDrag({ ...cur, to, dx: slotStart(to) - start(mine), settling: true });
+      setTimeout(() => {
+        busy.current = false;
+        if (to !== from) moveTab(id, ids[to], to > from ? 'after' : 'before');
+        setDrag(null);
+      }, SETTLE_MS);
     };
     const move = (ev: PointerEvent) => {
+      const delta = (row ? ev.clientX : ev.clientY) - p0;
       if (!active) {
-        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 5) return;
+        if (Math.abs(delta) < 4 && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 5) return;
         active = true;
         document.body.classList.add('is-tab-dragging');
-        setDragId(id);
       }
-      target = find(ev.clientX, ev.clientY);
-      setDrop(target);
+      const dx = Math.min(hi, Math.max(lo, delta));
+      const centre = start(mine) + len(mine) / 2 + dx;
+      let to = 0;
+      rects.forEach((r, j) => { if (j !== from && start(r) + len(r) / 2 < centre) to++; });
+      cur = { ...cur, dx, to };
+      setDrag(cur);
     };
-    const up = () => finish(true);
-    const key = (ev: KeyboardEvent) => { if (ev.key === 'Escape') finish(false); };
+    const up = () => settle(true);
+    const cancel = () => settle(false);
+    const key = (ev: KeyboardEvent) => { if (ev.key === 'Escape') settle(false); };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
     window.addEventListener('keydown', key);
   };
 
-  return { navRef, dragId, drop, begin, justDragged };
+  return { navRef, drag, begin, justDragged };
 }
 
 export function NavTabs({ orientation }: { orientation: Orientation }) {
@@ -129,7 +153,7 @@ export function NavTabs({ orientation }: { orientation: Orientation }) {
   const openIds = useShell((s) => s.openIds);
   const closeTab = useShell((s) => s.closeTab);
   const moveTab = useShell((s) => s.moveTab);
-  const { navRef, dragId, drop, begin, justDragged } = useTabDrag(orientation, moveTab);
+  const { navRef, drag, begin, justDragged } = useTabDrag(orientation, moveTab);
   const tabs = useStore((s) => s.tabs);
   const projects = useStore((s) => s.projects);
   const activeTabId = useStore((s) => s.activeTabId);
@@ -140,13 +164,28 @@ export function NavTabs({ orientation }: { orientation: Orientation }) {
   const c = CLASSES[orientation];
   const open = openIds.filter((id) => tabs[id]);
 
-  const item = (key: string, label: string, mark: ReactNode, on: boolean, go: () => void, close?: () => void) => (
+  // How far a board tab is moved off its natural place while another is being dragged: the dragged
+  // one follows the pointer, the ones it has passed slide one slot toward where it came from.
+  const offsetOf = (key: string): number | undefined => {
+    if (!drag) return undefined;
+    if (key === drag.id) return drag.dx;
+    const i = drag.ids.indexOf(key);
+    if (i < 0) return undefined;
+    if (i > drag.from && i <= drag.to) return -drag.size;
+    if (i < drag.from && i >= drag.to) return drag.size;
+    return 0;
+  };
+
+  const item = (key: string, label: string, mark: ReactNode, on: boolean, go: () => void, close?: () => void) => {
+    const off = close ? offsetOf(key) : undefined;
+    const lifted = !!drag && drag.id === key;
+    return (
     <div
       key={key}
-      className={`${c.item} ${on ? 'on' : ''} ${close ? '' : 'is-fixed'} ${dragId === key ? 'is-dragging' : ''}`}
+      className={`${c.item} ${on ? 'on' : ''} ${close ? '' : 'is-fixed'} ${lifted ? 'is-lifted' : off !== undefined ? 'is-shifting' : ''} ${lifted && drag.settling ? 'is-settling' : ''}`}
       // Only board tabs (the ones that can close) are movable; the two fixed tabs stay put.
       data-tab-id={close ? key : undefined}
-      data-drop={close && drop?.id === key ? drop.place : undefined}
+      style={off !== undefined ? { transform: orientation === 'row' ? `translateX(${off}px)` : `translateY(${off}px)` } : undefined}
       onPointerDown={close ? (e) => begin(e, key) : undefined}
     >
       <button
@@ -167,7 +206,8 @@ export function NavTabs({ orientation }: { orientation: Orientation }) {
         </button>
       )}
     </div>
-  );
+    );
+  };
 
   const fixed = [
     item('home', 'All boards', HOME_ICON, !plannerOpen && !activeTabId, () => setActiveTab(null)),
