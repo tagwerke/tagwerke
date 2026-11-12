@@ -125,14 +125,20 @@ function useTabDrag(orientation: Orientation, moveTab: (id: string, target: stri
     const move = (ev: PointerEvent) => {
       const delta = (row ? ev.clientX : ev.clientY) - p0;
       if (!active) {
-        if (Math.abs(delta) < 4 && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 5) return;
+        if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 5) return;
         active = true;
         document.body.classList.add('is-tab-dragging');
       }
       const dx = Math.min(hi, Math.max(lo, delta));
-      const centre = start(mine) + len(mine) / 2 + dx;
+      // A neighbour gives way once the dragged tab's leading edge passes its midpoint — like Chrome's.
+      const lead = start(mine) + dx;
+      const trail = lead + len(mine);
       let to = 0;
-      rects.forEach((r, j) => { if (j !== from && start(r) + len(r) / 2 < centre) to++; });
+      rects.forEach((r, j) => {
+        if (j === from) return;
+        const mid = start(r) + len(r) / 2;
+        if (j < from ? mid < lead : mid < trail) to++;
+      });
       cur = { ...cur, dx, to };
       setDrag(cur);
     };
