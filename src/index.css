@@ -1719,6 +1719,15 @@ button.pill:hover { border-color: var(--line-strong); }
 }
 .navtab:hover .navtab-close, .navtab.on .navtab-close, .navtab-close:focus-visible { opacity: 1; }
 .navtab-close:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+/* Reordering: the lifted tab dims, the drop edge shows as a line inside the neighbour (inset, so the
+   strip's overflow can't clip it), and nothing gets selected or flips the cursor mid-drag. */
+.navtab.is-dragging, .space.is-dragging { opacity: .45; }
+.navtab[data-drop='before'] { box-shadow: inset 2px 0 0 var(--pop); }
+.navtab[data-drop='after'] { box-shadow: inset -2px 0 0 var(--pop); }
+.space[data-drop='before'] { box-shadow: inset 0 2px 0 var(--pop); }
+.space[data-drop='after'] { box-shadow: inset 0 -2px 0 var(--pop); }
+body.is-tab-dragging { user-select: none; cursor: grabbing; }
+body.is-tab-dragging .navtab-main, body.is-tab-dragging .space-main { cursor: grabbing; }
 .navtabs-divider { flex: none; align-self: center; width: 1px; height: 18px; margin: 0 6px 8px; background: var(--line-strong); }
 .navtab-icon { flex: none; color: var(--ink-mute); }
 .on > * > .navtab-icon { color: var(--ink); }

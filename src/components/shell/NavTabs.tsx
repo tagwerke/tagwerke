@@ -5,7 +5,7 @@
 //
 // The column reuses the sidebar's row classes; the strip has its own.
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useStore } from '../../store';
 import { useShell } from './useShell';
 
@@ -58,10 +58,78 @@ function useHideOnScrollDown(enabled: boolean) {
   return hidden;
 }
 
+type Drop = { id: string; place: 'before' | 'after' };
+
+// Reordering with pointer events, not the browser's drag-and-drop: native DnD won't start from a
+// <button> in Firefox and gives no say over the drag image. A press that moves more than a few pixels
+// becomes a drag (a plain click still switches tabs); the tab under the pointer along the bar's axis
+// is the drop target; Escape cancels. Mouse and pen only: on touch the strip scrolls.
+function useTabDrag(orientation: Orientation, moveTab: (id: string, target: string, place: 'before' | 'after') => void) {
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [drop, setDrop] = useState<Drop | null>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const justDragged = useRef(false);
+
+  const begin = (e: ReactPointerEvent, id: string) => {
+    if (e.button !== 0 || e.pointerType === 'touch') return;
+    if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
+    const x0 = e.clientX, y0 = e.clientY;
+    let active = false;
+    let target: Drop | null = null;
+
+    const find = (x: number, y: number): Drop | null => {
+      const els = Array.from(navRef.current?.querySelectorAll<HTMLElement>('[data-tab-id]') ?? []);
+      let best: Drop | null = null, bestDist = Infinity;
+      for (const el of els) {
+        const tid = el.dataset.tabId!;
+        if (tid === id) continue;
+        const r = el.getBoundingClientRect();
+        const mid = orientation === 'row' ? r.left + r.width / 2 : r.top + r.height / 2;
+        const p = orientation === 'row' ? x : y;
+        if (Math.abs(p - mid) < bestDist) { bestDist = Math.abs(p - mid); best = { id: tid, place: p < mid ? 'before' : 'after' }; }
+      }
+      return best;
+    };
+    const finish = (commit: boolean) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('keydown', key);
+      document.body.classList.remove('is-tab-dragging');
+      if (active) {
+        if (commit && target) moveTab(id, target.id, target.place);
+        // The click that follows this release must not also switch tabs.
+        justDragged.current = true;
+        setTimeout(() => { justDragged.current = false; }, 0);
+      }
+      setDragId(null);
+      setDrop(null);
+    };
+    const move = (ev: PointerEvent) => {
+      if (!active) {
+        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 5) return;
+        active = true;
+        document.body.classList.add('is-tab-dragging');
+        setDragId(id);
+      }
+      target = find(ev.clientX, ev.clientY);
+      setDrop(target);
+    };
+    const up = () => finish(true);
+    const key = (ev: KeyboardEvent) => { if (ev.key === 'Escape') finish(false); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('keydown', key);
+  };
+
+  return { navRef, dragId, drop, begin, justDragged };
+}
+
 export function NavTabs({ orientation }: { orientation: Orientation }) {
   const hidden = useHideOnScrollDown(orientation === 'row');
   const openIds = useShell((s) => s.openIds);
   const closeTab = useShell((s) => s.closeTab);
+  const moveTab = useShell((s) => s.moveTab);
+  const { navRef, dragId, drop, begin, justDragged } = useTabDrag(orientation, moveTab);
   const tabs = useStore((s) => s.tabs);
   const projects = useStore((s) => s.projects);
   const activeTabId = useStore((s) => s.activeTabId);
@@ -73,12 +141,19 @@ export function NavTabs({ orientation }: { orientation: Orientation }) {
   const open = openIds.filter((id) => tabs[id]);
 
   const item = (key: string, label: string, mark: ReactNode, on: boolean, go: () => void, close?: () => void) => (
-    <div key={key} className={`${c.item} ${on ? 'on' : ''} ${close ? '' : 'is-fixed'}`}>
+    <div
+      key={key}
+      className={`${c.item} ${on ? 'on' : ''} ${close ? '' : 'is-fixed'} ${dragId === key ? 'is-dragging' : ''}`}
+      // Only board tabs (the ones that can close) are movable; the two fixed tabs stay put.
+      data-tab-id={close ? key : undefined}
+      data-drop={close && drop?.id === key ? drop.place : undefined}
+      onPointerDown={close ? (e) => begin(e, key) : undefined}
+    >
       <button
         type="button"
         className={c.main}
         aria-current={on ? 'page' : undefined}
-        onClick={go}
+        onClick={(e) => { if (justDragged.current) { e.preventDefault(); return; } go(); }}
         // Middle-click closes, as it does on a browser tab.
         onAuxClick={close ? (e) => { if (e.button === 1) { e.preventDefault(); close(); } } : undefined}
         title={label}
@@ -87,7 +162,7 @@ export function NavTabs({ orientation }: { orientation: Orientation }) {
         <span className={c.name}>{label}</span>
       </button>
       {close && (
-        <button type="button" className={c.close} onClick={close} aria-label={`Close ${label}`} title="Close tab">
+        <button type="button" className={c.close} data-no-drag onClick={close} aria-label={`Close ${label}`} title="Close tab">
           ×
         </button>
       )}
@@ -106,7 +181,7 @@ export function NavTabs({ orientation }: { orientation: Orientation }) {
 
   if (orientation === 'row') {
     return (
-      <nav className={`navtabs ${hidden ? 'is-hidden' : ''}`} aria-label="Tabs">
+      <nav ref={navRef} className={`navtabs ${hidden ? 'is-hidden' : ''}`} aria-label="Tabs">
         {fixed}
         {boards.length > 0 && <span className="navtabs-divider" aria-hidden />}
         {boards}
@@ -114,7 +189,7 @@ export function NavTabs({ orientation }: { orientation: Orientation }) {
     );
   }
   return (
-    <nav className="sidebar-sec navtabs-col" aria-label="Tabs">
+    <nav ref={navRef} className="sidebar-sec navtabs-col" aria-label="Tabs">
       <div className="space-list">{fixed}</div>
       <div>
         <div className="sidebar-sec-head"><span className="sidebar-sec-label">Open boards</span></div>

@@ -49,6 +49,8 @@ interface ShellState {
   openTab(id: ID): void;
   /** Close a board's tab. Closing the one on screen moves to its neighbour, or home. */
   closeTab(id: ID): void;
+  /** Reorder: put a board's tab just before or after another's. */
+  moveTab(id: ID, targetId: ID, place: 'before' | 'after'): void;
   setLayout(layout: NavLayout): void;
   setAppSettings(section: AppSettingsSection | null): void;
 }
@@ -79,6 +81,16 @@ export const useShell = create<ShellState>((set, get) => ({
     const live = (x: ID | undefined) => (x && st.tabs[x] ? x : undefined);
     const next = openIds.slice(at).find(live) ?? openIds.slice(0, at).reverse().find(live) ?? null;
     st.setActiveTab(next);
+  },
+
+  moveTab(id, targetId, place) {
+    const before = get().openIds;
+    if (id === targetId || !before.includes(id) || !before.includes(targetId)) return;
+    const rest = before.filter((x) => x !== id);
+    const at = rest.indexOf(targetId) + (place === 'after' ? 1 : 0);
+    const openIds = [...rest.slice(0, at), id, ...rest.slice(at)];
+    set({ openIds });
+    write(TABS_KEY, JSON.stringify(openIds));
   },
 
   setLayout(layout) {
